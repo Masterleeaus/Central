@@ -1,0 +1,36 @@
+name: Central CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/control-api/package-lock.json
+            packages/control-plane/package-lock.json
+      - name: Install control-plane dependencies
+        run: npm ci --prefix packages/control-plane
+      - name: Build and test control plane
+        run: npm --prefix packages/control-plane test
+      - name: Ensure committed build matches source
+        run: git diff --exit-code -- packages/control-plane/dist
+      - name: Install API dependencies
+        run: npm ci --prefix apps/control-api
+      - name: Test control API
+        run: npm --prefix apps/control-api test
+      - name: Test deployment preflight
+        run: python3 -m unittest discover -s deploy/tests
+      - name: Test repository source checks
+        run: python3 -m unittest discover -s tests
