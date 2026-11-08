@@ -282,3 +282,9 @@ jobs:
 
       - name: Verify immutable approval and audit record hashes and tamper detection
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_approval_integrity.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Read-only staging approval integrity report contains no private records
+        run: |
+          python3 tools/verify_staging_approval_integrity.py \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" > "$RUNNER_TEMP/approval-integrity.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["status"]=="integrity_verified_within_database" and r["approvals_checked"]>=5 and r["audits_checked"]>=4 and r["human_signature_verified"] is False and r["db_superuser_tamper_resistant"] is False and "logto_subject" not in r' "$RUNNER_TEMP/approval-integrity.json"
