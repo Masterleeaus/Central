@@ -21,6 +21,8 @@ function fakeLogto(state={members:new Set(['op_admin']),roles:{op_admin:[ROLE]},
   if(state.fail) return {ok:false,json:async()=>({})};
   const u=new URL(url);const p=u.pathname;
   if(/^\/api\/users\/[^/]+$/.test(p)) return ok({id:decodeURIComponent(p.split('/')[3])});
+  const uo=p.match(/^\/api\/users\/([^/]+)\/organizations$/);
+  if(uo){const uid=decodeURIComponent(uo[1]);return ok(state.members.has(uid)?[{id:OPERATOR_ORG}]:[]);}
   if(p===`/api/organizations/${OPERATOR_ORG}`) return ok({id:OPERATOR_ORG});
   if(p===`/api/organizations/${OPERATOR_ORG}/users`) return ok([...state.members].map(id=>({id})));
   const r=p.match(/^\/api\/organizations\/[^/]+\/users\/([^/]+)\/roles$/);

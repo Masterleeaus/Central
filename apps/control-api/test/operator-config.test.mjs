@@ -43,6 +43,8 @@ function fakeLogto({members=[],roles={},tokenStatus=200,tokenEcho=false}={}){
    return ok({access_token:MGMT_TOKEN,token_type:'Bearer',expires_in:300});
   }
   if(/^\/api\/users\/[^/]+$/.test(p)) return ok({id:decodeURIComponent(p.split('/')[3])});
+  const uo=p.match(/^\/api\/users\/([^/]+)\/organizations$/);
+  if(uo){const uid=decodeURIComponent(uo[1]);return ok(members.includes(uid)?[{id:ORG}]:[]);}
   if(p===`/api/organizations/${ORG}`) return ok({id:ORG});
   if(p===`/api/organizations/${ORG}/users`) return ok(members.map(id=>({id})));
   const r=p.match(/^\/api\/organizations\/[^/]+\/users\/([^/]+)\/roles$/);
