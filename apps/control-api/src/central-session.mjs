@@ -88,8 +88,10 @@ export function createCentralSessionManager({store,clock=()=>Date.now(),random=(
       const expiresAt=clock()+MAX_AGE*1000;
       const nextDigest=digest(next);
       await store.insert({digest:nextDigest,identityId,companyId,expiresAt});
-      try {await store.delete(digest(old));}
-      catch(error){
+      try {
+        const deleted=await store.delete(digest(old));
+        if(deleted!==true)throw new Error('previous session already consumed');
+      } catch(error){
         try {await store.delete(nextDigest);}catch{/* fail closed; do not send new cookie */}
         throw error;
       }
