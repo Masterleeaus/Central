@@ -98,3 +98,6 @@ jobs:
 
       - name: Central OIDC state isolation
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_oidc_state_isolation.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Scoped company discovery and membership isolation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_company_discovery.sql "$TITAN_CI_DATABASE_URL"
