@@ -40,7 +40,7 @@ CREATE TABLE titan.company_memberships (
 CREATE TABLE titan.application_entitlements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL REFERENCES titan.companies(id) ON DELETE RESTRICT,
-  application_id text NOT NULL CHECK (application_id IN ('central', 'sorted', 'skilled', 'supercharged')),
+  application_id text NOT NULL CHECK (application_id IN ('central', 'sorted', 'lms', 'supercharged')),
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'trialing', 'paused', 'expired', 'revoked')),
   features text[] NOT NULL DEFAULT '{}',
   expires_at timestamptz,
@@ -55,7 +55,7 @@ CREATE TABLE titan.application_entitlements (
 CREATE TABLE titan.application_company_links (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL REFERENCES titan.companies(id) ON DELETE RESTRICT,
-  application_id text NOT NULL CHECK (application_id IN ('sorted', 'skilled', 'supercharged')),
+  application_id text NOT NULL CHECK (application_id IN ('sorted', 'lms', 'supercharged')),
   local_company_id text NOT NULL CHECK (length(btrim(local_company_id)) > 0),
   status text NOT NULL DEFAULT 'verified' CHECK (status IN ('verified', 'revoked')),
   verified_at timestamptz NOT NULL DEFAULT now(),
@@ -71,7 +71,7 @@ CREATE TABLE titan.application_user_links (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid NOT NULL REFERENCES titan.companies(id) ON DELETE RESTRICT,
   identity_id uuid NOT NULL REFERENCES titan.identities(id) ON DELETE RESTRICT,
-  application_id text NOT NULL CHECK (application_id IN ('sorted', 'skilled', 'supercharged')),
+  application_id text NOT NULL CHECK (application_id IN ('sorted', 'lms', 'supercharged')),
   local_user_id text NOT NULL CHECK (length(btrim(local_user_id)) > 0),
   status text NOT NULL DEFAULT 'verified' CHECK (status IN ('verified', 'revoked')),
   verified_at timestamptz NOT NULL DEFAULT now(),
