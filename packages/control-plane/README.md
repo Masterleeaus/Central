@@ -4,14 +4,15 @@ This **is not an identity provider** or an HTTP server. It is a dependency-free 
 
 ## Build and test
 
-With Node.js 22+ and TypeScript available:
+From the repository root with Node.js 22+ and npm installed:
 
-```bash
-tsc -p tsconfig.json
-node --test test/*.test.mjs
+```sh
+npm install
+npm run build
+npm test
 ```
 
-The `dist/` directory contains compiled source for local testing. A future build should use pinned workspace dependencies and a lockfile.
+The `dist/` directory contains compiled source for local testing. The root Titan Central workspace builds this package before API tests. The package export points to generated `dist/`; do not edit compiled files by hand.
 
 ## Trust boundaries
 

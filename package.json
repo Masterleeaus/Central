@@ -13,6 +13,7 @@
   "scripts": {
     "build": "npm run build --workspace=@titan-central/control-plane",
     "test": "npm run build && npm run test --workspace=@titan-central/control-plane && npm run test --workspace=@titan-central/control-api",
-    "test:preflight": "python3 -m unittest discover -s deploy/tests"
+    "test:preflight": "python3 -m unittest discover -s deploy/tests",
+    "start": "npm run start --workspace=@titan-central/control-api"
   }
 }

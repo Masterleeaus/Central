@@ -1,4 +1,4 @@
-import { CentralAccessService, withCentralReadSnapshot } from '../../../packages/control-plane/dist/index.js';
+import { CentralAccessService, withCentralReadSnapshot } from '@titan-central/control-plane';
 
 const apps=new Set(['sorted','supercharged','lms']);
 const noStore={ 'cache-control':'no-store', 'content-type':'application/json; charset=utf-8', 'x-content-type-options':'nosniff' };

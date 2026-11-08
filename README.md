@@ -20,7 +20,7 @@ The API, control-plane package, deployment gate, migrations and tests live in th
 - `migrations`: draft schema for a dedicated Titan Central PostgreSQL database.
 - `deploy`: non-secret staging example and read-only preflight gate.
 
-Logto remains an external identity provider. This repository contains its source audit and inventory, but **does not contain the upstream Logto workspace**. The existing source split is preserved as clear package boundaries inside one buildable workspace.
+Logto remains an external identity provider. This repository contains its source audit and inventory, but **does not contain the upstream Logto workspace**. The source packages keep clear boundaries and are linked through npm workspaces.
 
 ## Requirements and commands
 
@@ -37,4 +37,4 @@ The test command builds the control-plane TypeScript before running its tests an
 
 ## Deployment status
 
-The staging configuration is an example, not live deployment evidence. OIDC, PostgreSQL migrations, product adapters, tenant isolation, global logout and rollback remain unverified until exercised against the actual services. See [PASS15_DEPLOYMENT_RUNBOOK.md](PASS15_DEPLOYMENT_RUNBOOK.md) and [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md).
+The staging configuration is an example, not live deployment evidence. OIDC, PostgreSQL migrations, product adapters, tenant isolation, global logout and rollback remain unverified until exercised against the actual services. See [the documentation index](docs/README.md), [the deployment runbook](PASS15_DEPLOYMENT_RUNBOOK.md) and [the architecture decisions](TITAN_ARCHITECTURE_DECISIONS.md).
