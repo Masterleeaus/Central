@@ -150,3 +150,51 @@ link approval, product data and schemas, and application adapters
 await a reviewed transactional migration plan. Never silently
 rename `titan.identities.state` to `status`, treat unrelated
 UUIDs as equal or autoapprove legacy links.
+
+## Read-only company reconciliation audit — Pass 14
+
+Before approving any company/identity migration, run the standalone audit
+against a stable, backed-up and access-restricted staging copy of both
+databases:
+
+```bash
+python3 tools/audit_company_reconciliation.py \
+  --legacy-url "$TITAN_CENTRAL_DATABASE_URL" \
+  --canonical-url "$TITAN_CENTRAL_SHARED_DATABASE_URL" \
+  --output /secure/titan-reconciliation-report.json
+```
+
+This tool performs **read-only, repeatable-read PostgreSQL transactions**
+and caps each source table extraction at 10,000 rows, rejecting larger
+datasets rather than silently publishing partial findings. It reads
+legacy companies, Logto identities, memberships, legacy app entitlements
+and local links, then compares them with canonical companies, verified
+legacy-to-company mappings, identities, memberships, canonical app
+entitlements and verified application user links. The explicit product
+translation is `field → sorted`, `desk → supercharged`,
+`academy → lms`.
+
+The JSON report contains **only aggregate record counts and blocker
+categories**, not company IDs, Logto subjects or user identifiers.
+It flags missing/pending company mappings, mismatched Logto organisation
+IDs, unmatched identities, roles and membership statuses, grant state
+and feature differences, missing account links, and unexpected active
+canonical memberships, entitlements or verified user links.
+Exit codes: `0` for no discrepancies in compared fields, `2`
+for review blockers, and `1` for unavailable/invalid/oversized
+audit. The output path must not already exist.
+
+**Not a migration authorisation:** The databases cannot provide one
+atomic snapshot across two PostgreSQL instances. Each table is read
+in its own read-only snapshot; run the audit against quiescent,
+consistent staging copies. The current audit does not prove matching
+expirations, audited Logto membership authority, production data
+backfill completeness, approval of source mapping or product-specific
+session semantics. Even exit `0` is not a substitute for signed
+migration approval and a verified, rollback-safe conversion plan.
+
+CI seeds *different* legacy and canonical company/identity UUIDs,
+asserts that only verified mappings reconcile, then deliberately
+changes a member role and requires a blocking exit. Unit tests
+also cover unexpected canonical grants and local user links. No
+production database is queried by CI.
