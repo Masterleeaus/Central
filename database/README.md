@@ -198,3 +198,41 @@ asserts that only verified mappings reconcile, then deliberately
 changes a member role and requires a blocking exit. Unit tests
 also cover unexpected canonical grants and local user links. No
 production database is queried by CI.
+
+## Pass 15 — Expiry reconciliation and staged cutover preflight
+
+The read-only reconciliation audit now detects timezone-aware membership
+and product-entitlement expiry mismatches, including unlimited versus
+bounded access and invalid/naive timestamps. It allows at most a 1-second
+difference in timestamp precision, and compares the active/expired result
+at the same audit reference time. Critically, a pending or revoked
+legacy-to-canonical link cannot be used to reconcile access records.
+
+Snapshots have also been strengthened: **each entire database dataset**
+is read under one PostgreSQL `REPEATABLE READ READ ONLY` transaction
+rather than opening an individual transaction for each table. This
+prevents changes within one database from mixing inconsistent table
+versions. It still cannot provide a single atomic snapshot **between**
+the legacy and canonical databases. Freeze source writes or use matching
+point-in-time backups before drawing any operational conclusions.
+
+The new `tools/plan_company_cutover.py` consumes the aggregate audit
+JSON and produces a **non-mutating** approval preflight. Checks require
+documented/restorable backups, quiescent sources, reviewed company
+mappings, authoritative Logto memberships, product session compatibility,
+rollback rehearsal, canonical RLS role verification and explicit
+production change approval. An all-zero audit without those independent
+checks is **blocked**. Even with every check marked true, the result
+is only `ready_for_separate_human_review`: it always sets
+`migration_authorised=false` and `writes_permitted=false`.
+
+The full CI dataset test checks:
+- Matching expiry states and timezone representations
+- A canonical entitlement extended beyond the legacy expiry, which must block
+- One snapshot per database, bounded extraction and unexpected record rejection
+- A discrepancy-free report that must still fail the cutover preflight
+- No production DB changes, schema conversions or backfill operations
+
+This preflight intentionally does not create an apply command or
+generate DML. A separate reviewed and reversible conversion plan
+must exist before any future migration executor is authorised.
