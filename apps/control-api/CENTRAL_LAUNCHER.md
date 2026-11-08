@@ -262,3 +262,47 @@ Configure and stage the protected OIDC path and session services before
 activation. Deployment also requires canonical company reconciliation
 with #43 / PR #46, live Logto verification, cookie/reverse-proxy checks,
 and logout/global revocation testing.
+
+## Logout and automatic Central-session invalidation (ninth slice)
+
+`src/central-logout.mjs` handles only same-origin POST
+`/auth/central/logout`, rejects query strings and request bodies,
+and revokes the opaque browser session from durable storage **before**
+sending the host-only cookie deletion and a fixed redirect. A failed
+database revocation returns 503, never a false success. The logout
+form appears in the product launcher only when the service is explicitly
+configured with a trusted HTTPS `origin`; the page CSP then permits
+only same-origin form submission.
+
+Migration `0013_central_session_access_revocation.sql` installs
+transactional access-change triggers on memberships, company state,
+identity state, entitlements and local-account link revocation. Their
+SECURITY DEFINER functions delete affected Central browser sessions
+in the same transaction as access changes, and roll back together if
+that transaction is aborted. This is Central-browser revocation only;
+it does **not** revoke separate Logto or product-owned sessions.
+
+Migration `0014_authorised_central_session_issue.sql` closes the
+race between the last membership recheck and session insertion.
+`titan_central_sessions` loses direct INSERT privileges. The
+restricted `central_issue_browser_session` function checks and locks
+the active identity, membership, company and at least one active
+entitlement in the inserting transaction. Updates then either commit
+first (the new session is denied) or wait for issuance to commit before
+their triggers delete it. Session creation through the PostgreSQL store
+now uses this function rather than an unguarded INSERT.
+
+Disposable PostgreSQL checks:
+`tests/sql/central_session_access_revocation.sql` and
+`tests/sql/central_authorised_issue.sql`. Node tests cover logout
+origin enforcement, duplicate/forged requests, unavailable storage,
+launcher composition and scoped session issuance.
+
+**Operational boundaries:** There is still no live Logto RP-initiated
+logout or distributed product logout. Session revocation from external
+identity-provider changes requires an authenticated inbound sync or
+reconciliation process. The trusted HTTPS origin, correct reverse
+proxy headers, authorised DB login role memberships, and live Logto
+staging must be verified before enabling these handlers in
+`server.mjs`. Canonical company migration #43 / PR #46 remains
+an independent blocker.
