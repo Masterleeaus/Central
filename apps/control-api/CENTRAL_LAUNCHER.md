@@ -108,7 +108,7 @@ test/central-launcher-service.test.mjs`.
 
 ## PostgreSQL-backed session store (fourth slice)
 
-The ordered migration `migrations/0009_central_browser_sessions.sql` adds
+The ordered migration `migrations/0010_central_browser_sessions.sql` adds
 `titan.central_browser_sessions`, an expiry index, FORCE RLS and the isolated
 NOLOGIN `titan_central_sessions` role. That role alone receives SELECT,
 INSERT and DELETE grants on the session table; ordinary tenants and trusted
@@ -134,7 +134,7 @@ PR #46, and its `organisation_id` FK must be migrated to canonical
 
 New verification: `node --test test/central-session-pg.test.mjs` and
 `psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_browser_sessions.sql
-"$TITAN_CI_DATABASE_URL"` on disposable PostgreSQL after migration 0009.
+"$TITAN_CI_DATABASE_URL"` on disposable PostgreSQL after migration 0011.
 
 ## Central OIDC browser callback and isolated login state (fifth slice)
 
@@ -149,7 +149,7 @@ eligible companies fail closed until #32 implements bound explicit selection.
 The handler rechecks live company membership before issuing a Central
 session. Query-string company selection is rejected.
 
-Migration `0010_central_oidc_login_namespace.sql` adds the `central`
+Migration `0011_central_oidc_login_namespace.sql` adds the `central`
 application namespace to the existing OIDC state schema. A dedicated
 NOLOGIN `titan_central_oidc` role and FORCE RLS isolate Central's
 state from product writers; `src/central-oidc-state-pg.mjs` reuses
@@ -196,7 +196,7 @@ server route mounting after those pieces have been integrated.
 
 ## Authoritative company discovery and recheck (seventh slice)
 
-Migration `0011_central_company_discovery.sql` adds the
+Migration `0012_central_company_discovery.sql` adds the
 `titan.central_eligible_companies(subject)` function, restricted to a
 dedicated NOLOGIN `titan_central_discovery` role. Its audited query returns
 only active company memberships with a current product entitlement.
@@ -230,7 +230,7 @@ company table, and mount the system after live Logto staging verification.
 
 ## Multi-company selection handoff (eighth slice)
 
-Migration `0012_central_company_selection.sql` creates a dedicated, short-lived
+Migration `0013_central_company_selection.sql` creates a dedicated, short-lived
 `titan.central_company_selection_states` table. The NOLOGIN
 `titan_central_selection` role alone can read, insert and delete state;
 FORCE RLS blocks ordinary tenant and trusted-reader roles. Only digests
@@ -274,7 +274,7 @@ form appears in the product launcher only when the service is explicitly
 configured with a trusted HTTPS `origin`; the page CSP then permits
 only same-origin form submission.
 
-Migration `0013_central_session_access_revocation.sql` installs
+Migration `0014_central_session_access_revocation.sql` installs
 transactional access-change triggers on memberships, company state,
 identity state, entitlements and local-account link revocation. Their
 SECURITY DEFINER functions delete affected Central browser sessions
@@ -282,7 +282,7 @@ in the same transaction as access changes, and roll back together if
 that transaction is aborted. This is Central-browser revocation only;
 it does **not** revoke separate Logto or product-owned sessions.
 
-Migration `0014_authorised_central_session_issue.sql` closes the
+Migration `0015_authorised_central_session_issue.sql` closes the
 race between the last membership recheck and session insertion.
 `titan_central_sessions` loses direct INSERT privileges. The
 restricted `central_issue_browser_session` function checks and locks
@@ -306,3 +306,7 @@ proxy headers, authorised DB login role memberships, and live Logto
 staging must be verified before enabling these handlers in
 `server.mjs`. Canonical company migration #43 / PR #46 remains
 an independent blocker.
+
+## Migration collision reconciliation (tenth slice)
+
+The latest default branch introduced `0009_login_role_session_and_oidc_grants.sql` while this draft PR independently used version 0009. Before merging, the PR's session, OIDC, discovery, selection, revocation and locked-issuance migrations were renumbered in order to **0010–0015**; the exact 0009 source from `main` was added unchanged. `tests/test_migrate.py` now requires versions 1–15. Do not apply the earlier branch's original 0009–0014 manifests; those numbers are superseded. Re-run the full migration chain and schema checks before deployment.
