@@ -6,12 +6,13 @@
 import {createOidcLogin} from './oidc-login.mjs';
 import {createCentralOidcStateStore} from './central-oidc-state-pg.mjs';
 import {createCentralOidcBrowserHandler} from './central-oidc-browser.mjs';
+import {createCentralCompanyAuthority} from './central-company-authority.mjs';
 
 export function createCentralSignInService({pool,sessions,issuer,clientId,clientSecret,redirectUri,
-  verifyIdToken,listEligibleCompanies,recheckCompany,fetcher,stateStore,sealer,clock,
+  verifyIdToken,listEligibleCompanies,recheckCompany,getCompanyName,fetcher,stateStore,sealer,clock,
   allowInsecureLocalhost=false,logger}={}){
   if(!pool?.connect||!sessions?.issue||typeof verifyIdToken!=='function'||
-    typeof listEligibleCompanies!=='function'||typeof recheckCompany!=='function')
+    (!listEligibleCompanies||!recheckCompany) && typeof getCompanyName!=='function')
     throw new TypeError('trusted Central sign-in dependencies required');
   let redirect;
   try{redirect=new URL(redirectUri);}catch{throw new TypeError('invalid Central callback URL');}
@@ -23,8 +24,10 @@ export function createCentralSignInService({pool,sessions,issuer,clientId,client
   const oidcLogin=createOidcLogin({issuer,clientId,clientSecret,redirectUri,
     loginStore:store,verifyIdToken,allowInsecureLocalhost,
     ...(fetcher?{fetcher}:{}),...(clock?{clock}:{})});
+  const authority=(!listEligibleCompanies||!recheckCompany)?createCentralCompanyAuthority({pool,issuer,getCompanyName}):null;
   const handler=createCentralOidcBrowserHandler({oidcLogin,sessions,
-    listEligibleCompanies,recheckCompany,allowInsecureLocalhost,
+    listEligibleCompanies:listEligibleCompanies??authority.listEligibleCompanies,
+    recheckCompany:recheckCompany??authority.recheckCompany,allowInsecureLocalhost,
     ...(logger?{logger}:{})});
   return Object.freeze({handler});
 }
