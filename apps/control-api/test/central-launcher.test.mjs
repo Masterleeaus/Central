@@ -48,3 +48,9 @@ test('escapes untrusted company names',()=>{
 test('only GET is supported',async()=>{
   const res=fakeRes();await make()({url:'/central',method:'POST'},res);assert.equal(res.status,405);
 });
+
+test('accepts verified OIDC subjects containing issuer delimiters',async()=>{
+ const res=fakeRes();
+ await make({resolveSession:async()=>({identityId:'issuer|user:42',companyId})})({url:'/central',method:'GET'},res);
+ assert.equal(res.status,200);
+});
