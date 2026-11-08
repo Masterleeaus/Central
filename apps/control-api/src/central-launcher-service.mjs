@@ -16,7 +16,8 @@ export function createCentralLauncherService({pool,sessionStore,getCompanyName,d
   const handler=createCentralLauncherHandler({
     resolveSession:req=>sessions.resolve(req),
     readProducts,
-    destinations
+    destinations,
+    logoutEnabled:Boolean(origin)
   });
   const logout=origin?createCentralLogoutHandler({sessions,origin}):null;
   const combined=logout?async(req,res)=> (await logout(req,res)) || handler(req,res):handler;
