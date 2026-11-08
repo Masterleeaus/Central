@@ -8,7 +8,7 @@ import {createHash, randomBytes, timingSafeEqual} from 'node:crypto';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TOKEN=/^[A-Za-z0-9_-]{43}$/;
 const text=value=>typeof value==='string'&&value.length>0&&value.length<=256&&!/[\x00-\x1f\x7f]/.test(value);
-const validIssuer=value=>{try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&!url.search&&!url.hash&&url.href===value;}catch{return false;}};
+const validIssuer=value=>{try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&!url.search&&!url.hash&&(url.href===value||(url.pathname==='/'&&url.origin===value));}catch{return false;}};
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const equalHash=(left,right)=>{
   if(typeof left!=='string'||typeof right!=='string'||!/^[a-f0-9]{64}$/.test(left)||!/^[a-f0-9]{64}$/.test(right))return false;
