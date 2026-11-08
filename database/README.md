@@ -80,3 +80,39 @@ identity migration would risk cross-company authorization errors.
 These new draft migrations are not merged to PR #46 automatically;
 the PR owners must reconcile the additional migration files before
 either draft becomes production-ready.
+
+## Verified canonical company-name bridge (additional staged integration)
+
+- `0004_verified_company_lookup.sql` exposes only a restricted
+  `resolve_verified_central_company(legacy_organisation_uuid, logto_organisation_id)`
+  lookup to the canonical read role. It resolves **only** reviewed
+  `verified` links for active companies. The authoritative Logto
+  organisation ID must match the legacy mapping.
+- `apps/control-api/src/central-canonical-company-name.mjs` uses that
+  resolver and then changes the transaction-local `titan.company_id`
+  before reading the canonical company name. It does not accept
+  browser-provided display names or assume UUIDs are interchangeable.
+- `central-shared-bootstrap.mjs` checks that a **separate named
+  PostgreSQL database** exists and has the canonical tables and
+  approved lookup function before handing the service a trusted name
+  resolver.
+- When the browser feature is enabled and no trusted name callback
+  was injected, `server.mjs` now requires
+  `TITAN_CENTRAL_SHARED_DATABASE_URL` and initializes a second
+  connection pool. Both pools are closed on successful shutdown;
+  failed canonical preflight closes its pool and blocks startup.
+- `central-browser-router.mjs` validates
+  `TITAN_OIDC_STATE_KEY` and injects the resulting AES-256-GCM
+  sealer into both OIDC and company-choice stores. No implicit
+  process-env key lookup replaces the supplied service environment.
+
+**Critical limitations:** These are transitional staging mechanics,
+not the final one-database architecture. Neither database has been
+backfilled or linked with verified real user/company records.
+Canonical migrations remain independent from the legacy migration
+chain; do not run them on the same database. The newly created
+`titan_shared_company_reader` role requires explicit, approved
+role-membership grants for the canonical service credential, and
+the legacy Central app credential requires its own previously
+documented restricted roles. No production connections, migrations
+or Logto registrations were changed.
