@@ -2,6 +2,8 @@
  * Does not replace Desk/Field/Academy authentication internals. Each app injects
  * a trusted local account lookup, atomic session rotation, and revocation.
  */
+import { appSessionCookiePolicy, buildPolicyCookie, buildClearCookie } from './oidc-cookie-policy.mjs';
+
 const APPS = new Set(['desk', 'field', 'academy']);
 const ID = /^[A-Za-z0-9:_-]{1,200}$/;
 const valid = (v) => typeof v === 'string' && ID.test(v);
@@ -15,8 +17,8 @@ const originOf = (value) => {
   if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash || u.pathname !== '/') throw new Error('invalid app origin');
   return u.origin;
 };
-const cookieName = (name) => typeof name==='string' && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name);
-const cookie = (name, value, maxAge) => `${name}=${value}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+// The session cookie name is fixed by policy (`${applicationId}_sid`); callers cannot choose another.
+const sessionNameFor = (applicationId, name) => APPS.has(applicationId) && name === appSessionCookiePolicy(applicationId).name;
 
 /**
  * findOrganisationIds receives the VERIFIED issuer and subject only; it must
@@ -53,12 +55,13 @@ export function createVerifiedIdentityResolver({applicationId, issuer, audience,
  * It receives app-owned local identities only after the resolver's checks.
  */
 export function createAppSessionIssuer({applicationId,rotateAppSession,sessionCookieName,sessionTtlSeconds=3600}={}) {
-  if (!APPS.has(applicationId)||typeof rotateAppSession!=='function'||!cookieName(sessionCookieName)||!Number.isInteger(sessionTtlSeconds)||sessionTtlSeconds<60||sessionTtlSeconds>86400) throw new TypeError('invalid issuer dependencies');
+  if (!APPS.has(applicationId)||typeof rotateAppSession!=='function'||!sessionNameFor(applicationId,sessionCookieName)||!Number.isInteger(sessionTtlSeconds)||sessionTtlSeconds<60||sessionTtlSeconds>86400) throw new TypeError('invalid issuer dependencies');
+  const policy=appSessionCookiePolicy(applicationId);
   return async ({applicationId:app,localUserId,localAccountId,organisationId,oidcSubject,oidcIssuer}) => {
     if (app!==applicationId||!valid(localUserId)||!valid(localAccountId)||!valid(organisationId)||!valid(oidcSubject)||!validIssuer(oidcIssuer)) throw Error('invalid identity');
     const session=await rotateAppSession({localUserId,localAccountId,organisationId,oidcSubject,oidcIssuer,applicationId});
     if(typeof session!=='string'||!/^[A-Za-z0-9_-]{32,256}$/.test(session)) throw Error('session rotation unavailable');
-    return cookie(sessionCookieName,session,sessionTtlSeconds);
+    return buildPolicyCookie(policy,session,sessionTtlSeconds);
   };
 }
 
@@ -68,8 +71,9 @@ export function createAppSessionIssuer({applicationId,rotateAppSession,sessionCo
  * Deliberately rejects GET logout to avoid CSRF and unwanted sign-outs.
  */
 export function createAppLogoutHandler({applicationId,appOrigin,sessionCookieName,authenticateSession,revokeSession,logger=()=>{}}={}) {
-  if (!APPS.has(applicationId)||typeof authenticateSession!=='function'||typeof revokeSession!=='function'||!cookieName(sessionCookieName)) throw new TypeError('invalid logout dependencies');
+  if (!APPS.has(applicationId)||typeof authenticateSession!=='function'||typeof revokeSession!=='function'||!sessionNameFor(applicationId,sessionCookieName)) throw new TypeError('invalid logout dependencies');
   const origin=originOf(appOrigin);
+  const clear=buildClearCookie(appSessionCookiePolicy(applicationId));
   return async (req,res) => {
     if (new URL(req.url??'/',origin).pathname !== `/auth/titan/${applicationId}/logout`) return false;
     if(req.method!=='POST') {response(res,405,'method_not_allowed');return true;}
@@ -81,7 +85,7 @@ export function createAppLogoutHandler({applicationId,appOrigin,sessionCookieNam
       if (!session || !valid(session.id) || !valid(session.userId)) {response(res,401,'unauthenticated');return true;}
       const revoked = await revokeSession({sessionId:session.id,userId:session.userId,applicationId});
       if(revoked!==true) throw Error('revocation_not_confirmed');
-      res.writeHead(204,{'cache-control':'no-store','set-cookie':cookie(sessionCookieName,'',0)});res.end();
+      res.writeHead(204,{'cache-control':'no-store','set-cookie':clear});res.end();
     } catch (error) {logger('app_logout_failed',error);response(res,503,'logout_unavailable');}
     return true;
   };

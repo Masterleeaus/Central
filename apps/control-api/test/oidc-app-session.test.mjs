@@ -26,3 +26,21 @@ test('login handoff forwards verified business binding into session rotation',as
 test('logout requires an Origin header',async()=>{let revoked=false;const h=createAppLogoutHandler({applicationId:'desk',appOrigin:'https://desk.example/',sessionCookieName:'desk_sid',authenticateSession:async()=>({id:'sess_1',userId:'user_1'}),revokeSession:async()=>{revoked=true;return true}});const r=res();await h({method:'POST',url:'/auth/titan/desk/logout',headers:{'sec-fetch-site':'same-origin'}},r);assert.equal(r.code,403);assert.equal(revoked,false);});
 test('logout rejects a request with no Sec-Fetch-Site header',async()=>{let revoked=false;const h=createAppLogoutHandler({applicationId:'desk',appOrigin:'https://desk.example/',sessionCookieName:'desk_sid',authenticateSession:async()=>({id:'sess_1',userId:'user_1'}),revokeSession:async()=>{revoked=true;return true}});const r=res();await h({method:'POST',url:'/auth/titan/desk/logout',headers:{origin:'https://desk.example'}},r);assert.equal(r.code,403);assert.equal(revoked,false);assert.equal(r.headers['set-cookie'],undefined);});
 test('logout rejects cross-site Sec-Fetch-Site',async()=>{const h=createAppLogoutHandler({applicationId:'desk',appOrigin:'https://desk.example/',sessionCookieName:'desk_sid',authenticateSession:async()=>({id:'sess_1',userId:'user_1'}),revokeSession:async()=>true});const r=res();await h({method:'POST',url:'/auth/titan/desk/logout',headers:{origin:'https://desk.example','sec-fetch-site':'cross-site'}},r);assert.equal(r.code,403);});
+// Cookie creation and clearing use the same policy as the adapter (issue #31).
+import {isPolicySetCookie,appSessionCookiePolicy} from '../src/oidc-cookie-policy.mjs';
+const sess=(v)=>createAppSessionIssuer({applicationId:'desk',sessionCookieName:'desk_sid',rotateAppSession:async()=>v});
+const issueArgs={applicationId:'desk',localUserId:'user_1',localAccountId:'account_1',organisationId:'org_1',oidcSubject:'logto_1',oidcIssuer:'https://id.example'};
+test('issued session cookie is host-only, exact and validates against the policy',async()=>{const c=await sess('x'.repeat(48))(issueArgs);assert.equal(c,'desk_sid='+'x'.repeat(48)+'; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=3600');assert.equal(isPolicySetCookie(appSessionCookiePolicy('desk'),c),true);});
+test('session cookie name is fixed to the application, not chosen by the caller',()=>{
+  assert.throws(()=>createAppSessionIssuer({applicationId:'desk',sessionCookieName:'field_sid',rotateAppSession:async()=>'x'.repeat(48)}),TypeError);
+  assert.throws(()=>createAppSessionIssuer({applicationId:'desk',sessionCookieName:'desk_sid_2',rotateAppSession:async()=>'x'.repeat(48)}),TypeError);
+  assert.throws(()=>createAppSessionIssuer({applicationId:'desk',sessionCookieName:'__Host-desk_sid',rotateAppSession:async()=>'x'.repeat(48)}),TypeError);
+  assert.throws(()=>createAppLogoutHandler({applicationId:'desk',appOrigin:'https://desk.example/',sessionCookieName:'field_sid',authenticateSession:async()=>null,revokeSession:async()=>true}),TypeError);
+});
+test('session TTL outside the policy bounds is refused at construction',()=>{
+  for(const ttl of [59,86401,1.5,'3600']) assert.throws(()=>createAppSessionIssuer({applicationId:'desk',sessionCookieName:'desk_sid',rotateAppSession:async()=>'x'.repeat(48),sessionTtlSeconds:ttl}),TypeError);
+});
+test('CRLF or separators in a rotated session token cannot reach a Set-Cookie header',async()=>{
+  for(const v of ['x'.repeat(40)+'\r\nSet-Cookie: evil=1','x'.repeat(40)+'; Domain=.titanzero.io','x'.repeat(40)+'\n','x'.repeat(10)]) await assert.rejects(()=>sess(v)(issueArgs));
+});
+test('logout clears the session cookie with the exact policy string',async()=>{const h=createAppLogoutHandler({applicationId:'desk',appOrigin:'https://desk.example/',sessionCookieName:'desk_sid',authenticateSession:async()=>({id:'sess_1',userId:'user_1'}),revokeSession:async()=>true});const r=res();await h({method:'POST',url:'/auth/titan/desk/logout',headers:{origin:'https://desk.example','sec-fetch-site':'same-origin'}},r);assert.equal(r.headers['set-cookie'],'desk_sid=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0');assert.equal(isPolicySetCookie(appSessionCookiePolicy('desk'),r.headers['set-cookie']),true);});
