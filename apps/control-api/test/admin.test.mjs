@@ -5,13 +5,14 @@ import {once} from 'node:events';
 import {createCentralHandler} from '../src/app.mjs';
 import {createAdminHandler} from '../src/admin.mjs';
 const ORIGINS={field:'https://field.titanzero.io',desk:'https://desk.titanzero.io',academy:'https://academy.titanzero.io'};
+const AUDIENCES={field:'aud-field',desk:'aud-desk',academy:'aud-academy'};
 const ID='00000000-0000-4000-8000-000000000001';
 const command={kind:'membership',id:ID,organisationId:ID,identityId:ID,role:'learner'};
 const input={requestId:ID,authorityReference:'logto-audit:123',command};
 async function invoke(path,{method='GET',auth=true,allow=true,authorize=async()=>allow,verify=async()=>({logtoSubject:'member1'}),provision=async()=> 'created',body=undefined,origins=ORIGINS}={}){
  const calls=[];const handler=createAdminHandler({verifyToken:verify,authoriseOperator:authorize,provision:provision===null?undefined:async(...args)=>{calls.push(args);return provision(...args)},origins});
  const pool={connect:async()=>({query:async()=>({rows:[]}),release(){}})};
- const s=createServer(createCentralHandler({pool,verifyToken:verify,issuer:'https://issuer.test',audience:'test',adminHandler:handler}));s.listen(0,'127.0.0.1');await once(s,'listening');
+ const s=createServer(createCentralHandler({pool,verifyToken:verify,issuer:'https://issuer.test',audiences:AUDIENCES,adminHandler:handler}));s.listen(0,'127.0.0.1');await once(s,'listening');
  try {const opts={method,headers:auth?{authorization:'Bearer abc.def.ghi'}:{}};
  if(body!==undefined){opts.headers['content-type']='application/json';opts.body=typeof body==='string'?body:JSON.stringify(body);}
  const res=await fetch(`http://127.0.0.1:${s.address().port}${path}`,opts);return {status:res.status,body:await res.json(),calls};}
@@ -33,4 +34,4 @@ test('excess or unsupported command fields rejected',async()=>assert.equal((awai
 test('malformed command rejected',async()=>assert.equal((await invoke('/v1/admin/provision',{method:'POST',body:{...input,command:{...command,organisationId:'bad'}}})).status,400));
 test('invalid provisioning caller role rejected',async()=>assert.equal((await invoke('/v1/admin/provision',{method:'POST',body:{...input,command:{...command,role:'superuser'}}})).status,400));
 test('service failures do not leak details',async()=>{const r=await invoke('/v1/admin/provision',{method:'POST',body:input,provision:async()=>{throw Error('sensitive database details')}});assert.equal(r.status,503);assert.ok(!JSON.stringify(r.body).includes('sensitive'));});
-test('default Central handler has no admin interface',async()=>{const pool={connect:async()=>({query:async()=>({rows:[]}),release(){}})};const s=createServer(createCentralHandler({pool,verifyToken:async()=>({logtoSubject:'a'}),issuer:'https://issuer.test',audience:'test'}));s.listen(0,'127.0.0.1');await once(s,'listening');try{const r=await fetch(`http://127.0.0.1:${s.address().port}/v1/admin/oidc/plans`);assert.equal(r.status,404)}finally{s.close();await once(s,'close')}});
+test('default Central handler has no admin interface',async()=>{const pool={connect:async()=>({query:async()=>({rows:[]}),release(){}})};const s=createServer(createCentralHandler({pool,verifyToken:async()=>({logtoSubject:'a'}),issuer:'https://issuer.test',audiences:AUDIENCES}));s.listen(0,'127.0.0.1');await once(s,'listening');try{const r=await fetch(`http://127.0.0.1:${s.address().port}/v1/admin/oidc/plans`);assert.equal(r.status,404)}finally{s.close();await once(s,'close')}});

@@ -1,5 +1,27 @@
 /** Titan Central opt-in operator API. No privileged route exists without injected live authorisation. */
 import { createTitanOidcRegistrationPlans } from '../../../packages/control-plane/dist/oidc-registration.js';
+import { LogtoAuthorityError } from '../../../packages/control-plane/dist/logto-management.js';
+
+const logtoId = v => typeof v==='string' && /^[A-Za-z0-9_-]{1,256}$/.test(v);
+/**
+ * Real operator authority: the end-user operator token must belong to a current member of the
+ * configured Logto organisation AND hold one of the configured administrator role IDs, both read
+ * from the Logto Management API at decision time. Email, display names and local profiles are never consulted.
+ * Logto authority failures (not a member, role not held, management API rejected or unreachable) deny.
+ * Other errors propagate so the caller answers 503.
+ */
+export function createLogtoOperatorAuthoriser({verifier,operatorOrganisationId,administrativeRoleIds}={}) {
+ if(!verifier||typeof verifier.assertAnyOrganisationRole!=='function') throw new Error('Logto management verifier required');
+ if(!logtoId(operatorOrganisationId)) throw new Error('operator organisation ID required');
+ if(!Array.isArray(administrativeRoleIds)||administrativeRoleIds.length<1||administrativeRoleIds.length>32||!administrativeRoleIds.every(logtoId)||new Set(administrativeRoleIds).size!==administrativeRoleIds.length)
+  throw new Error('explicit operator administrator role IDs required');
+ const roles=Object.freeze([...administrativeRoleIds]);
+ return async principal=>{
+  if(!logtoId(principal?.logtoSubject)) return false;
+  try{await verifier.assertAnyOrganisationRole(principal.logtoSubject,operatorOrganisationId,roles);return true;}
+  catch(e){if(e instanceof LogtoAuthorityError) return false;throw e;}
+ };
+}
 
 const baseHeaders = Object.freeze({'cache-control':'no-store','content-type':'application/json; charset=utf-8','x-content-type-options':'nosniff'});
 const send = (res,status,body) => {res.writeHead(status,baseHeaders);res.end(JSON.stringify(body));};
@@ -47,8 +69,10 @@ export function createAdminHandler({verifyToken,authoriseOperator,provision,orig
   let principal;
   try{principal=await verifyToken(token);if(typeof principal?.logtoSubject!=='string'||!principal.logtoSubject)throw Error('bad principal');}
   catch{send(res,401,{error:'unauthenticated'});return true;}
-  try{if(await authoriseOperator(principal)!==true){send(res,403,{error:'forbidden'});return true;}}
+  let operatorAuthorised;
+  try{operatorAuthorised=await authoriseOperator(principal)===true;}
   catch{send(res,503,{error:'authority_unavailable'});return true;}
+  if(!operatorAuthorised){send(res,403,{error:'forbidden'});return true;}
   if(req.url.includes('?')){send(res,400,{error:'unexpected_query'});return true;}
   if(path.endsWith('/plans')){send(res,200,{applications:plans,registrationStatus:'not_registered',note:'Operator-reviewed plans; no Logto registrations performed'});return true;}
   if(typeof provision!=='function'){send(res,503,{error:'provisioning_disabled'});return true;}
@@ -59,7 +83,11 @@ export function createAdminHandler({verifyToken,authoriseOperator,provision,orig
     send(res,400,{error:'invalid_command'});return true;
   }
   try {
-   const result=await provision({logtoSubject:principal.logtoSubject,managementCredentialVerified:true},
+   // managementCredentialVerified does NOT mean the bearer token is a machine credential: an end-user
+   // operator token is never trusted as one. It is set only here, from authoriseOperator returning true
+   // (Logto organisation membership plus an administrator role, checked on this request via the
+   // Management API). TrustedProvisioningService and the organisation authoriser re-check authority.
+   const result=await provision({logtoSubject:principal.logtoSubject,managementCredentialVerified:operatorAuthorised},
      {actorSubject:principal.logtoSubject,requestId:body.requestId,authorityReference:body.authorityReference},body.command);
    if(result!=='created'&&result!=='replayed')throw Error('invalid provisioning result');
    send(res,result==='created'?201:200,{status:result,requestId:body.requestId});

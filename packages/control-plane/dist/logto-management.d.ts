@@ -9,6 +9,13 @@ export interface LogtoVerifierOptions {
     accessToken: () => Promise<string>;
     fetcher?: typeof fetch;
     maxPages?: number;
+    /** How long a positive membership result may be reused. Default 30s; 0 disables caching.
+     * A removed member can therefore still pass a membership check for up to this long. Max 5 minutes. */
+    membershipCacheTtlMs?: number;
+    /** Upper bound on cached membership entries (oldest evicted first). Default 1000. */
+    membershipCacheMaxEntries?: number;
+    /** Injectable clock for tests; milliseconds since epoch. */
+    clock?: () => number;
 }
 export declare class LogtoAuthorityError extends Error {
     constructor(message?: string);
@@ -18,12 +25,20 @@ export declare class LogtoManagementVerifier {
     private readonly accessToken;
     private readonly fetcher;
     private readonly maxPages;
+    private readonly membershipTtlMs;
+    private readonly membershipMaxEntries;
+    private readonly clock;
+    /** Key `${organisationId}\0${userId}` -> expiry time (ms). Positive results only, so denials always reach Logto. */
+    private readonly membershipCache;
     constructor(opts: LogtoVerifierOptions);
     private get;
     /** Confirm a Logto identity currently belongs to an independently known organisation.
-     * Exhaust pages (up to a configured safe bound); never infer membership from email or profile.
+     * A positive result is reused for at most membershipCacheTtlMs; a cache hit costs zero Logto calls.
+     * Cold lookups exhaust pages (up to a configured safe bound); never infer membership from email or profile.
      */
     assertMembership(logtoUserId: string, logtoOrganisationId: string): Promise<void>;
+    private rememberMembership;
+    private lookupMembership;
     assertIdentity(logtoUserId: string): Promise<void>;
     assertOrganisation(logtoOrganisationId: string): Promise<void>;
     /** Require at least one exact Logto organisation role ID, fetched at decision time.

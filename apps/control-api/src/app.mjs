@@ -5,9 +5,18 @@ const noStore={ 'cache-control':'no-store', 'content-type':'application/json; ch
 function respond(res, status, body) {res.writeHead(status,noStore);res.end(JSON.stringify(body));}
 function bearer(req) {const h=req.headers.authorization;if(typeof h!=='string'||!/^Bearer [A-Za-z0-9_\-.]+$/.test(h)) return;return h.slice(7);}
 /** No administrative mutations or user-controlled SQL. Organisation/app/action are the only request inputs. */
-export function createCentralHandler({ pool, verifyToken, issuer, audience, adminHandler, logger=()=>{} }) {
-  if (!pool || !verifyToken || !issuer || !audience) throw new Error('missing Central API dependencies');
-  const trust={expectedIssuer:issuer,audienceByApplication:{field:audience,desk:audience,academy:audience}};
+/** One distinct audience per application (ADR-005). A shared audience would let a token issued for one app pass for another, so there is no single-audience fallback. */
+function perApplicationAudiences(audiences) {
+  if (!audiences || typeof audiences!=='object') throw new Error('per-application audiences required');
+  const map={field:audiences.field,desk:audiences.desk,academy:audiences.academy};
+  const values=Object.values(map);
+  if (values.some(v=>typeof v!=='string'||v.length===0||v.length>256) || new Set(values).size!==3) throw new Error('per-application audiences required');
+  return Object.freeze(map);
+}
+/** A token is accepted for an application only when its verified aud equals that application's audience. */
+export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, logger=()=>{} }) {
+  if (!pool || !verifyToken || !issuer) throw new Error('missing Central API dependencies');
+  const trust={expectedIssuer:issuer,audienceByApplication:perApplicationAudiences(audiences)};
   return async (req,res)=>{
     const pathname=new URL(req.url??'/', 'http://localhost').pathname;
     if (req.method==='GET' && pathname==='/healthz') return respond(res,200,{status:'ok'});
