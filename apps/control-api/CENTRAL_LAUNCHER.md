@@ -173,3 +173,23 @@ those callbacks; client-supplied selections must never be accepted.
 Test: `node --test test/central-oidc-browser.test.mjs
 test/central-oidc-state-pg.test.mjs` plus
 `tests/sql/central_oidc_state_isolation.sql` in disposable PostgreSQL.
+
+## Sign-in composition (sixth slice)
+
+`src/central-sign-in-service.mjs` composes the existing
+Authorization Code + PKCE login engine, isolated encrypted Central
+OIDC state, the browser callback, and the Central session manager.
+The configured redirect URI must be exactly
+`/auth/central/callback` with no query, fragment or untrusted HTTP
+origin. The callback is registered independently for Central and must
+not borrow a product's client ID or redirect URI.
+
+Integration tests exercise start, callback, PKCE challenge,
+one-use state consumption, replay denial, membership recheck,
+and exact callback registration. Verification is mocked in tests;
+live Logto and real token-signature validation have not been tested.
+
+Remaining gating steps are issuer discovery (#30), a production
+ID-token verifier and registration, trusted company eligibility/recheck
+implementations, the multi-company choice ceremony (#32), and
+server route mounting after those pieces have been integrated.
