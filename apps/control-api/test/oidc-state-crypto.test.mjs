@@ -1,0 +1,14 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {randomBytes} from 'node:crypto';
+import {createStateSealer,createStateSealerFromEnv,parseStateKey} from '../src/oidc-state-crypto.mjs';
+const key=randomBytes(32);
+test('AES-256-GCM round trip recovers plaintext',()=>{const s=createStateSealer({key});const sealed=s.seal('code-verifier-value','aad-1');assert.match(sealed,/^v1\./);assert.doesNotMatch(sealed,/code-verifier-value/);assert.equal(s.open(sealed,'aad-1'),'code-verifier-value');});
+test('same plaintext seals differently each time (fresh IV)',()=>{const s=createStateSealer({key});assert.notEqual(s.seal('x','a'),s.seal('x','a'));});
+test('ciphertext bit flip is detected',()=>{const s=createStateSealer({key});const sealed=s.seal('nonce-value','aad');const raw=Buffer.from(sealed.slice(3),'base64url');raw[raw.length-1]^=0x01;assert.throws(()=>s.open('v1.'+raw.toString('base64url'),'aad'),/rejected/);});
+test('tag tampering is detected',()=>{const s=createStateSealer({key});const sealed=s.seal('nonce-value','aad');const raw=Buffer.from(sealed.slice(3),'base64url');raw[12]^=0xff;assert.throws(()=>s.open('v1.'+raw.toString('base64url'),'aad'),/rejected/);});
+test('wrong AAD is rejected',()=>{const s=createStateSealer({key});const sealed=s.seal('v','desk|digest|code_verifier');assert.throws(()=>s.open(sealed,'field|digest|code_verifier'),/rejected/);});
+test('wrong key is rejected',()=>{const sealed=createStateSealer({key}).seal('v','aad');assert.throws(()=>createStateSealer({key:randomBytes(32)}).open(sealed,'aad'),/rejected/);});
+test('unknown version prefix and truncated input are rejected',()=>{const s=createStateSealer({key});assert.throws(()=>s.open('v2.AAAA','aad'),/rejected/);assert.throws(()=>s.open('v1.AAAA','aad'),/rejected/);});
+test('env key must be set and be 32 bytes of base64',()=>{assert.throws(()=>createStateSealerFromEnv({}),/must be set/);assert.throws(()=>createStateSealerFromEnv({TITAN_OIDC_STATE_KEY:randomBytes(16).toString('base64')}),/32 bytes/);assert.throws(()=>parseStateKey('not base64!'),/32 bytes/);});
+test('env key loads a valid sealer',()=>{const env={TITAN_OIDC_STATE_KEY:key.toString('base64')};assert.equal(createStateSealerFromEnv(env).open(createStateSealerFromEnv(env).seal('ok','a'),'a'),'ok');});
