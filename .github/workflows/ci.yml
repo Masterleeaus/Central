@@ -101,3 +101,6 @@ jobs:
 
       - name: Scoped company discovery and membership isolation
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_company_discovery.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Durable company selection role isolation and one-use consumption
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_company_selection.sql "$TITAN_CI_DATABASE_URL"
