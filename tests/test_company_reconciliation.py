@@ -93,3 +93,43 @@ class AuditTests(unittest.TestCase):
         s=source();s['entitlements'][0]['features']=['invoices']
         r=audit.reconcile(s,target())
         self.assertEqual(r['blockers']['entitlement_features_mismatch'],1)
+
+    def test_matching_timezone_converted_expirations(self):
+        from datetime import datetime, timezone
+        s=source(); c=target()
+        s['memberships'][0]['expires_at']='2027-01-01 12:00:00+00'
+        c['memberships'][0]['expires_at']='2027-01-01T23:00:00+11:00'
+        s['entitlements'][0]['expires_at']='2027-01-02 12:00:00+00'
+        c['entitlements'][0]['expires_at']='2027-01-02T12:00:00Z'
+        r=audit.reconcile(s,c,now=datetime(2026,11,9,tzinfo=timezone.utc))
+        self.assertEqual(r['blocker_count'],0)
+    def test_expiry_extension_or_unlimited_access_blocks_cutover(self):
+        from datetime import datetime, timezone
+        now=datetime(2026,11,9,tzinfo=timezone.utc)
+        s=source();c=target()
+        s['memberships'][0]['expires_at']='2026-11-01T00:00:00Z'
+        c['memberships'][0]['expires_at']='2027-01-01T00:00:00Z'
+        s['entitlements'][0]['expires_at']='2026-12-01T00:00:00Z'
+        c['entitlements'][0]['expires_at']=None
+        r=audit.reconcile(s,c,now=now)
+        self.assertEqual(r['blockers']['membership_expiry_mismatch'],1)
+        self.assertEqual(r['blockers']['entitlement_expiry_mismatch'],1)
+    def test_invalid_naive_expiry_fails_closed_as_blocker(self):
+        from datetime import datetime, timezone
+        s=source();c=target()
+        c['memberships'][0]['expires_at']='2026-11-09T10:00:00'
+        r=audit.reconcile(s,c,now=datetime(2026,11,9,tzinfo=timezone.utc))
+        self.assertEqual(r['blockers']['membership_expiry_invalid'],1)
+    def test_subsecond_expiry_difference_under_one_second_is_allowed(self):
+        from datetime import datetime, timezone
+        s=source();c=target()
+        s['entitlements'][0]['expires_at']='2027-01-01T00:00:00.200Z'
+        c['entitlements'][0]['expires_at']='2027-01-01T00:00:00.900Z'
+        r=audit.reconcile(s,c,now=datetime(2026,11,9,tzinfo=timezone.utc))
+        self.assertEqual(r['blocker_count'],0)
+    def test_unverified_mapping_does_not_authorise_access_reconciliation(self):
+        c=target();c['mappings'][0]['status']='revoked'
+        r=audit.reconcile(source(),c)
+        self.assertEqual(r['blockers']['unverified_company_mapping'],1)
+        self.assertEqual(r['blockers']['unresolvable_membership'],1)
+        self.assertEqual(r['blockers']['unresolvable_entitlement'],1)
