@@ -193,3 +193,37 @@ Remaining gating steps are issuer discovery (#30), a production
 ID-token verifier and registration, trusted company eligibility/recheck
 implementations, the multi-company choice ceremony (#32), and
 server route mounting after those pieces have been integrated.
+
+## Authoritative company discovery and recheck (seventh slice)
+
+Migration `0011_central_company_discovery.sql` adds the
+`titan.central_eligible_companies(subject)` function, restricted to a
+dedicated NOLOGIN `titan_central_discovery` role. Its audited query returns
+only active company memberships with a current product entitlement.
+It does not expose direct membership-table SELECT privileges to the
+browser-login credential. The function is SECURITY DEFINER, has a fixed
+search path and revokes PUBLIC execution. As it accepts an authenticated
+subject as an argument, it MUST be called only after signature/issuer/nonce
+verification and must not be exposed as a public arbitrary-subject API.
+
+`src/central-company-authority.mjs` provides a trusted
+`listEligibleCompanies`, `listOrganisations` (trusted names for #32)
+and `recheckCompany`. Discovery uses a restricted read-only
+transaction, validates the record count and IDs and fails closed on
+duplicate/malformed results. Recheck uses the normal tenant-scoped RLS
+snapshot and verifies active identity, organisation, unique current
+membership, and at least one live product entitlement immediately before
+issuing a session.
+
+`createCentralSignInService` now automatically creates the authority
+when callbacks are not explicitly injected; callers must supply
+`getCompanyName` as a trusted provider. A deployment role must have
+`GRANT titan_central_discovery TO titan_central_app` in addition to the
+previous Central role grants. This is not a production migration yet.
+CI now checks `tests/sql/central_company_discovery.sql` for role
+restrictions and revoked-company exclusion.
+
+**Still outstanding:** complete durable multi-company selection and its
+HTTP form/POST handler, bind the one-use choice state to the same browser
+that completed OIDC, verify logout/revocations, reconcile the #43 canonical
+company table, and mount the system after live Logto staging verification.
