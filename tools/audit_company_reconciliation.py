@@ -104,26 +104,42 @@ def reconcile(legacy,canonical):
         elif identity['state']!=target['status']:
             blockers['identity_status_mismatch']+=1
     canonical_members={(x['company_id'],x['identity_id']):x for x in canonical['memberships']}
+    expected_members=set()
     for member in legacy['memberships']:
         mapping=mappings.get(member['organisation_id'])
         identity=identities.get(member['identity_id'])
         if mapping is None or identity is None:blockers['unresolvable_membership']+=1;continue
         target_identity=canon_identities.get(identity['logto_subject'])
         if not target_identity:continue  # reported as missing identity
-        target=canonical_members.get((mapping['company_id'],target_identity['id']))
+        member_key=(mapping['company_id'],target_identity['id'])
+        expected_members.add(member_key)
+        target=canonical_members.get(member_key)
         if not target:blockers['missing_canonical_membership']+=1
         elif (member['role'],member['state']) != (target['role'],target['status']):
             blockers['membership_access_mismatch']+=1
+    mapped_companies={x['company_id'] for x in mappings.values() if x['status']=='verified'}
+    for key,member in canonical_members.items():
+        if key[0] in mapped_companies and key not in expected_members and member['status']=='active':
+            blockers['unexpected_canonical_active_membership']+=1
     canonical_grants={(x['company_id'],x['application_id']):x for x in canonical['entitlements']}
+    expected_grants=set()
     for grant in legacy['entitlements']:
         mapping=mappings.get(grant['organisation_id'])
         product=APPLICATIONS.get(grant['application_id'])
         if mapping is None or product is None:blockers['unresolvable_entitlement']+=1;continue
-        target=canonical_grants.get((mapping['company_id'],product))
+        grant_key=(mapping['company_id'],product)
+        expected_grants.add(grant_key)
+        target=canonical_grants.get(grant_key)
         if not target:blockers['missing_canonical_entitlement']+=1
         elif grant['state']!=target['status']:
             blockers['entitlement_status_mismatch']+=1
+        elif set(grant.get('features') or [])!=set(target.get('features') or []):
+            blockers['entitlement_features_mismatch']+=1
+    for key,grant in canonical_grants.items():
+        if key[0] in mapped_companies and key not in expected_grants and grant['status'] in ACTIVE:
+            blockers['unexpected_canonical_active_entitlement']+=1
     canonical_links={(x['company_id'],x['identity_id'],x['application_id']):x for x in canonical['links']}
+    expected_links=set()
     for link in legacy['links']:
         mapping=mappings.get(link['organisation_id'])
         identity=identities.get(link['identity_id'])
@@ -132,10 +148,15 @@ def reconcile(legacy,canonical):
             blockers['unresolvable_user_link']+=1;continue
         target_id=canon_identities.get(identity['logto_subject'])
         if not target_id:continue
-        target=canonical_links.get((mapping['company_id'],target_id['id'],product))
+        link_key=(mapping['company_id'],target_id['id'],product)
+        expected_links.add(link_key)
+        target=canonical_links.get(link_key)
         if not target:blockers['missing_canonical_user_link']+=1
         elif target['status']!=link['state'] or target['local_user_id']!=link['local_user_id']:
             blockers['user_link_mismatch']+=1
+    for key,link in canonical_links.items():
+        if key[0] in mapped_companies and key not in expected_links and link['status']=='verified':
+            blockers['unexpected_canonical_verified_user_link']+=1
     return {'schema':'titan.company-reconciliation.v1','read_only':True,
             'migration_authorised':False,'snapshots_atomic_across_databases':False,
             'row_counts':row_counts,'blockers':dict(sorted(blockers.items())),
