@@ -256,3 +256,19 @@ jobs:
 
       - name: Verify outer transaction rollback restores approval and durable audit atomically
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_backfill_atomic_rollback.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Verify authenticated non-superuser can commit only approved staging backfill
+        env:
+          PGPASSWORD: ci-only-throwaway
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_backfill_login_setup.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+          if psql -X -v ON_ERROR_STOP=1 -h localhost -U titan_backfill_ci_login -d titan_shared_ci -c "SELECT * FROM titan.staging_backfill_approvals" > "$RUNNER_TEMP/staging-privilege-denied.txt" 2>&1; then
+            echo "SECURITY FAILURE: staging login can read approvals directly"
+            exit 1
+          fi
+          if psql -X -v ON_ERROR_STOP=1 -h localhost -U titan_backfill_ci_login -d titan_shared_ci -c "SET ROLE titan_staging_backfill_executor; INSERT INTO titan.identities(id,logto_subject,status) VALUES('00000000-0000-4000-8000-000000000806','forbidden-direct-login','active')" > "$RUNNER_TEMP/staging-direct-write-denied.txt" 2>&1; then
+            echo "SECURITY FAILURE: staging login can write identity directly"
+            exit 1
+          fi
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U titan_backfill_ci_login -d titan_shared_ci -c "SET ROLE titan_staging_backfill_executor; SELECT titan.execute_staging_backfill_approval('00000000-0000-4000-8000-000000000705')"
+          psql -X -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "DO \$\$ BEGIN IF NOT EXISTS(SELECT 1 FROM titan.staging_backfill_audit WHERE approval_id='00000000-0000-4000-8000-000000000705' AND executing_login='titan_backfill_ci_login') THEN RAISE EXCEPTION 'independent login audit missing'; END IF; IF EXISTS(SELECT 1 FROM titan.identities WHERE id='00000000-0000-4000-8000-000000000806') THEN RAISE EXCEPTION 'unapproved direct write succeeded'; END IF; END \$\$;"
