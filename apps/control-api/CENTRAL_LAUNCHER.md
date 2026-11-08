@@ -53,3 +53,17 @@ database schema does not provide a suitable company display name directly.
 This is an isolated service module. **Do not mount it** before Central's
 server-side session lifecycle and verified company-selection flow exist.
 Tests: `node --test test/central-product-reader.test.mjs`.
+
+## One-use organisation selection (partial issue #32 implementation)
+
+`src/organisation-selection.mjs` provides the selection coordinator. It issues a
+random one-use state bound to a hash of the browser binding and stores the
+allowed organisation IDs server-side. On selection, the state store must consume
+the token atomically; the coordinator verifies the selected ID was in the stored
+choice set, rechecks current membership/access, and only then calls the Central
+session issuer. The module is not mounted in the HTTP server because durable
+selection storage, Central-owned OIDC callback/session issuance, and a trusted
+organisation discovery query are not yet wired. The browser must never receive
+the issuer/subject or gain authority from a posted company ID.
+
+Tests: `node --test test/organisation-selection.test.mjs`.
