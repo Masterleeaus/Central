@@ -16,6 +16,11 @@
     "field": "/auth/titan/field/logout",
     "academy": "/auth/titan/academy/logout"
   },
+  "live_app_directories": {
+    "desk": "desk",
+    "field": "ai-fsm",
+    "academy": "academy"
+  },
   "central_db_separate": false,
   "logto_db_separate": false,
   "supported_postgres": false,
