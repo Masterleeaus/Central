@@ -116,7 +116,7 @@ jobs:
       # differently. CI uses a second disposable PostgreSQL database.
       - name: Create independent shared-core test database
         run: psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" -c "CREATE DATABASE titan_shared_ci"
-      - name: Apply canonical migration registry 0001–0004
+      - name: Apply canonical migration registry 0001–0005
         run: python3 tools/migrate_shared.py --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
       - name: Canonical migration rerun applies nothing
         run: |
@@ -250,3 +250,6 @@ jobs:
             echo "SECURITY FAILURE: rehearsal ran with staging flag disabled"
             exit 1
           fi
+
+      - name: Verify restricted staging commit, approval consumption, audit ledger and replay rejection
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_backfill_commit.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
