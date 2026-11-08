@@ -200,3 +200,53 @@ jobs:
           set -e
           test "$rc" -eq 2
           python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["status"]=="blocked" and not p["migration_authorised"] and not p["writes_permitted"] and len(p["missing_gates"])>=7' "$RUNNER_TEMP/cutover-preflight.json"
+
+      - name: Signed staging backfill executes transaction then always rolls back
+        env:
+          TITAN_BACKFILL_STAGING_ENABLED: '1'
+          TITAN_BACKFILL_APPROVAL_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        run: |
+          python3 - <<'PY'
+          import hashlib,hmac,json,os,time
+          from pathlib import Path
+          folder=Path(os.environ['RUNNER_TEMP'])
+          manifest={
+            'company_id':'00000000-0000-4000-8000-000000000011',
+            'legacy_organisation_id':'00000000-0000-4000-8000-000000000001',
+            'logto_organisation_id':'logto-company-a',
+            'identity_id':'00000000-0000-4000-8000-000000000901',
+            'logto_subject':'ci-staging-signed-subject',
+            'identity_status':'active','membership_role':'member'
+          }
+          from sys import path
+          path.insert(0,'tools')
+          from rehearse_signed_backfill import digest
+          expire=int(time.time())+300
+          hash_value=digest(manifest)
+          payload=f'titan:staging-backfill-rehearsal:v1:{expire}:{hash_value}'
+          sig=hmac.new(bytes.fromhex(os.environ['TITAN_BACKFILL_APPROVAL_KEY']),
+                       payload.encode(),hashlib.sha256).hexdigest()
+          (folder/'ci-rehearsal-manifest.json').write_text(json.dumps(manifest))
+          (folder/'ci-rehearsal-approval.json').write_text(json.dumps(
+              {'manifest_sha256':hash_value,'expires_at_unix':expire,'signature':sig}))
+          PY
+          python3 tools/rehearse_signed_backfill.py \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --manifest "$RUNNER_TEMP/ci-rehearsal-manifest.json" \
+            --approval "$RUNNER_TEMP/ci-rehearsal-approval.json" \
+            --execute-staging-rehearsal > "$RUNNER_TEMP/signed-rehearsal-result.json"
+          python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["status"]=="rolled_back" and x["records_persisted"]==0 and x["production_execution_permitted"] is False' "$RUNNER_TEMP/signed-rehearsal-result.json"
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "SELECT count(*) FROM titan.identities WHERE logto_subject='ci-staging-signed-subject'")" = "0"
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "SELECT count(*) FROM titan.company_memberships WHERE identity_id='00000000-0000-4000-8000-000000000901'")" = "0"
+      - name: Signed backfill refuses production database and absent staging flag
+        env:
+          TITAN_BACKFILL_APPROVAL_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        run: |
+          if python3 tools/rehearse_signed_backfill.py \
+            --database-url "$TITAN_CI_DATABASE_URL" \
+            --manifest "$RUNNER_TEMP/ci-rehearsal-manifest.json" \
+            --approval "$RUNNER_TEMP/ci-rehearsal-approval.json" \
+            --execute-staging-rehearsal; then
+            echo "SECURITY FAILURE: rehearsal ran with staging flag disabled"
+            exit 1
+          fi
