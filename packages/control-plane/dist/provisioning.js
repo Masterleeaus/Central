@@ -69,6 +69,8 @@ export class CentralProvisioner {
         try {
             await conn.query('BEGIN');
             begun = true;
+            // Cross-tenant writes run only as titan_trusted_writer (migrations 0006-0008); the login role does not inherit them.
+            await conn.query('SET LOCAL ROLE titan_trusted_writer');
             await conn.query("SET LOCAL statement_timeout = '5000ms'");
             // Serialize the exact request ID; request idempotence is protected by the DB unique constraint.
             await conn.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [context.requestId]);
