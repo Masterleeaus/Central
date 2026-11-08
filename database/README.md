@@ -49,3 +49,34 @@ and verified on a disposable PostgreSQL database.
    use the canonical company UUID.
 5. Verify clean install, schema drift, and cross-company isolation for all apps.
 
+
+## Reconciliation work added on the Central launcher draft branch
+
+The PR #46 clean-install schema has been copied without modifying its original
+`0001_shared_company_core.sql`. This repository now has two **independent**
+database test paths: the legacy `/migrations` chain (1–15) and the canonical
+`database/migrations` chain. CI applies each to a separate disposable
+PostgreSQL database. Do **not** apply both chains to one database: both
+create `titan.identities` with incompatible column contracts
+(`state` versus `status`).
+
+Canonical migrations added:
+- `0002_shared_company_rls.sql` defines the company-scoped,
+  NOLOGIN read-only role `titan_shared_company_reader`, transaction-local
+  company context and FORCE RLS for company, identity, membership,
+  entitlement and app-link reads. An unset or malformed scope reads no rows.
+- `0003_legacy_central_company_links.sql` defines a reviewed one-to-one
+  mapping from legacy Central organisation UUID to canonical company UUID
+  and Logto organisation ID. Pending/revoked mappings never confer access.
+  There is **no automatic conversion** between UUID namespaces.
+
+Live deployment still needs an authenticated and audited mapping approval
+workflow, schema-backfill procedures, shared database role grants and
+production-level canonical RLS/provisioning. The existing launcher still
+uses its legacy authoritative reader. Its queries have **not** been
+switched to these canonical tables, because doing so before tenant and
+identity migration would risk cross-company authorization errors.
+
+These new draft migrations are not merged to PR #46 automatically;
+the PR owners must reconcile the additional migration files before
+either draft becomes production-ready.
