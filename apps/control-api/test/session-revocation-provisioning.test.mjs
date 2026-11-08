@@ -27,7 +27,7 @@ function makeDatabase({memberRevision=1,role='manager'}={}){
  return {db,pool};
 }
 const ctx=(n)=>({requestId:reqId(n),actorSubject:'admin_1',authorityReference:'policy:1'});
-const actor={logtoSubject:'admin_1',managementCredentialVerified:true};
+const actor={logtoSubject:'admin_1',operatorAuthorityVerified:true};
 const logto={assertIdentity:async()=>{},assertOrganisation:async()=>{},assertMembership:async()=>{throw Error('membership removed in Logto')}};
 const service=(pool)=>new TrustedProvisioningService(new CentralProvisioner(pool),logto,async()=>true,async(_t,id)=>id,async()=>true);
 const guardFor=(pool,generation)=>createProtectedSessionGuard({applicationId:'desk',clock:()=>1000,
