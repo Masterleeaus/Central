@@ -9,8 +9,8 @@ const fixture=()=>({
  entitlements:[{id:'e-1',organisationId:'org-1',applicationId:'sorted',status:'active',features:['jobs:read'],revision:1}],
  links:[{id:'l-1',identityId:'ti-1',organisationId:'org-1',applicationId:'sorted',localUserId:'fu-1',localAccountId:'fa-1',status:'verified',verifiedAt:now,revision:1}]
 });
-const principal={logtoSubject:'logto-1',issuer:'https://auth.titan.test/oidc',audience:'field-client',verifiedAt:now};
-const trust={expectedIssuer:principal.issuer,audienceByApplication:{sorted:'field-client',supercharged:'desk-client',lms:'academy-client'}};
+const principal={logtoSubject:'logto-1',issuer:'https://auth.titan.test/oidc',audience:'sorted-client',verifiedAt:now};
+const trust={expectedIssuer:principal.issuer,audienceByApplication:{sorted:'sorted-client',supercharged:'supercharged-client',lms:'lms-client'}};
 function setup(changer=()=>{}){let d=fixture();changer(d);const repo={identityBySubject:async s=>d.identity.logtoSubject===s?d.identity:undefined,organisation:async id=>d.organisation.id===id?d.organisation:undefined,memberships:async (id,org)=>d.memberships.filter(m=>m.identityId===id&&m.organisationId===org),entitlements:async (org,app)=>d.entitlements.filter(e=>e.organisationId===org&&e.applicationId===app),localLinks:async (id,org,app)=>d.links.filter(l=>l.identityId===id&&l.organisationId===org&&l.applicationId===app)};return new CentralAccessService(repo,trust)}
 const req=(changes={})=>({principal,organisationId:'org-1',applicationId:'sorted',action:'jobs:read',now,...changes});
 async function deny(name,mutate,request,reason){test(name,async()=>{const decision=await setup(mutate)( ).authorise(req(request));assert.deepEqual(decision,{allowed:false,reason});});}
@@ -18,7 +18,7 @@ async function deny(name,mutate,request,reason){test(name,async()=>{const decisi
 test('valid membership with entitlement and link allows only resolved local account',async()=>{let result=await setup().authorise(req());assert.equal(result.allowed,true);assert.equal(result.localAccountId,'fa-1');assert.equal(result.localUserId,'fu-1');});
 const denied=[
  ['wrong issuer',()=>{}, {principal:{...principal,issuer:'https://evil.invalid'}},'untrusted_issuer'],
- ['wrong audience',()=>{}, {principal:{...principal,audience:'desk-client'}},'untrusted_audience'],
+ ['wrong audience',()=>{}, {principal:{...principal,audience:'supercharged-client'}},'untrusted_audience'],
  ['unknown subject',()=>{}, {principal:{...principal,logtoSubject:'someone-else'}},'identity_inactive'],
  ['blocked identity',d=>d.identity.status='blocked',{},'identity_inactive'],
  ['suspended organisation',d=>d.organisation.status='suspended',{},'organisation_inactive'],
@@ -39,5 +39,5 @@ const denied=[
 ];
 for (const [name,mutate,request,expected] of denied) test(name,async()=>assert.deepEqual(await setup(mutate).authorise(req(request)),{allowed:false,reason:expected}));
 test('OIDC registrations cover all three apps with unique client env keys',()=>{const apps=allApplications();assert.deepEqual(apps.map(a=>a.id),['sorted','supercharged','lms']);assert.equal(new Set(apps.map(a=>a.oidcClientIdEnv)).size,3);});
-test('redirect URI rejects insecure origins',()=>{assert.equal(makeOidcRedirect('https://field.titanzero.io/','sorted'),'https://field.titanzero.io/auth/callback');for(const url of ['http://field.titanzero.io/','https://field.titanzero.io/bad','https://user:secret@field.titanzero.io/'])assert.throws(()=>makeOidcRedirect(url,'sorted'));});
+test('redirect URI rejects insecure origins',()=>{assert.equal(makeOidcRedirect('https://sorted.example.test/','sorted'),'https://sorted.example.test/auth/callback');for(const url of ['http://field.titanzero.io/','https://sorted.example.test/bad','https://user:secret@field.titanzero.io/'])assert.throws(()=>makeOidcRedirect(url,'sorted'));});
 test('signed/verified local link assertion must be recent',()=>{const a={identityId:'ti-1',organisationId:'org-1',applicationId:'sorted',localUserId:'user-1',localAccountId:'account-1',verifiedBy:'field-api',assertedAt:now};assert.equal(linkFromVerifiedAssertion('link-1',a,now).status,'verified');assert.throws(()=>linkFromVerifiedAssertion('link-1',{...a,assertedAt:'2026-01-01T00:00:00Z'},now));});

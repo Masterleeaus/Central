@@ -4,7 +4,7 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {createCentralHandler} from '../src/app.mjs';
 import {createAdminHandler} from '../src/admin.mjs';
-const ORIGINS={sorted:'https://field.titanzero.io',supercharged:'https://desk.titanzero.io',lms:'https://academy.titanzero.io'};
+const ORIGINS={sorted:'https://sorted.example.test',supercharged:'https://supercharged.example.test',lms:'https://lms.example.test'};
 const ID='00000000-0000-4000-8000-000000000001';
 const command={kind:'membership',id:ID,organisationId:ID,identityId:ID,role:'learner'};
 const input={requestId:ID,authorityReference:'logto-audit:123',command};
@@ -21,7 +21,7 @@ test('unauthenticated admin access fails closed',async()=>assert.equal((await in
 test('invalid JWT fails closed',async()=>assert.equal((await invoke('/v1/admin/oidc/plans',{verify:async()=>{throw Error('bad token')}})).status,401));
 test('missing live operator authority denies access',async()=>assert.equal((await invoke('/v1/admin/oidc/plans',{allow:false})).status,403));
 test('unavailable authority returns 503',async()=>assert.equal((await invoke('/v1/admin/oidc/plans',{authorize:async()=>{throw Error('offline')}})).status,503));
-test('OIDC plans use fixed origins, code and PKCE, no client secrets',async()=>{const r=await invoke('/v1/admin/oidc/plans');assert.equal(r.status,200);assert.equal(r.body.applications.length,3);assert.equal(r.body.applications[0].pkce,'S256');assert.equal(r.body.applications.find(a=>a.app==='sorted').redirectUris[0],'https://field.titanzero.io/auth/callback');assert.ok(!JSON.stringify(r.body).includes('secret'));});
+test('OIDC plans use fixed origins, code and PKCE, no client secrets',async()=>{const r=await invoke('/v1/admin/oidc/plans');assert.equal(r.status,200);assert.equal(r.body.applications.length,3);assert.equal(r.body.applications[0].pkce,'S256');assert.equal(r.body.applications.find(a=>a.app==='sorted').redirectUris[0],'https://sorted.example.test/auth/callback');assert.ok(!JSON.stringify(r.body).includes('secret'));});
 test('query cannot modify OIDC plans',async()=>assert.equal((await invoke('/v1/admin/oidc/plans?origin=https://evil.example')).status,400));
 test('admin endpoints reject wrong HTTP method',async()=>assert.equal((await invoke('/v1/admin/provision')).status,405));
 test('provision disabled by default',async()=>assert.equal((await invoke('/v1/admin/provision',{method:'POST',provision:null,body:input})).status,503));

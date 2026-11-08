@@ -1,8 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createTitanOidcRegistrationPlans} from '../dist/index.js';
-const origins={supercharged:'https://desk.titanzero.io',sorted:'https://field.titanzero.io',lms:'https://academy.titanzero.io'};
+const origins={supercharged:'https://supercharged.example.test',sorted:'https://sorted.example.test',lms:'https://lms.example.test'};
 test('produces three distinct code+PKCE S256 clients',()=>{const plans=createTitanOidcRegistrationPlans(origins);assert.equal(plans.length,3);for(const p of plans){assert.equal(p.responseType,'code');assert.equal(p.pkce,'S256');assert.deepEqual(p.redirectUris,[`${p.origin}/auth/callback`]);}});
 test('rejects HTTP',()=>assert.throws(()=>createTitanOidcRegistrationPlans({...origins,supercharged:'http://desk.titanzero.io'})));
 test('rejects ambiguous duplicate origins',()=>assert.throws(()=>createTitanOidcRegistrationPlans({...origins,lms:origins.desk})));
-test('rejects URI injection',()=>assert.throws(()=>createTitanOidcRegistrationPlans({...origins,supercharged:'https://desk.titanzero.io/?next=evil'})));
+test('rejects URI injection',()=>assert.throws(()=>createTitanOidcRegistrationPlans({...origins,supercharged:'https://supercharged.example.test/?next=evil'})));
 test('rejects embedded credentials',()=>assert.throws(()=>createTitanOidcRegistrationPlans({...origins,supercharged:'https://foo:bar@desk.titanzero.io'})));

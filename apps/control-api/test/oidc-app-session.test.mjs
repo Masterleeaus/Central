@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createVerifiedIdentityResolver,createAppSessionIssuer,createAppLogoutHandler} from '../src/oidc-app-session.mjs';
-const base={applicationId:'supercharged',issuer:'https://id.example',audience:'desk-client',findOrganisationIds:async()=>['org_1'],authorise:async()=>({allowed:true,applicationId:'supercharged',organisationId:'org_1',localUserId:'user_1',localAccountId:'account_1'}),localAccountActive:async()=>true};
+const base={applicationId:'supercharged',issuer:'https://id.example',audience:'supercharged-client',findOrganisationIds:async()=>['org_1'],authorise:async()=>({allowed:true,applicationId:'supercharged',organisationId:'org_1',localUserId:'user_1',localAccountId:'account_1'}),localAccountActive:async()=>true};
 const identity={issuer:'https://id.example',subject:'logto_1',applicationId:'supercharged'};
 const res=()=>({code:0,headers:{},body:'',writeHead(code,headers){this.code=code;this.headers=headers},end(body=''){this.body=body}});
 test('trusted single-org identity resolves to local identity',async()=>assert.deepEqual(await createVerifiedIdentityResolver(base)(identity),{authorised:true,localUserId:'user_1',localAccountId:'account_1',organisationId:'org_1'}));

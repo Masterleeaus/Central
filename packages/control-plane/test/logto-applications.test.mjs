@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {LogtoApplicationInspector} from '../dist/logto-applications.js';
 import {createTitanOidcRegistrationPlans} from '../dist/oidc-registration.js';
-const plans=createTitanOidcRegistrationPlans({supercharged:'https://desk.titanzero.io',sorted:'https://field.titanzero.io',lms:'https://academy.titanzero.io'});
+const plans=createTitanOidcRegistrationPlans({supercharged:'https://supercharged.example.test',sorted:'https://sorted.example.test',lms:'https://lms.example.test'});
 const ids={supercharged:'desk01',sorted:'field01',lms:'academy01'};
 const entries=plans.map(p=>({id:ids[p.app],type:'Traditional',oidcClientMetadata:{redirectUris:p.redirectUris,postLogoutRedirectUris:p.postLogoutRedirectUris},secret:'never-send'}));
 const make=(data=entries,{status=200,throwError=false}={})=>new LogtoApplicationInspector({origin:'https://id.titanzero.io',accessToken:async()=> 'management-secret-token',fetcher:async(url,init)=>{assert.equal(init.headers.Authorization,'Bearer management-secret-token');assert.equal(init.redirect,'error');if(throwError)throw Error('network');return {ok:status===200,status,json:async()=>data}}});
