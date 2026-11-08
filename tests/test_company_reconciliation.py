@@ -133,3 +133,42 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(r['blockers']['unverified_company_mapping'],1)
         self.assertEqual(r['blockers']['unresolvable_membership'],1)
         self.assertEqual(r['blockers']['unresolvable_entitlement'],1)
+
+    def test_dataset_extraction_uses_one_snapshot_for_all_tables(self):
+        from unittest.mock import patch
+        import json
+        class Result:
+            returncode=0
+            stdout=(json.dumps({'section':'companies','record':{'id':'a'}})
+                    +'\n'+json.dumps({'section':'identities','record':{'id':'b'}})+'\n')
+            stderr=''
+        with patch.object(audit.subprocess,'run',return_value=Result()) as execute:
+            records=audit.extract_dataset('postgresql://test@localhost/legacy',audit.LEGACY)
+        self.assertEqual(records['companies'],[{'id':'a'}])
+        self.assertEqual(records['identities'],[{'id':'b'}])
+        script=execute.call_args.kwargs['input']
+        self.assertEqual(script.count('BEGIN TRANSACTION'),1)
+        self.assertEqual(script.count('ROLLBACK;'),1)
+        self.assertIn('REPEATABLE READ READ ONLY',script)
+        self.assertEqual(script.count('LIMIT 10001'),len(audit.LEGACY))
+        self.assertEqual(execute.call_count,1)
+    def test_dataset_extraction_blocks_oversized_table_without_partial_result(self):
+        from unittest.mock import patch
+        import json
+        class Result:
+            returncode=0
+            stdout='\n'.join(json.dumps({'section':'companies','record':{'id':i}})
+                for i in range(audit.MAX_ROWS+1))
+            stderr=''
+        with patch.object(audit.subprocess,'run',return_value=Result()):
+            with self.assertRaisesRegex(RuntimeError,'row limit exceeded'):
+                audit.extract_dataset('postgresql://test@localhost/legacy',audit.LEGACY)
+    def test_dataset_extraction_rejects_forged_section(self):
+        from unittest.mock import patch
+        class Result:
+            returncode=0
+            stdout='{"section":"unknown","record":{"id":"abc"}}\n'
+            stderr=''
+        with patch.object(audit.subprocess,'run',return_value=Result()):
+            with self.assertRaisesRegex(RuntimeError,'invalid dataset snapshot'):
+                audit.extract_dataset('postgresql://test@localhost/legacy',audit.LEGACY)
