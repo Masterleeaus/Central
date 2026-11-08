@@ -123,6 +123,15 @@ jobs:
           out=$(python3 tools/migrate_shared.py --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci")
           echo "$out"
           test "$out" = "applied 0 canonical migration(s)"
+      - name: Verify canonical checksum registry and legacy schema absence
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_migration_registry.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Canonical runner refuses legacy Central database
+        run: |
+          if python3 tools/migrate_shared.py --database-url "$TITAN_CI_DATABASE_URL" > "$RUNNER_TEMP/shared-legacy-guard.txt" 2>&1; then
+            echo "SECURITY FAILURE: shared runner accepted a legacy database"
+            exit 1
+          fi
+          grep -q "existing legacy or unknown schema: migration refused" "$RUNNER_TEMP/shared-legacy-guard.txt"
       - name: Validate canonical companies and product IDs
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_core.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
 
