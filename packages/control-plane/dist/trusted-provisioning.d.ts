@@ -5,11 +5,11 @@
 import type { ProvisioningCommand, ProvisioningContext } from './provisioning.js';
 import { CentralProvisioner } from './provisioning.js';
 import { LogtoManagementVerifier } from './logto-management.js';
-/** `managementCredentialVerified` records that the caller's Logto organisation authority was checked against the
+/** `operatorAuthorityVerified` records that the caller's Logto organisation authority was checked against the
  * Management API for this request. It is NOT evidence that an end-user bearer token is a machine credential. */
 export type TrustedActor = {
     logtoSubject: string;
-    managementCredentialVerified: true;
+    operatorAuthorityVerified: true;
 };
 export type AuthorizeProvisioning = (actor: TrustedActor, command: ProvisioningCommand) => Promise<boolean>;
 export type VerifyLocalLink = (command: Extract<ProvisioningCommand, {
