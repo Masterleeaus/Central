@@ -130,3 +130,8 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0003_legacy_central_company_links.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
       - name: Verify pending and cross-tenant company links deny access
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_legacy_mapping.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Install verified canonical company lookup
+        run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0004_verified_company_lookup.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Check exact Logto legacy mapping with canonical RLS
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_verified_lookup.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
