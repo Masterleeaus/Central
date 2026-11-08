@@ -105,3 +105,33 @@ trusted Logto OIDC callback, company-selection and membership revalidation,
 strict cookie policy verification behind the reverse proxy, staging flows,
 and product destination verification. Integration: `node --test
 test/central-launcher-service.test.mjs`.
+
+## PostgreSQL-backed session store (fourth slice)
+
+The ordered migration `migrations/0009_central_browser_sessions.sql` adds
+`titan.central_browser_sessions`, an expiry index, FORCE RLS and the isolated
+NOLOGIN `titan_central_sessions` role. That role alone receives SELECT,
+INSERT and DELETE grants on the session table; ordinary tenants and trusted
+readers cannot read it.
+
+`src/central-session-pg.mjs` supplies the required durable store with
+transaction-local `SET LOCAL ROLE titan_central_sessions`. Operations
+bind all values as SQL parameters. `delete(digest)` returns a boolean
+obtained from `DELETE ... RETURNING`, allowing session rotation to reject
+concurrent consumption of the previous token. Expired sessions can be
+pruned in bounded SKIP LOCKED batches.
+
+Deployment MUST provision a non-superuser, NOINHERIT service credential and
+explicitly grant `titan_central_sessions` to that login account:
+```sql
+GRANT titan_central_sessions TO titan_central_app;
+```
+Never grant that role to tenant-access credentials, and never expose raw
+token digests or session data through a public endpoint. The schema is not
+applied to production. It is not reconciled with draft shared-company migration
+PR #46, and its `organisation_id` FK must be migrated to canonical
+`company_id` after the shared database contract is finalized.
+
+New verification: `node --test test/central-session-pg.test.mjs` and
+`psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_browser_sessions.sql
+"$TITAN_CI_DATABASE_URL"` on disposable PostgreSQL after migration 0009.
