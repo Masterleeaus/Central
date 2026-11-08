@@ -143,3 +143,27 @@ jobs:
 
       - name: Check exact Logto legacy mapping with canonical RLS
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_verified_lookup.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Seed separate read-only reconciliation fixtures
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/reconcile_legacy_fixture.sql "$TITAN_CI_DATABASE_URL"
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/reconcile_canonical_fixture.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Audit matching verified company, identity, membership and entitlement records
+        run: |
+          python3 tools/audit_company_reconciliation.py \
+            --legacy-url "$TITAN_CI_DATABASE_URL" \
+            --canonical-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --output "$RUNNER_TEMP/reconciliation-matched.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["blocker_count"]==0 and not r["migration_authorised"]' "$RUNNER_TEMP/reconciliation-matched.json"
+      - name: Audit must block altered member role without leaking private IDs
+        run: |
+          psql -X -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "UPDATE titan.company_memberships SET role='learner' WHERE company_id='00000000-0000-4000-8000-000000000011'"
+          set +e
+          python3 tools/audit_company_reconciliation.py \
+            --legacy-url "$TITAN_CI_DATABASE_URL" \
+            --canonical-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --output "$RUNNER_TEMP/reconciliation-blocked.json"
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["blockers"]["membership_access_mismatch"]==1; assert "audit-person" not in str(r) and not r["migration_authorised"]' "$RUNNER_TEMP/reconciliation-blocked.json"
