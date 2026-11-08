@@ -59,8 +59,25 @@ The RLS test seeds two tenants and runs inside a transaction that is rolled back
 | 0004 | Session-revocation table (created unqualified, moved by 0005). |
 | 0005 | Moves the 0003 and 0004 tables into schema `titan`. Application queries use `titan.<table>`. |
 | 0006 | Row-level security on `titan.memberships`, `titan.entitlements`, `titan.local_account_links`. |
+| 0007 | Provisioning audit types for update and revoke commands; session-revocation and OIDC-state grants. |
+| 0008 | Trusted reader scoped to the organisation set for the transaction; `titan_trusted_writer` may read session revocations (needed by the revocation bump). |
 
-Tenant isolation (0006): the application must set the transaction-local tenant before any tenant query, for example `SET LOCAL titan.organisation_id = '<organisation uuid>';`. With no tenant set, tenant roles see no rows and cannot write. Roles are NOLOGIN group roles to be granted to login roles at deployment: `titan_tenant_app` (tenant-scoped), `titan_trusted_reader` (server-side access checks; also reads identities and organisations), and `titan_trusted_writer` (separately authorised provisioning). Superusers and `BYPASSRLS` roles bypass RLS, so the application must not connect as either. Session revocations and the provisioning audit table are not yet covered by RLS.
+Tenant isolation (0006, narrowed by 0008). Tenant scope is the transaction-local setting `titan.organisation_id`. Set it with a bound parameter, never by interpolation: `SELECT set_config('titan.organisation_id', $1, true)`. This has the same effect as `SET LOCAL` and is the only form that takes a bind parameter. With no scope set, tenant rows are invisible and writes fail (fail closed). A malformed value raises an error.
+
+Role design. Each role is a NOLOGIN group role. The deployment creates one login role for the service and grants it the two trusted roles. The login role must not be a superuser, must not have `BYPASSRLS`, and must be `NOINHERIT`:
+
+```sql
+CREATE ROLE titan_central_app LOGIN NOINHERIT PASSWORD '<from the secret store>';
+GRANT titan_trusted_reader, titan_trusted_writer TO titan_central_app;
+-- Do not grant titan_tenant_app to the service; it is for a future tenant-facing role only.
+-- Do not make titan_central_app the owner of any titan.* object.
+```
+
+- `titan_trusted_reader` runs the access check (`withCentralReadSnapshot`). It runs `SET LOCAL ROLE titan_trusted_reader`, then sets the organisation scope. It reads identities and organisations (global, not RLS-protected). It reads memberships, entitlements and local account links only for the organisation in scope.
+- `titan_trusted_writer` runs provisioning (`CentralProvisioner`). It runs `SET LOCAL ROLE titan_trusted_writer` and is cross-tenant by design. Every command is separately authorised and writes one audit row in the same transaction.
+- `titan_tenant_app` is tenant-scoped on the three tables and has no grant on identities, organisations or session revocations.
+
+Verified on PostgreSQL 16 with `tests/sql/rls_two_tenant.sql` (run as superuser) and, as a one-off manual run that is not in CI, the compiled access check and provisioner run through `pg` as `titan_central_app` against a database with 0001-0008. Not yet covered: `titan.titan_session_revocations` has no RLS; the session-revocation guard (`apps/control-api/src/session-revocation-pg.mjs`) and the OIDC state store (`oidc-state-pg.mjs`) query the pool directly without a role switch, so under the `NOINHERIT` login role they are denied until they are wrapped the same way. `titan_trusted_writer` has no SELECT on `titan.titan_oidc_login_states`, which the OIDC consume statement needs.
 
 ## Compiled output (`packages/control-plane/dist`)
 

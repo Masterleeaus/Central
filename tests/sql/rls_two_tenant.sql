@@ -1,5 +1,5 @@
--- Two-tenant row-level security test for migration 0006.
--- Run as a superuser against a database where migrations 0001-0006 are applied:
+-- Two-tenant row-level security test for migrations 0006 and 0008.
+-- Run as a superuser against a database where migrations 0001-0008 are applied:
 --   psql -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$DATABASE_URL"
 -- The script seeds two tenants (the superuser bypasses RLS for seeding), then switches to the
 -- tenant and trusted roles and asserts what each may see and change. Any cross-tenant row
@@ -95,6 +95,7 @@ SELECT pg_temp.expect_denied('tenant A cannot change tenant B entitlement', $s$U
 SELECT pg_temp.expect_denied('tenant A cannot delete tenant B entitlement', $s$DELETE FROM titan.entitlements WHERE id = '00000000-0000-4000-8000-000000000e02'$s$);
 SELECT pg_temp.expect_denied('tenant A cannot insert membership into tenant B', $s$INSERT INTO titan.memberships (id, identity_id, organisation_id, role, state) VALUES ('00000000-0000-4000-8000-000000000c03', '00000000-0000-4000-8000-0000000000a1', '00000000-0000-4000-8000-00000000000b', 'admin', 'active')$s$);
 SELECT pg_temp.expect_denied('tenant A cannot insert entitlement into tenant B', $s$INSERT INTO titan.entitlements (id, organisation_id, application_id, state) VALUES ('00000000-0000-4000-8000-000000000e03', '00000000-0000-4000-8000-00000000000b', 'field', 'active')$s$);
+SELECT pg_temp.expect_denied('tenant A cannot insert account link into tenant B', $s$INSERT INTO titan.local_account_links (id, identity_id, organisation_id, application_id, local_user_id, local_account_id, state, verified_at) VALUES ('00000000-0000-4000-8000-000000000d03', '00000000-0000-4000-8000-0000000000a1', '00000000-0000-4000-8000-00000000000b', 'desk', 'u-x', 'acct-x', 'verified', now())$s$);
 SELECT pg_temp.expect_denied('tenant A cannot move own membership into tenant B', $s$UPDATE titan.memberships SET organisation_id = '00000000-0000-4000-8000-00000000000b' WHERE id = '00000000-0000-4000-8000-000000000c01'$s$);
 SELECT pg_temp.expect_error('tenant A has no grant on identities', $s$SELECT id FROM titan.identities$s$);
 SELECT pg_temp.expect_error('tenant A has no grant on organisations', $s$SELECT id FROM titan.organisations$s$);
@@ -119,19 +120,50 @@ SELECT pg_temp.expect_denied('unscoped session cannot insert membership', $s$INS
 RESET ROLE;
 
 -- ---------------------------------------------------------------- trusted reader (server-side access check path)
+-- The access check runs: SET LOCAL ROLE titan_trusted_reader, then set_config(..., true) with the
+-- organisation as a bound parameter. The reader is tenant-scoped by that setting (migration 0008).
 SET LOCAL ROLE titan_trusted_reader;
-SELECT pg_temp.expect_count('trusted reader sees identities', 'SELECT id FROM titan.identities', 2);
-SELECT pg_temp.expect_count('trusted reader sees organisations', 'SELECT id FROM titan.organisations', 2);
-SELECT pg_temp.expect_count('trusted reader sees both tenants memberships', 'SELECT id FROM titan.memberships', 2);
-SELECT pg_temp.expect_count('trusted reader sees both tenants entitlements', 'SELECT id FROM titan.entitlements', 2);
-SELECT pg_temp.expect_count('trusted reader sees both tenants account links', 'SELECT id FROM titan.local_account_links', 2);
-SELECT pg_temp.expect_denied('trusted reader cannot write memberships', $s$UPDATE titan.memberships SET state = 'suspended' WHERE id = '00000000-0000-4000-8000-000000000c02'$s$);
+SELECT pg_temp.expect_count('trusted reader sees identities without a tenant set', 'SELECT id FROM titan.identities', 2);
+SELECT pg_temp.expect_count('trusted reader sees organisations without a tenant set', 'SELECT id FROM titan.organisations', 2);
+SELECT pg_temp.expect_count('trusted reader sees no memberships without a tenant set', 'SELECT id FROM titan.memberships', 0);
+SELECT pg_temp.expect_count('trusted reader sees no entitlements without a tenant set', 'SELECT id FROM titan.entitlements', 0);
+SELECT pg_temp.expect_count('trusted reader sees no account links without a tenant set', 'SELECT id FROM titan.local_account_links', 0);
+SELECT set_config('titan.organisation_id', 'not-a-uuid', true);
+SELECT pg_temp.expect_error('trusted reader fails closed on a malformed tenant setting', 'SELECT id FROM titan.memberships');
+SELECT set_config('titan.organisation_id', '00000000-0000-4000-8000-00000000000a', true);
+SELECT pg_temp.expect_count('trusted reader in tenant A sees only tenant A memberships', 'SELECT id FROM titan.memberships', 1);
+SELECT pg_temp.expect_count('trusted reader in tenant A sees only tenant A entitlements', 'SELECT id FROM titan.entitlements', 1);
+SELECT pg_temp.expect_count('trusted reader in tenant A sees only tenant A account links', 'SELECT id FROM titan.local_account_links', 1);
+SELECT pg_temp.expect_count('trusted reader in tenant A cannot read tenant B membership by id', $s$SELECT id FROM titan.memberships WHERE id = '00000000-0000-4000-8000-000000000c02'$s$, 0);
+SELECT pg_temp.expect_count('trusted reader in tenant A cannot read tenant B link by id', $s$SELECT id FROM titan.local_account_links WHERE id = '00000000-0000-4000-8000-000000000d02'$s$, 0);
+SELECT pg_temp.expect_count('trusted reader in tenant A cannot read tenant B entitlement by id', $s$SELECT id FROM titan.entitlements WHERE id = '00000000-0000-4000-8000-000000000e02'$s$, 0);
+SELECT pg_temp.expect_count('trusted reader in tenant A still reads global identities', 'SELECT id FROM titan.identities', 2);
+SELECT pg_temp.expect_denied('trusted reader cannot write memberships', $s$UPDATE titan.memberships SET state = 'suspended' WHERE id = '00000000-0000-4000-8000-000000000c01'$s$);
+SELECT pg_temp.expect_denied('trusted reader cannot write account links', $s$UPDATE titan.local_account_links SET state = 'revoked' WHERE id = '00000000-0000-4000-8000-000000000d01'$s$);
+SELECT pg_temp.expect_denied('trusted reader cannot write session revocations', $s$UPDATE titan.titan_session_revocations SET generation = generation + 1$s$);
+SELECT pg_temp.expect_error('trusted reader has no grant to insert session revocations', $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-alice', 'org-tenant-a', 1)$s$);
+SELECT set_config('titan.organisation_id', '00000000-0000-4000-8000-00000000000b', true);
+SELECT pg_temp.expect_count('trusted reader switched to tenant B sees only tenant B memberships', 'SELECT id FROM titan.memberships', 1);
+SELECT pg_temp.expect_count('trusted reader in tenant B cannot read tenant A membership by id', $s$SELECT id FROM titan.memberships WHERE id = '00000000-0000-4000-8000-000000000c01'$s$, 0);
+SELECT set_config('titan.organisation_id', '', true);
+SELECT pg_temp.expect_count('trusted reader with an emptied setting sees no memberships', 'SELECT id FROM titan.memberships', 0);
 RESET ROLE;
 
--- ---------------------------------------------------------------- trusted writer (positive control)
+-- ---------------------------------------------------------------- trusted writer (provisioning path)
+-- Positive controls: the writer can change cross-tenant rows, and can run the exact statement
+-- provisioning uses to advance a session revocation generation (INSERT ... ON CONFLICT DO UPDATE).
 SET LOCAL ROLE titan_trusted_writer;
 SELECT pg_temp.expect_affected('trusted writer can suspend tenant B membership', $s$UPDATE titan.memberships SET state = 'suspended', revision = revision + 1 WHERE id = '00000000-0000-4000-8000-000000000c02'$s$, 1);
 SELECT pg_temp.expect_affected('trusted writer can restore tenant B membership', $s$UPDATE titan.memberships SET state = 'active', revision = revision + 1 WHERE id = '00000000-0000-4000-8000-000000000c02'$s$, 1);
+SELECT pg_temp.expect_affected('trusted writer bumps a session revocation generation (insert path)', $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-bob', 'org-tenant-b', 1) ON CONFLICT (application_id, logto_subject, organisation_id) DO UPDATE SET generation = titan_session_revocations.generation + 1, revoked_at = now()$s$, 1);
+SELECT pg_temp.expect_affected('trusted writer bumps a session revocation generation (conflict path)', $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-bob', 'org-tenant-b', 1) ON CONFLICT (application_id, logto_subject, organisation_id) DO UPDATE SET generation = titan_session_revocations.generation + 1, revoked_at = now()$s$, 1);
+SELECT pg_temp.expect_count('trusted writer generation advanced to 2', $s$SELECT generation FROM titan.titan_session_revocations WHERE logto_subject = 'sub-bob' AND generation = 2$s$, 1);
+RESET ROLE;
+
+-- ---------------------------------------------------------------- tenant app has no revocation grant
+SET LOCAL ROLE titan_tenant_app;
+SELECT set_config('titan.organisation_id', '00000000-0000-4000-8000-00000000000a', true);
+SELECT pg_temp.expect_error('tenant app has no grant on session revocations', 'SELECT generation FROM titan.titan_session_revocations');
 RESET ROLE;
 
 ROLLBACK;
