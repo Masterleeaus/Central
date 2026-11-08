@@ -110,3 +110,13 @@ jobs:
 
       - name: Locked Central session issuance and revocation
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_authorised_issue.sql "$TITAN_CI_DATABASE_URL"
+
+      # Shared company core is an independent draft migration chain. Never run
+      # it in the legacy Central DB: both chains define titan.identities
+      # differently. CI uses a second disposable PostgreSQL database.
+      - name: Create independent shared-core test database
+        run: psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" -c "CREATE DATABASE titan_shared_ci"
+      - name: Apply shared-core clean-install migration
+        run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0001_shared_company_core.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Validate canonical companies and product IDs
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_core.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
