@@ -92,3 +92,11 @@ jobs:
           test "$out" = "applied 0 migration(s)"
       - name: Two-tenant RLS tests
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$TITAN_CI_DATABASE_URL"
+      # Login-role path: the service login role (NOINHERIT, member of the trusted roles) runs the
+      # session-revocation and OIDC-state statements and the access check through SET LOCAL ROLE.
+      # TITAN_REQUIRE_DB_TESTS makes a missing psql or database URL fail the job instead of skipping.
+      - name: Login-role path tests (SQL, real PostgreSQL)
+        env:
+          TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
+          TITAN_REQUIRE_DB_TESTS: '1'
+        run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
