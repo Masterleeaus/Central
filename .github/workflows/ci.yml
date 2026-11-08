@@ -107,3 +107,6 @@ jobs:
 
       - name: Central browser session access-reduction revocation
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_session_access_revocation.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Locked Central session issuance and revocation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_authorised_issue.sql "$TITAN_CI_DATABASE_URL"
