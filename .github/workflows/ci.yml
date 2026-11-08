@@ -104,3 +104,6 @@ jobs:
 
       - name: Durable company selection role isolation and one-use consumption
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_company_selection.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Central browser session access-reduction revocation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_session_access_revocation.sql "$TITAN_CI_DATABASE_URL"
