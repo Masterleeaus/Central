@@ -48,7 +48,7 @@ test('invalid browser startup configuration fails before listening and closes po
   await assert.rejects(startCentralService({
     env:{...env,TITAN_CENTRAL_BROWSER_ENABLED:'1'},
     loadPg:db.loadPg,verifyToken:async()=>({}),
-  }),/trusted Central|secure Central origin/);
+  }),/trusted Central|secure Central origin|PostgreSQL/);
   assert.equal(db.stats.ended,1);
 });
 test('disabled browser configuration does not require company-name resolver',async()=>{
@@ -63,4 +63,36 @@ test('disabled browser configuration does not require company-name resolver',asy
     assert.equal(db.stats.ended,0);
   }finally{await service.close()}
   assert.equal(db.stats.ended,1);
+});
+
+test('enabled browser builds an independent canonical name pool and closes both on shutdown',async()=>{
+  const constructed=[],ended=[];
+  class Pool{
+    constructor(opts){constructed.push(opts.connectionString)}
+    async connect(){return {async query(sql){
+      if(sql.includes("to_regclass('titan.companies')"))return {rows:[{
+        companies:'titan.companies',links:'titan.central_legacy_company_links',
+        resolver:'titan.resolve_verified_central_company(uuid,text)'
+      }]};
+      return {rows:[]};
+    },release(){}}}
+    async end(){ended.push(true)}
+  }
+  const port=await availablePort();
+  let receivedNameProvider=false;
+  const service=await startCentralService({
+    env:{...env,TITAN_CENTRAL_PORT:String(port),TITAN_CENTRAL_BROWSER_ENABLED:'1',
+      TITAN_CENTRAL_SHARED_DATABASE_URL:'postgresql://unit-test.example/titan_shared'},
+    loadPg:async()=>({Pool}),verifyToken:async()=>({}),
+    createBrowserRouter:({getCompanyName})=>{
+      receivedNameProvider=typeof getCompanyName==='function';
+      return {handler:async()=>false};
+    }
+  });
+  try{
+    assert.deepEqual(constructed,[env.TITAN_CENTRAL_DATABASE_URL,
+      'postgresql://unit-test.example/titan_shared']);
+    assert.equal(receivedNameProvider,true);
+  }finally{await service.close()}
+  assert.equal(ended.length,2);
 });
