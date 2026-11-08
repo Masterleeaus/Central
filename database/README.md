@@ -11,8 +11,10 @@ historical draft material until it is reconciled and promoted.
 - Every company-owned row in app schemas uses a non-null `company_id UUID
   foreign key to `titan.companies(id)`.
 - Shared identity and access records are in `titan.identities`,
-  `titan.company_memberships`, `titan.application_entitlements`, and
-  `titan.application_user_links`.
+  `titan.company_memberships`, `titan.application_entitlements`,
+  `titan.application_company_links`, and `titan.application_user_links`.
+- `titan.application_company_links` records each app's old tenant ID while it
+  is migrated to the canonical company UUID.
 - App-specific profile IDs remain text at the identity-link boundary to
   accommodate the current Sorted, Skilled, and Supercharged ID formats.
 - Truly global reference data must be identified in the table registry; nullable
