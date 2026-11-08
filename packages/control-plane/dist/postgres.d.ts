@@ -27,13 +27,5 @@ export declare class PostgresCentralRepository implements CentralRepository {
 export declare function withCentralReadSnapshot<T>(pool: SqlPool, task: (repo: PostgresCentralRepository) => Promise<T>): Promise<T>;
 export type MemberState = 'active' | 'invited' | 'suspended' | 'revoked';
 export type GrantState = 'active' | 'trialing' | 'paused' | 'expired' | 'revoked';
-/** Mutation boundary: caller must have been independently authenticated and authorised.
- * Optimistic revision checks ensure concurrent changes fail closed. */
-export declare class CentralMutationStore {
-    private readonly pool;
-    constructor(pool: SqlPool);
-    private update;
-    setMembershipState(id: string, expectedRevision: number, state: MemberState): Promise<boolean>;
-    setEntitlementState(id: string, expectedRevision: number, state: GrantState): Promise<boolean>;
-    revokeLocalLink(id: string, expectedRevision: number): Promise<boolean>;
-}
+/** Mutations are not exposed here. Use CentralProvisioner (provisioning.ts), which writes the
+ * row change, the session revocation generation and the audit record in one transaction. */

@@ -21,5 +21,5 @@ export declare class TrustedProvisioningService {
     private readonly resolve;
     private readonly verifyLocalLink;
     constructor(provisioner: CentralProvisioner, logto: LogtoManagementVerifier, authorize: AuthorizeProvisioning, resolve: GetCanonicalLogtoId, verifyLocalLink: VerifyLocalLink);
-    apply(actor: TrustedActor, context: ProvisioningContext, command: ProvisioningCommand): Promise<'created' | 'replayed'>;
+    apply(actor: TrustedActor, context: ProvisioningContext, command: ProvisioningCommand): Promise<'created' | 'updated' | 'replayed'>;
 }

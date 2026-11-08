@@ -67,36 +67,5 @@ export async function withCentralReadSnapshot(pool, task) {
         conn.release?.();
     }
 }
-/** Mutation boundary: caller must have been independently authenticated and authorised.
- * Optimistic revision checks ensure concurrent changes fail closed. */
-export class CentralMutationStore {
-    pool;
-    constructor(pool) {
-        this.pool = pool;
-    }
-    async update(query, params) {
-        const conn = await this.pool.connect();
-        try {
-            const r = await conn.query(query, params);
-            return r.rowCount === 1;
-        }
-        finally {
-            conn.release?.();
-        }
-    }
-    async setMembershipState(id, expectedRevision, state) {
-        if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 || !['active', 'invited', 'suspended', 'revoked'].includes(state))
-            throw new Error('invalid membership mutation');
-        return this.update('UPDATE titan.memberships SET state=$3, revision=revision+1 WHERE id=$1 AND revision=$2 AND state<>$3', [id, expectedRevision, state]);
-    }
-    async setEntitlementState(id, expectedRevision, state) {
-        if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 || !['active', 'trialing', 'paused', 'expired', 'revoked'].includes(state))
-            throw new Error('invalid entitlement mutation');
-        return this.update('UPDATE titan.entitlements SET state=$3, revision=revision+1 WHERE id=$1 AND revision=$2 AND state<>$3', [id, expectedRevision, state]);
-    }
-    async revokeLocalLink(id, expectedRevision) {
-        if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)
-            throw new Error('invalid link revision');
-        return this.update("UPDATE titan.local_account_links SET state='revoked', revision=revision+1 WHERE id=$1 AND revision=$2 AND state='verified'", [id, expectedRevision]);
-    }
-}
+/** Mutations are not exposed here. Use CentralProvisioner (provisioning.ts), which writes the
+ * row change, the session revocation generation and the audit record in one transaction. */
