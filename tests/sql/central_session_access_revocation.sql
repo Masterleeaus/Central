@@ -32,8 +32,11 @@ UPDATE titan.memberships SET state='suspended' WHERE id='00000000-0000-4000-8000
 SELECT pg_temp.expect_sessions(1,'session removed within update transaction');
 ROLLBACK TO SAVEPOINT rollback_revocation;
 SELECT pg_temp.expect_sessions(2,'rolled-back update restores session');
--- Membership revocation deletes only the affected user's company sessions.
+-- Restricted tenant update also triggers authoritative session invalidation.
+SET LOCAL ROLE titan_tenant_app;
+SELECT set_config('titan.organisation_id','00000000-0000-4000-8000-000000000001',true);
 UPDATE titan.memberships SET state='revoked' WHERE id='00000000-0000-4000-8000-000000000c01';
+RESET ROLE;
 SELECT pg_temp.expect_sessions(1,'membership revocation');
 DO $$
 BEGIN
