@@ -6,6 +6,7 @@
 import {createCentralLauncherService} from './central-launcher-service.mjs';
 import {createCentralSignInService} from './central-sign-in-service.mjs';
 import {createIdTokenVerifier} from './oidc-id-token.mjs';
+import {createStateSealer,parseStateKey} from './oidc-state-crypto.mjs';
 
 function secureOrigin(value){
   if(typeof value!=='string')throw new TypeError('secure Central origin required');
@@ -39,6 +40,7 @@ export function createCentralBrowserRouter({env=process.env,pool,getCompanyName,
   if(!settings)return null;
   if(!pool?.connect||typeof getCompanyName!=='function')
     throw new TypeError('trusted Central browser database and company name authority required');
+  const sealer=createStateSealer({key:parseStateKey(env.TITAN_OIDC_STATE_KEY)});
   const verifier=verifyIdToken??createIdTokenVerifier({
     issuer:env.TITAN_OIDC_ISSUER,clientId:env.TITAN_CENTRAL_BROWSER_CLIENT_ID,
     jwksUri:env.TITAN_OIDC_JWKS_URI,...(fetcher?{fetcher}:{})
@@ -52,7 +54,7 @@ export function createCentralBrowserRouter({env=process.env,pool,getCompanyName,
     clientId:env.TITAN_CENTRAL_BROWSER_CLIENT_ID,
     clientSecret:env.TITAN_CENTRAL_BROWSER_CLIENT_SECRET,
     redirectUri:settings.redirectUri,
-    verifyIdToken:verifier,getCompanyName,enableCompanySelection:true,
+    verifyIdToken:verifier,getCompanyName,enableCompanySelection:true,sealer,
     ...(fetcher?{fetcher}:{}),...(stateStore?{stateStore}:{}),
     ...(selectionStore?{selectionStore}:{}),...(logger?{logger}:{})
   });
