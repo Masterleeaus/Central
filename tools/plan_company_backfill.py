@@ -37,6 +37,7 @@ def plan(legacy,canonical):
         canonical_subject[row['logto_subject']]=row
         canonical_identity_ids.add(row['id'])
     approved={}
+    verified=set()
     seen_targets=set()
     for mapping in canonical['mappings']:
         source=mapping['legacy_organisation_id']
@@ -52,6 +53,8 @@ def plan(legacy,canonical):
             fail('mapping_identity_conflict')
         elif old_org[source]['state']!='active' or canonical_org[target]['status']!='active':
             fail('inactive_mapped_company')
+        else:
+            verified.add(source)
     for org in old_org:
         if org not in approved:fail('missing_approved_company_mapping')
     for row in legacy['identities']:
@@ -68,7 +71,7 @@ def plan(legacy,canonical):
     for row in legacy['memberships']:
         mapping=approved.get(row['organisation_id'])
         source=old_subject.get(row['identity_id'])
-        if not mapping or mapping['status']!='verified' or not source:
+        if not mapping or row['organisation_id'] not in verified or not source:
             fail('unresolved_membership');continue
         identity=canonical_subject.get(source['logto_subject'])
         if not identity:
@@ -91,7 +94,7 @@ def plan(legacy,canonical):
     for row in legacy['entitlements']:
         mapping=approved.get(row['organisation_id'])
         product=APPLICATIONS.get(row['application_id'])
-        if not mapping or mapping['status']!='verified' or not product:
+        if not mapping or row['organisation_id'] not in verified or not product:
             fail('unresolved_entitlement');continue
         key=(mapping['company_id'],product)
         if key in seen_grants:fail('duplicate_source_entitlement');continue
@@ -112,7 +115,7 @@ def plan(legacy,canonical):
         mapping=approved.get(row['organisation_id'])
         source=old_subject.get(row['identity_id'])
         product=APPLICATIONS.get(row['application_id'])
-        if not mapping or mapping['status']!='verified' or not source or not product:
+        if not mapping or row['organisation_id'] not in verified or not source or not product:
             fail('unresolved_user_link');continue
         identity=canonical_subject.get(source['logto_subject'])
         if not identity:
