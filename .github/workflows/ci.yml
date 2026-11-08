@@ -155,6 +155,14 @@ jobs:
             --canonical-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
             --output "$RUNNER_TEMP/reconciliation-matched.json"
           python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["blocker_count"]==0 and not r["migration_authorised"]' "$RUNNER_TEMP/reconciliation-matched.json"
+      - name: Rehearse canonical backfill and prove transactional rollback
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_backfill_rollback.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Plan deterministic backfill from verified database snapshots without writes
+        run: |
+          python3 tools/plan_company_backfill.py \
+            --legacy-url "$TITAN_CI_DATABASE_URL" \
+            --canonical-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" > "$RUNNER_TEMP/backfill-review.json"
+          python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["conflict_count"]==0 and all(v==0 for v in p["candidate_counts"].values()) and p["status"]=="candidate_review_only" and p["writes_permitted"] is False and p["migration_authorised"] is False' "$RUNNER_TEMP/backfill-review.json"
       - name: Audit must block altered member role without leaking private IDs
         run: |
           psql -X -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "UPDATE titan.company_memberships SET role='learner' WHERE company_id='00000000-0000-4000-8000-000000000011'"
