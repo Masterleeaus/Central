@@ -32,9 +32,10 @@ unknown out-of-order migration.
 
 ## Current implementation boundary
 
-Migration `0001_shared_company_core.sql` creates the shared core only. It does
-not yet move Sorted, LMS, or Supercharged domain tables, change their
-database clients, or prove RLS isolation. Do not mark the four-app database
+Migration `0001_shared_company_core.sql` creates the shared core only. CI applies
+it to a separate clean PostgreSQL database and checks the required company UUID
+foreign keys. It does not yet move Sorted, LMS, or Supercharged domain tables,
+change their database clients, or prove RLS isolation. Do not mark the four-app database
 upgrade production-ready until those migrations and app adapters are completed
 and verified on a disposable PostgreSQL database.
 

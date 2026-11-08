@@ -92,3 +92,12 @@ jobs:
           test "$out" = "applied 0 migration(s)"
       - name: Two-tenant RLS tests
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$TITAN_CI_DATABASE_URL"
+
+      # The draft shared-schema chain is a separate clean-install path until #43 reconciles it.
+      - name: Shared company core clean-install checks
+        env:
+          PGPASSWORD: ci-only-throwaway
+        run: |
+          createdb -h localhost -U postgres titan_shared_core_ci
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d titan_shared_core_ci -f database/migrations/0001_shared_company_core.sql
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d titan_shared_core_ci -f tests/sql/shared_company_core.sql
