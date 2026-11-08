@@ -11,7 +11,7 @@ function setup({organisations=[{id:orgA,name:'A & Co'},{id:orgB,name:'B Co'}],ve
     selectionStore:{async save(key,value){saved.set(key,value)},async consume(key){const value=saved.get(key);saved.delete(key);return value??null}},
     listOrganisations:async()=>organisations,
     verifySelection:async args=>{calls.verify.push(args);if(throwVerify)throw Error('internal detail');return verify},
-    issueSession:async args=>{calls.issued.push(args);return 'opaque-session'},
+    issueSession:async args=>{calls.issued.push(args);return true},
     clock:()=>1_000,randomState:()=>state,
   });
   return {selection,saved,calls};
@@ -44,7 +44,7 @@ test('rechecks current authority and issues a session only after a verified sele
   const {selection,calls}=setup();
   await selection.begin({issuer:'https://id.example/',subject:'subject-1',browserBinding:binding});
   const result=await selection.complete({state,organisationId:orgB,browserBinding:binding});
-  assert.deepEqual(result,{status:'selected',session:'opaque-session'});
+  assert.deepEqual(result,{status:'selected'});
   assert.deepEqual(calls.verify,[{issuer:'https://id.example/',subject:'subject-1',organisationId:orgB}]);
   assert.deepEqual(calls.issued,[{issuer:'https://id.example/',subject:'subject-1',organisationId:orgB}]);
 });
@@ -77,4 +77,15 @@ test('no choices denies and recheck failure never issues a session',async()=>{
   await selection.begin({issuer:'https://id.example/',subject:'subject-1',browserBinding:binding});
   assert.deepEqual(await selection.complete({state,organisationId:orgA,browserBinding:binding}),{status:'unavailable'});
   assert.equal(calls.issued.length,0);
+});
+
+test('session credentials are not returned by the selection coordinator',async()=>{
+  const saved=new Map();
+  const selection=createOrganisationSelection({selectionStore:{
+    save:async(key,value)=>saved.set(key,value),
+    consume:async key=>{const value=saved.get(key);saved.delete(key);return value??null;},
+  },listOrganisations:async()=>[{id:orgA,name:'A'}],verifySelection:async()=>true,
+  issueSession:async()=>'central_sid=secret; HttpOnly',clock:()=>1_000,randomState:()=>state});
+  await selection.begin({issuer:'https://id.example/',subject:'subject-1',browserBinding:binding});
+  assert.deepEqual(await selection.complete({state,organisationId:orgA,browserBinding:binding}),{status:'unavailable'});
 });

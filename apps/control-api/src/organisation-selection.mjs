@@ -20,7 +20,9 @@ const equalHash=(left,right)=>{
  * trusted Central membership/access records. selectionStore.save/consume must be
  * durable and atomic across workers; consume deletes exactly once. verifySelection
  * MUST re-check current membership and product access for the selected tenant.
- * issueSession is invoked only after both the one-use and current-authority checks.
+ * issueSession is invoked only after both the one-use and current-authority checks;
+ * it should persist the session and set its cookie on the response in its closure,
+ * then return exactly true. Session credentials are never returned by this module.
  */
 export function createOrganisationSelection({selectionStore,listOrganisations,verifySelection,issueSession,
   clock=()=>Date.now(),randomState=()=>randomBytes(32).toString('base64url'),ttlMs=300_000}={}){
@@ -62,9 +64,9 @@ export function createOrganisationSelection({selectionStore,listOrganisations,ve
       catch{return {status:'unavailable'};}
       if(authorised!==true)return {status:'denied'};
       try{
-        const session=await issueSession({issuer:pending.issuer,subject:pending.subject,organisationId});
-        if(!session)return {status:'unavailable'};
-        return {status:'selected',session};
+        const issued=await issueSession({issuer:pending.issuer,subject:pending.subject,organisationId});
+        if(issued!==true)return {status:'unavailable'};
+        return {status:'selected'};
       }catch{return {status:'unavailable'};}
     }
   };

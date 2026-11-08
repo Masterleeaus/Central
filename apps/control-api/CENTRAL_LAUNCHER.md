@@ -61,7 +61,8 @@ random one-use state bound to a hash of the browser binding and stores the
 allowed organisation IDs server-side. On selection, the state store must consume
 the token atomically; the coordinator verifies the selected ID was in the stored
 choice set, rechecks current membership/access, and only then calls the Central
-session issuer. The module is not mounted in the HTTP server because durable
+session issuer. Session credentials are not returned by the coordinator. The
+module is not mounted in the HTTP server because durable
 selection storage, Central-owned OIDC callback/session issuance, and a trusted
 organisation discovery query are not yet wired. The browser must never receive
 the issuer/subject or gain authority from a posted company ID.
