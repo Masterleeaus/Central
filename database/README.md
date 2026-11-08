@@ -413,3 +413,41 @@ allowlists do not prove an environment is non-production; real human
 identity verification, independent change approval, least-privilege
 provisioning, backups and real Logto/product source verification are
 still required. No live production credentials or databases were used.
+
+## Pass 20 — Approval and audit integrity checks (staging only)
+
+Canonical migration `0012_staging_approval_integrity.sql` adds
+fingerprints for the immutable fields of staging approval and committed
+backfill audit records, using SHA-256 and domain-separated payloads.
+Before-row triggers prevent ordinary database actors from modifying
+approval details after issuance, deleting approvals, changing an audit
+entry or deleting a committed audit. An approval may transition
+`consumed_at` once, from NULL to its consumption timestamp; no other
+approval fields may change. Existing rows get fingerprints during
+migration.
+
+The privileged, read-only `titan.verify_staging_backfill_integrity()`
+function counts approval/audit fingerprints that no longer match and
+checks that each consumed approval corresponds to an audit event.
+The companion CLI
+`tools/verify_staging_approval_integrity.py --database-url ...`
+runs a single `REPEATABLE READ READ ONLY` transaction and outputs
+aggregate counts **without user IDs, Logto subjects or customer names**.
+Exit 0 means no mismatch in compared fields, 2 means a detected
+integrity violation, and 1 means verification unavailable or invalid.
+
+Disposable PostgreSQL integration tests verify that direct edits,
+deletions and repeated consumption fail; a deliberately tampered approval
+with the trigger temporarily disabled is detected and then restored
+by rolling back the entire test transaction. The existing historical
+expired-approval fixture was updated to seed its historical timestamps
+on insertion rather than attempt an edit after creation.
+
+**Security limits:** These SHA-256 fingerprints are *not independent
+digital signatures*. A privileged PostgreSQL owner or superuser can
+rewrite both rows and hashes or disable triggers. Independent,
+person-bound, externally verifiable signed approvals and an off-database
+tamper-evident checkpoint/receipt store are still missing. Existing
+function owners and the privileged audit reader must be restricted
+to appropriate staging contexts. No real production backfill is
+authorised or executed by this mechanism.
