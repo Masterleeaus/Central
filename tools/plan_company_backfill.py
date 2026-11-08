@@ -68,6 +68,7 @@ def plan(legacy,canonical):
             fail('identity_status_conflict')
     seen_member=set()
     canonical_member={(r['company_id'],r['identity_id']):r for r in canonical['memberships']}
+    expected_members=set()
     for row in legacy['memberships']:
         mapping=approved.get(row['organisation_id'])
         source=old_subject.get(row['identity_id'])
@@ -79,6 +80,7 @@ def plan(legacy,canonical):
         key=(mapping['company_id'],identity['id'])
         if key in seen_member:fail('duplicate_source_membership');continue
         seen_member.add(key)
+        expected_members.add(key)
         existing=canonical_member.get(key)
         if existing:
             if (existing['role'],existing['status'],existing.get('expires_at')) != (
@@ -89,8 +91,13 @@ def plan(legacy,canonical):
         if row.get('expires_at') is not None:
             try:parse_expiry(row['expires_at'])
             except ValueError:fail('invalid_membership_expiry')
+    mapped_company_ids={approved[x]['company_id'] for x in verified}
+    for key,member in canonical_member.items():
+        if key[0] in mapped_company_ids and key not in expected_members and member['status']=='active':
+            fail('unexpected_active_canonical_membership')
     canonical_grant={(r['company_id'],r['application_id']):r for r in canonical['entitlements']}
     seen_grants=set()
+    expected_grants=set()
     for row in legacy['entitlements']:
         mapping=approved.get(row['organisation_id'])
         product=APPLICATIONS.get(row['application_id'])
@@ -99,6 +106,7 @@ def plan(legacy,canonical):
         key=(mapping['company_id'],product)
         if key in seen_grants:fail('duplicate_source_entitlement');continue
         seen_grants.add(key)
+        expected_grants.add(key)
         existing=canonical_grant.get(key)
         if existing:
             if (existing['status'],sorted(existing.get('features') or []),existing.get('expires_at')) != (
@@ -109,7 +117,11 @@ def plan(legacy,canonical):
         if row.get('expires_at') is not None:
             try:parse_expiry(row['expires_at'])
             except ValueError:fail('invalid_entitlement_expiry')
+    for key,grant in canonical_grant.items():
+        if key[0] in mapped_company_ids and key not in expected_grants and grant['status'] in ('active','trialing'):
+            fail('unexpected_active_canonical_entitlement')
     canonical_links={(r['company_id'],r['identity_id'],r['application_id']):r for r in canonical['links']}
+    expected_links=set()
     seen_links=set()
     for row in legacy['links']:
         mapping=approved.get(row['organisation_id'])
@@ -123,11 +135,15 @@ def plan(legacy,canonical):
         key=(mapping['company_id'],identity['id'],product)
         if key in seen_links:fail('duplicate_source_user_link');continue
         seen_links.add(key)
+        expected_links.add(key)
         existing=canonical_links.get(key)
         if existing:
             if (existing['status'],existing['local_user_id'])!=(row['state'],row['local_user_id']):
                 fail('user_link_conflict')
         else:candidates['user_links']+=1
+    for key,link in canonical_links.items():
+        if key[0] in mapped_company_ids and key not in expected_links and link['status']=='verified':
+            fail('unexpected_verified_canonical_user_link')
     # Canonical rows may exist from other sources; never update or delete them.
     return {'schema':'titan.company-backfill-plan.v1',
             'source':'read_only_snapshots',
