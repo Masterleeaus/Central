@@ -26,6 +26,12 @@ BEGIN
  IF observed<>expected THEN RAISE EXCEPTION 'FAIL %: expected %, saw %',reason,expected,observed; END IF;
 END $$;
 SELECT pg_temp.expect_sessions(2,'fixtures');
+-- A failed provisioning transaction must restore the session row and membership.
+SAVEPOINT rollback_revocation;
+UPDATE titan.memberships SET state='suspended' WHERE id='00000000-0000-4000-8000-000000000c01';
+SELECT pg_temp.expect_sessions(1,'session removed within update transaction');
+ROLLBACK TO SAVEPOINT rollback_revocation;
+SELECT pg_temp.expect_sessions(2,'rolled-back update restores session');
 -- Membership revocation deletes only the affected user's company sessions.
 UPDATE titan.memberships SET state='revoked' WHERE id='00000000-0000-4000-8000-000000000c01';
 SELECT pg_temp.expect_sessions(1,'membership revocation');
