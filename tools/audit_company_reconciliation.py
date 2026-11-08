@@ -80,7 +80,7 @@ def extract_dataset(url, queries, *, psql='psql'):
     # Statically selected queries only. LIMIT + 1 detects oversize, never
     # silently emits a truncated or misleading comparison.
     sections = [
-        "SELECT json_build_object('section', " + json.dumps(key) +
+        "SELECT json_build_object('section', '" + key + "'" +
         ", 'record', row_to_json(t))::text AS audit_row FROM (" +
         sql + f' LIMIT {MAX_ROWS + 1}) t'
         for key,sql in queries.items()
