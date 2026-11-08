@@ -310,3 +310,60 @@ idempotent/rollback procedure, stable source snapshots and verified
 product/Logto policies. The rehearsal is not evidence that a
 production migration can be executed safely, nor is it permission
 to grant those write privileges.
+
+## Pass 18 — Database-enforced staging-only writer with approval ledger
+
+Migration `0005_staging_backfill_approvals.sql` extends the canonical
+migration registry. It creates two durable tables:
+
+- `titan.staging_backfill_approvals`: an operator-inserted, exact
+  one-identity/one-membership approval specifying the **reviewed**
+  legacy company UUID, canonical company UUID, exact Logto organisation ID,
+  identity UUID and Logto subject, role, approver and change ticket;
+  approval expires in at most 15 minutes and has a `consumed_at` marker.
+- `titan.staging_backfill_audit`: a unique event linked to each consumed
+  approval, recording company/identity UUIDs, authenticated database
+  `session_user` and the committed staging outcome.
+
+A new `titan_staging_backfill_executor NOLOGIN NOINHERIT` role gets
+**EXECUTE on only** `titan.execute_staging_backfill_approval(uuid)`.
+It receives no direct read/write privileges on approval, identity,
+membership or audit tables, and no production credential is granted
+this role automatically. The `SECURITY DEFINER` function runs with a
+fixed search path and refuses execution unless the *actual PostgreSQL
+database name* is on its small staging allowlist
+(`titan_shared_ci`, `titan_shared_staging`,
+`titan_shared_backfill_ci`). It locks one unconsumed,
+unexpired approval, validates the exact mapping again against a
+locked active company and verified link, refuses identity collision,
+then inserts exactly one identity and membership, marks the approval
+consumed, and appends one audit event in the **same database transaction**.
+
+The **database administrator or separate privileged provisioning process**
+must create the approval after independently validating evidence.
+The executor itself has no ability to mint or edit approvals. This
+database-enforced approval is distinct from the prior ephemeral HMAC
+rehearsal; the HMAC rehearsal still always rolls back and cannot
+produce approvals. Database approval rows currently contain
+`approved_by` and ticket strings supplied by a privileged operator,
+**not cryptographic evidence that a named human actually approved**.
+
+CI verifies a committed staging transaction, approval replay denial,
+expired and mismatched mapping refusals, and all-or-nothing rollback
+(including the approval consumption and audit). It also connects using
+a **real independently authenticated, non-superuser, NOINHERIT test
+login**, asserts direct table reads and writes are forbidden, executes
+only the narrow approved function via an explicit role change, and
+checks the actual authenticated login is recorded in the audit.
+
+**Safety boundary:** All committed operations in this pass execute only
+against disposable CI PostgreSQL. A database *name* is defense in
+depth, not a cryptographically proven environment identity: deploying
+a production database under an allowed staging name would be unsafe.
+The function is intentionally narrow and there is still **no
+production backfill execution path**. Deployment requires separate
+approval issuance controls, real independent human-signature
+verification, least-privilege function ownership (the CI function is
+installed by the schema owner), controlled staging credentials,
+source freezes, rollback rehearsals and product/Logto verification.
+Do not grant this execution role to any live production service.
