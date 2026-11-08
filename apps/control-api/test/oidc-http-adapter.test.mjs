@@ -23,3 +23,39 @@ test('session adapter cannot return insecure cookie',async()=>{const x=setup({es
 test('session adapter fails closed on exception',async()=>{const x=setup({establishSession:async()=>{throw Error('store down')}});const {res}=await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:`titan_desk_oidc_binding=${token}`});assert.equal(res.status,401)});
 test('invalid app registration rejected',()=>assert.throws(()=>createOidcHttpAdapter({applicationId:'admin'}),TypeError));
 test('untrusted postlogin external URL rejected',()=>assert.throws(()=>createOidcHttpAdapter({applicationId:'desk',afterLogin:'//evil.test',oidcLogin:{begin(){},complete(){}},resolveLocalIdentity(){},establishSession(){}}),TypeError));
+const cb=`titan_desk_oidc_binding=${token}`;
+test('malformed request URL gets 400 instead of throwing',async()=>{const x=setup();const {handled,res}=await call(x.adapter,'http://[::1');assert.equal(handled,true);assert.equal(res.status,400);assert.match(res.body,/invalid_url/);});
+test('an exception inside the route returns 500 and does not escape',async()=>{const x=setup();const req={get method(){throw Error('boom')},url:'/auth/titan/desk/start',headers:{}};const res=makeRes();const handled=await x.adapter(req,res);assert.equal(handled,true);assert.equal(res.status,500);});
+test('non-localhost http authorization URL is refused, localhost only with the dev flag',async()=>{
+ const local={begin:async()=>({authorizationUrl:'http://localhost:9000/oidc/auth?state=s'}),complete:async()=>({subject:'uid',issuer:'https://id.example'})};
+ const strict=setup({oidcLogin:local});assert.equal((await call(strict.adapter,'/auth/titan/desk/start')).res.status,503);
+ const dev=setup({oidcLogin:local,allowInsecureLocalhost:true});assert.equal((await call(dev.adapter,'/auth/titan/desk/start')).res.status,303);
+});
+test('callback is rate-limited per client IP before the token exchange',async()=>{
+ const x=setup({rateLimits:{ip:{limit:1,windowMs:60_000},subject:{limit:10,windowMs:60_000}}});
+ const first=await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ const second=await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ assert.equal(first.res.status,303);assert.equal(second.res.status,429);assert.ok(Number(second.res.headers['retry-after'])>=1);
+ assert.equal(x.counts().complete,1);
+});
+test('callback is rate-limited per verified subject',async()=>{
+ const x=setup({rateLimits:{ip:{limit:100,windowMs:60_000},subject:{limit:1,windowMs:60_000}}});
+ const first=await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ const second=await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ assert.equal(first.res.status,303);assert.equal(second.res.status,429);assert.equal(x.counts().establish,1);
+});
+test('login outcomes are logged as structured fields without tokens, codes or subjects',async()=>{
+ const events=[];const logger=(event,fields)=>events.push({event,fields});
+ const ok=setup({logger,oidcLogin:{begin:async()=>({authorizationUrl:'https://id.example/oidc/auth?state=s'}),complete:async()=>({subject:'subject-secret-7',issuer:'https://id.example'})}});
+ await call(ok.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ const bad=setup({logger,oidcLogin:{begin:async()=>({authorizationUrl:'https://id.example/oidc/auth?state=s'}),complete:async()=>{throw Error('exchange failed code=secret-code-999')}}});
+ await call(bad.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ const denied=setup({logger,resolveLocalIdentity:async()=>({authorised:false})});
+ await call(denied.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ assert.deepEqual(events.map(e=>e.event),['login_succeeded','login_failed','login_denied']);
+ assert.equal(events[0].fields.application,'desk');assert.equal(events[1].fields.reason,'unexpected_error');assert.equal(events[2].fields.reason,'account_not_authorised');
+ const dump=JSON.stringify(events);
+ assert.ok(!dump.includes('subject-secret-7'),'subject must not be logged');
+ assert.ok(!dump.includes('secret-code-999'),'error text must not be logged');
+ assert.ok(!dump.includes(token),'browser binding must not be logged');
+});

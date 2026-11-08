@@ -59,7 +59,7 @@ test('valid membership, entitlement and link use bound SQL',async()=>{
 const ORG='33333333-3333-4333-8333-333333333333', IDENT='44444444-4444-4444-8444-444444444444';
 const reqId=(n)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const ctxN=(n)=>({requestId:reqId(n),actorSubject:'management:operator',authorityReference:'logto:verified:123'});
-const isBump=q=>q.startsWith('INSERT INTO titan_session_revocations');
+const isBump=q=>q.startsWith('INSERT INTO titan.titan_session_revocations');
 function lifecyclePool({lock,members=[],updateRows=1,audit=[]}){
  const calls=[];let released=0;
  const handler=(q)=>{

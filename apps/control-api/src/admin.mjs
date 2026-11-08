@@ -60,7 +60,8 @@ export function createAdminHandler({verifyToken,authoriseOperator,provision,orig
  // Eager check, not user-controlled request origins.
  const plans=createTitanOidcRegistrationPlans(origins);
  return async (req,res)=>{
-  const path=new URL(req.url??'/', 'http://localhost').pathname;
+  let path;
+  try{path=new URL(req.url??'/', 'http://localhost').pathname;}catch{send(res,400,{error:'invalid_url'});return true;}
   if(!['/v1/admin/oidc/plans','/v1/admin/provision'].includes(path))return false;
   const method=path.endsWith('/plans')?'GET':'POST';
   if(req.method!==method){send(res,405,{error:'method_not_allowed'});return true;}

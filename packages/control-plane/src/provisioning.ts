@@ -150,7 +150,7 @@ async function applyUpdate(conn:SqlClient,c:Exclude<ProvisioningCommand,CreateCo
 /** Advances the session revocation generation for one application, subject and organisation.
  * Runs on the caller's transaction so a failure rolls back the row change and the audit record. */
 async function bumpGeneration(conn:SqlClient,applicationId:ApplicationId,logtoSubject:string,organisationId:string):Promise<void>{
- const result=await conn.query(`INSERT INTO titan_session_revocations (application_id,logto_subject,organisation_id,generation)
+ const result=await conn.query(`INSERT INTO titan.titan_session_revocations (application_id,logto_subject,organisation_id,generation)
 VALUES ($1,$2,$3,1) ON CONFLICT (application_id,logto_subject,organisation_id)
 DO UPDATE SET generation=titan_session_revocations.generation+1,revoked_at=now()
 RETURNING generation`,[applicationId,logtoSubject,organisationId]);
