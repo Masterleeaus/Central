@@ -36,7 +36,7 @@ export function createPostgresCentralSessionStore({pool}={}){
       const when=expiryDate(expiresAt);
       return sessionTransaction(pool,async client=>{
         const result=await client.query(
-          'INSERT INTO titan.central_browser_sessions (token_digest,logto_subject,organisation_id,expires_at) VALUES ($1,$2,$3,$4::timestamptz) RETURNING token_digest',
+          'SELECT titan.central_issue_browser_session($1,$2,$3,$4::timestamptz) AS token_digest',
           [digest,identityId,companyId,when]);
         if(result.rows?.length!==1)throw new Error('session insert not confirmed');
       });
