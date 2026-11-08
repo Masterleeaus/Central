@@ -4,18 +4,30 @@ import { createCentralHandler } from './app.mjs';
 import { createOidcVerifier } from './oidc.mjs';
 import { createJsonLogger } from './structured-log.mjs';
 import { insecureLocalhostAllowed } from './endpoint-policy.mjs';
+import { createMetrics, pathnameOf, serveMetrics } from './metrics.mjs';
+import { createOperatorAdmin } from './operator-config.mjs';
 const log = createJsonLogger();
 
-export async function startCentralService({env=process.env, loadPg=()=>import('pg')}={}) {
+export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log}={}) {
   const {TITAN_CENTRAL_DATABASE_URL, TITAN_OIDC_ISSUER, TITAN_OIDC_JWKS_URI, TITAN_FIELD_AUDIENCE, TITAN_DESK_AUDIENCE, TITAN_ACADEMY_AUDIENCE}=env;
   if (![TITAN_CENTRAL_DATABASE_URL,TITAN_OIDC_ISSUER,TITAN_OIDC_JWKS_URI,TITAN_FIELD_AUDIENCE,TITAN_DESK_AUDIENCE,TITAN_ACADEMY_AUDIENCE].every(Boolean)) throw Error('missing Central service configuration');
   const audiences={field:TITAN_FIELD_AUDIENCE,desk:TITAN_DESK_AUDIENCE,academy:TITAN_ACADEMY_AUDIENCE};
   // One verifier per app audience; the first that accepts the token supplies principal.audience, which app.mjs then matches against the requested application.
   const verifiers=Object.values(audiences).map(audience=>createOidcVerifier({issuer:TITAN_OIDC_ISSUER,audience,jwksUri:TITAN_OIDC_JWKS_URI,allowInsecureLocalhost:insecureLocalhostAllowed(env)}));
-  const verifyToken=async token=>{let lastError;for(const verify of verifiers){try{return await verify(token);}catch(e){lastError=e;}}throw lastError??Error('no audience matched');};
+  const verifyToken=verifyOverride??(async token=>{let lastError;for(const verify of verifiers){try{return await verify(token);}catch(e){lastError=e;}}throw lastError??Error('no audience matched');});
+  // Decision and failure events feed the metrics counters and then the structured log, unchanged.
+  const metrics=createMetrics();
+  const auditLog=(event,fields)=>{try{metrics.observeLog(event,fields);}catch{/* metrics never alter a request */}logger(event,fields);};
+  // Operator plane: null unless TITAN_OPERATOR_* is set, in which case /v1/admin/ is mounted. Invalid settings throw here.
+  const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher});
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
-  const handler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,logger:log});
+  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,logger:auditLog});
+  const handler=async (req,res)=>{
+    res.on('finish',()=>{try{metrics.observeResponse(res.statusCode);}catch{/* ignore */}});
+    if (req.method==='GET' && pathnameOf(req)==='/metrics') return serveMetrics(req,res,metrics);
+    return centralHandler(req,res);
+  };
   const server=createServer(handler);
   const port=Number(env.TITAN_CENTRAL_PORT||3102);
   if (!Number.isInteger(port)||port<1||port>65535) throw Error('invalid port');
