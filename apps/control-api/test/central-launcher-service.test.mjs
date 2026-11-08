@@ -44,3 +44,24 @@ test('full trusted composition blocks unauthenticated browsers, then renders ent
   await service.handler(req,revoked);
   assert.equal(revoked.status,401);
 });
+
+test('composed authenticated launcher logout revokes session and denies re-use',async()=>{
+  record.clear();
+  const service=createCentralLauncherService({
+    pool:fakePool,sessionStore,getCompanyName:async()=> 'Acme & Co',destinations,
+    origin:'https://central.example'
+  });
+  const issued=await service.sessions.issue({identityId:'issuer|subject',companyId:ORG});
+  const cookie=issued.cookie.split(';')[0];
+  const page=response();
+  await service.handler({url:'/central',method:'GET',headers:{cookie}},page);
+  assert.equal(page.status,200);
+  assert.match(page.body,/Sign out of Central/);
+  const signedOut=response();
+  await service.handler({url:'/auth/central/logout',method:'POST',
+    headers:{origin:'https://central.example',cookie,'content-length':'0','sec-fetch-site':'same-origin'}},signedOut);
+  assert.equal(signedOut.status,303);
+  const after=response();
+  await service.handler({url:'/central',method:'GET',headers:{cookie}},after);
+  assert.equal(after.status,401);
+});
