@@ -120,3 +120,8 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0001_shared_company_core.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
       - name: Validate canonical companies and product IDs
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_core.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Apply canonical tenant RLS to shared-core database
+        run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0002_shared_company_rls.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Verify canonical two-company isolation and links
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_rls.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
