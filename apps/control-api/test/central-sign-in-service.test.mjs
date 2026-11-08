@@ -99,3 +99,13 @@ test('default company authority performs restricted discovery and current RLS me
   assert.ok(trace.some(([sql])=>sql==='SET LOCAL ROLE titan_trusted_reader'));
   assert.ok(trace.some(([sql,args])=>sql.includes('set_config')&&args[0]===ORG));
 });
+
+test('partially injected company authority cannot silently bypass trusted RLS checks',()=>{
+  assert.throws(()=>createCentralSignInService({
+    pool:{connect:async()=>{}},sessions:{issue:async()=>{}},
+    issuer:'https://issuer.example',clientId:'id',clientSecret:'secret',
+    redirectUri:'https://central.example/auth/central/callback',
+    verifyIdToken:async()=>{},listEligibleCompanies:async()=>[{companyId:ORG,authorised:true}],
+    stateStore:{save:async()=>{},consume:async()=>{}}
+  }),/trusted Central sign-in dependencies required/);
+});
