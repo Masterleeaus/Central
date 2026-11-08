@@ -1,0 +1,29 @@
+{
+  "pass": 14,
+  "base": "Titan-Central-Logto-Pass13-CUMULATIVE-SOURCE.zip",
+  "added": [
+    "titan-central/PASS14_IMPLEMENTATION.md",
+    "titan-central/PASS14_RELEASE_MANIFEST.json",
+    "titan-central/apps/control-api/src/session-revocation-pg.mjs",
+    "titan-central/apps/control-api/src/session-security.mjs",
+    "titan-central/apps/control-api/test/session-security.test.mjs",
+    "titan-central/migrations/0004_session_revocations_draft.sql"
+  ],
+  "modified": [],
+  "removed": [],
+  "checks": {
+    "control_api_node": 108,
+    "control_plane_node": 93,
+    "source_python": 4
+  },
+  "live_deployment": "not performed",
+  "production_ready": false,
+  "sha256_changed": {
+    "titan-central/PASS14_IMPLEMENTATION.md": "073451f3fccde9a26a26e9328933702572bd4eb3f0906b510dbcb02710d658c6",
+    "titan-central/PASS14_RELEASE_MANIFEST.json": "c286418c7c9d5ed01473fdaa7d06888b8dade422ac27510f21a2e52dd417e69c",
+    "titan-central/apps/control-api/src/session-revocation-pg.mjs": "56dc57b466e6f8b973e60646559b1770d6fe417b9ad93612849445273a45d97b",
+    "titan-central/apps/control-api/src/session-security.mjs": "2822d42a3d5dd7565557a75593a61b7eb15e50eff1ecfa2bd31a75b79e6fdee5",
+    "titan-central/apps/control-api/test/session-security.test.mjs": "bfd3b01dd8318694d63449d15e02bff16bceede1214c07fe16703089dae37d63",
+    "titan-central/migrations/0004_session_revocations_draft.sql": "d62df6ac7f976e2653d99bea1aedcff63e0665451eddf8e70f6b1cc479cbbe85"
+  }
+}

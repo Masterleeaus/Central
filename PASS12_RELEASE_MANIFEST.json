@@ -1,0 +1,38 @@
+{
+  "baseline": "Titan-Central-Logto-Pass11-CUMULATIVE-SOURCE.zip",
+  "changed": [
+    {
+      "bytes": 5194,
+      "operation": "added",
+      "path": "titan-central/apps/control-api/src/oidc-http-adapter.mjs",
+      "sha256": "b706973ae4df876cd81780060166f2007e2bc0240d97e3341134ad5059d93a77"
+    },
+    {
+      "bytes": 4588,
+      "operation": "added",
+      "path": "titan-central/apps/control-api/test/oidc-http-adapter.test.mjs",
+      "sha256": "f0e287cadf0ea55b0c42ca6f65acdaf97438c7aa87da3ef09f07664a75652383"
+    },
+    {
+      "bytes": 2185,
+      "operation": "added",
+      "path": "titan-central/PASS12_IMPLEMENTATION.md",
+      "sha256": "e03a0c6481acf77bc0f7d47e21b21c322274c70b4a9fe513f9e14fd34d7b8e19"
+    }
+  ],
+  "deleted": [],
+  "live_deployed": false,
+  "pass": 12,
+  "scope": "app OIDC browser adapter; session boundary",
+  "test_results": {
+    "node": {
+      "failed": 0,
+      "passed": 167
+    },
+    "python": {
+      "failed": 0,
+      "passed": 4
+    },
+    "typescript": "passed"
+  }
+}

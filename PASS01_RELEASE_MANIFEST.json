@@ -1,0 +1,16 @@
+{
+  "pass": 1,
+  "upstream_zip_sha256": "dcaccecd1cc6696f1dd78dc21ee482268960c3a13360e028dced50827cd3a0f5",
+  "upstream_files_preserved": 8181,
+  "modified_upstream_files": 0,
+  "removed_upstream_files": 0,
+  "deliverables": [
+    "PASS01_SOURCE_AUDIT.md",
+    "SOURCE_INVENTORY.json",
+    "TITAN_ARCHITECTURE_DECISIONS.md",
+    "PASS01_RELEASE_MANIFEST.json",
+    "tools/verify_logto_source.py",
+    "tests/test_verify_logto_source.py"
+  ],
+  "production_ready": false
+}

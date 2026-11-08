@@ -1,0 +1,7 @@
+# Titan Central — Pass 10: Reusable OIDC login client
+
+Implemented a framework-independent OIDC Authorization Code + PKCE S256 helper for Desk, Field and Academy. It generates cryptographically random state, nonce and verifier, binds state to a server-issued browser correlation secret, consumes pending state atomically, exchanges the code at a fixed issuer endpoint and requires verified identity-token claims including nonce. The token/JWT verifier and atomic store are injected so callers cannot accidentally mistake parsed claims for verified claims. Access tokens are not returned as part of the public login completion.
+
+**Deployment remains disabled.** No browser route has been added to Desk, Field or Academy. The adapter does NOT implement its own JWT cryptographic signature verification: applications must use a proper ID-token verifier with the exact configured issuer/client ID and JWKS. The pre-existing control API verifier is for access tokens and does not expose the nonce or full ID-token claims required here. Browser correlations must use Secure, HttpOnly, SameSite cookies and durable TTL-bound one-time state storage (e.g. Redis SET GETDEL with atomic expiry). Cross-app single logout, user provisioning, cookie sessions, CSRF controls, and actual Logto OIDC configuration are still pending. Never enable this helper with a permissive injected verifier.
+
+The repo's Logto v1.45.0 source and existing Pass 09 files remain unchanged. This pass adds only the reusable helper, tests, and documentation.

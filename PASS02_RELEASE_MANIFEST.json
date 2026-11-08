@@ -1,0 +1,100 @@
+{
+  "pass": 2,
+  "baseline": "Titan-Central-Logto-Pass01-CUMULATIVE-SOURCE.zip",
+  "created_utc": "2026-11-02T11:55:16.099028+00:00",
+  "added_or_updated": {
+    "titan-central/migrations/0001_control_plane_draft.sql": {
+      "sha256": "bfb66a96d9f9d41387f7214c735d8c2688ddb8d7a74d5ff700191a717374093b",
+      "bytes": 2536
+    },
+    "titan-central/packages/control-plane/README.md": {
+      "sha256": "c50e046849c6858f430927e7930fa76cf4a8103f39dbf26327ea6754ffd3069b",
+      "bytes": 2205
+    },
+    "titan-central/packages/control-plane/dist/access.d.ts": {
+      "sha256": "370e61c39ce83213baa2ebdd282dbb2ecc10739fd67058e79545f673aec069f2",
+      "bytes": 569
+    },
+    "titan-central/packages/control-plane/dist/access.js": {
+      "sha256": "857c32bb2acb1cea937ea88cb02ef531617fbfae71a0ee3bc967f43fd988943d",
+      "bytes": 3485
+    },
+    "titan-central/packages/control-plane/dist/applications.d.ts": {
+      "sha256": "61d0eb63efba0bc0b3d34a3f3fbf6f603a0352df19dc5005cbc8809156032aaf",
+      "bytes": 658
+    },
+    "titan-central/packages/control-plane/dist/applications.js": {
+      "sha256": "347b2c1ce99480d02c8b70aecc4f63d9a179cc3424b7400c501d706d5d99b452",
+      "bytes": 1727
+    },
+    "titan-central/packages/control-plane/dist/contracts.d.ts": {
+      "sha256": "cd6ac1077c8a5eec2545fb48809e5c9502b0cdafc55cdd2caca22441b7187e84",
+      "bytes": 3199
+    },
+    "titan-central/packages/control-plane/dist/contracts.js": {
+      "sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+      "bytes": 11
+    },
+    "titan-central/packages/control-plane/dist/index.d.ts": {
+      "sha256": "9dc0d176520a4f063b0afb120c4e4c500d658e3d1adfd36d42f83c177be845cf",
+      "bytes": 124
+    },
+    "titan-central/packages/control-plane/dist/index.js": {
+      "sha256": "9dc0d176520a4f063b0afb120c4e4c500d658e3d1adfd36d42f83c177be845cf",
+      "bytes": 124
+    },
+    "titan-central/packages/control-plane/dist/links.d.ts": {
+      "sha256": "08fed6fafbec58e2f2e878d9c319180888774a1e3c652db2c7a4acfc4fd3451c",
+      "bytes": 536
+    },
+    "titan-central/packages/control-plane/dist/links.js": {
+      "sha256": "f2641371725486688f507621946874669c3b63720bd2d7e32d2624eb39a51133",
+      "bytes": 860
+    },
+    "titan-central/packages/control-plane/package.json": {
+      "sha256": "c89ef4af5a9e01d3e6fce0f0de50d5099b2b80268821289e374b816add8982a1",
+      "bytes": 283
+    },
+    "titan-central/packages/control-plane/src/access.ts": {
+      "sha256": "c7e7b1f5acdf8f13490284008c36cc5e6e3b43061ea85316c2cae3765d19bf31",
+      "bytes": 3568
+    },
+    "titan-central/packages/control-plane/src/applications.ts": {
+      "sha256": "d75bdc750acdb7cd14d90ab75dc65eed047a1483aae6bab374eb68d5ca309a17",
+      "bytes": 2245
+    },
+    "titan-central/packages/control-plane/src/contracts.ts": {
+      "sha256": "81ea3efdb4ea83be5abfd795492e5a8f69acdb7419d4d073355a38ce07fa2f18",
+      "bytes": 2990
+    },
+    "titan-central/packages/control-plane/src/index.ts": {
+      "sha256": "9dc0d176520a4f063b0afb120c4e4c500d658e3d1adfd36d42f83c177be845cf",
+      "bytes": 124
+    },
+    "titan-central/packages/control-plane/src/links.ts": {
+      "sha256": "f7e34736eb0ff7a5f44d57b69ead0a4777c8b778e718511b291f4d852409b54d",
+      "bytes": 1271
+    },
+    "titan-central/packages/control-plane/test/access.test.mjs": {
+      "sha256": "7c41af78bf34cd56a55a39d8281ce0dfb83b397bb62fd2ebb21e45e9e9210524",
+      "bytes": 5020
+    },
+    "titan-central/packages/control-plane/tsconfig.json": {
+      "sha256": "ab8115b21ed3a9e7f669ea7a3a5db3c1867dab11f1eb8448cb6a13f0649964f9",
+      "bytes": 222
+    },
+    "titan-central/PASS02_IMPLEMENTATION.md": {
+      "sha256": "aae7f1f66a45a238ffd840f7f49836b8e710f734291312addc0ecaa7dbe458c6",
+      "bytes": 2219
+    }
+  },
+  "upstream_entries_preserved": 8187,
+  "migration_applied": false,
+  "live_deployed": false,
+  "test_report": {
+    "typescript_compile": "passed",
+    "node_passed": 23,
+    "node_failed": 0
+  },
+  "source_status": "candidate; not deployed"
+}

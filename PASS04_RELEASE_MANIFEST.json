@@ -1,0 +1,40 @@
+{
+  "baseline": "Titan-Central-Logto-Pass03-CUMULATIVE-SOURCE.zip",
+  "build": {
+    "OIDC_live": "not_run",
+    "control_plane_typescript": "passed",
+    "live_postgresql": "not_run",
+    "logto_full_workspace": "not_run"
+  },
+  "new_or_modified_files": 8,
+  "pass": 4,
+  "production_ready": false,
+  "sha256": {
+    "titan-central/PASS04_IMPLEMENTATION.md": "51fd7b9d8eb6516100bc45a3b4dc57b235d2c5bab8aac148a2f41634f2cc63f7",
+    "titan-central/apps/control-api/package.json": "075673126bd13cbcfb83760251c3d550964b61699e04bdc58d2fd527e0ae4e05",
+    "titan-central/apps/control-api/src/app.mjs": "526d1fff183a992900c9d6deba8bf8620e59d834e75d7ccf21554508c12d3d26",
+    "titan-central/apps/control-api/src/oidc.mjs": "2de4059ba189bf3532e8978534b62b7b520f8b7f76fb3d3d43c20758c720aa5d",
+    "titan-central/apps/control-api/src/server.mjs": "a3793ea130b55b4967ef63d25997e57e8acb601cccab48e19d9633f37cd6dffe",
+    "titan-central/apps/control-api/test/app.test.mjs": "8ccb32b0a0a859d85957fb43a6a6441ac923698657c51bddea148e2face39ade",
+    "titan-central/apps/control-api/test/oidc.test.mjs": "4e51b4e3d479a10684aa3afc78b97e05d982109da061bd0c1ea37501c357abe0"
+  },
+  "source_changes": {
+    "added": [
+      "titan-central/PASS04_IMPLEMENTATION.md",
+      "titan-central/apps/control-api/package.json",
+      "titan-central/apps/control-api/src/app.mjs",
+      "titan-central/apps/control-api/src/oidc.mjs",
+      "titan-central/apps/control-api/src/server.mjs",
+      "titan-central/apps/control-api/test/app.test.mjs",
+      "titan-central/apps/control-api/test/oidc.test.mjs"
+    ],
+    "deleted": [],
+    "modified": []
+  },
+  "tests": {
+    "control_api_node": 17,
+    "control_plane_node": 31,
+    "upstream_inventory_python": 4
+  },
+  "upstream_modifications": 0
+}

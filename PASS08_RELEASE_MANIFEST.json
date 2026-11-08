@@ -1,0 +1,107 @@
+{
+  "release": "Titan Central Logto Pass 08",
+  "baseline": "Titan-Central-Logto-Pass07-CUMULATIVE-SOURCE.zip",
+  "baseline_files": 8250,
+  "added_files": 10,
+  "modified_files": 8,
+  "deleted_files": 0,
+  "upstream_logto_changed": 0,
+  "local_tests": {
+    "control_plane_node": 82,
+    "control_api_node": 17,
+    "source_verification_python": 4
+  },
+  "live_deployment": "NOT DEPLOYED; role authority and registration plans only",
+  "changes": [
+    {
+      "path": "titan-central/PASS08_IMPLEMENTATION.md",
+      "change": "added",
+      "sha256": "098ef06e474890f9141d57a3b6f4e8227bc92f24bcf60988bc2312cfe33c00aa"
+    },
+    {
+      "path": "titan-central/PASS08_SSO_REGISTRATION_CHECKLIST.md",
+      "change": "added",
+      "sha256": "0a4b928a91a4ed286ca5f72b1fd3186a6003b01e5dd4520f8e28412467645b0a"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/index.d.ts",
+      "change": "modified",
+      "sha256": "eb9fd245c2090e8ba2b486d2e59c4415ecc38d56d820cc27b63fdf1e0694c5cb"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/index.js",
+      "change": "modified",
+      "sha256": "eb9fd245c2090e8ba2b486d2e59c4415ecc38d56d820cc27b63fdf1e0694c5cb"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/logto-management.d.ts",
+      "change": "modified",
+      "sha256": "c86db436e74c7b17e482cf3ccdcd94f4c76f9475483da6aee60bb9bab467fcf0"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/logto-management.js",
+      "change": "modified",
+      "sha256": "1ebc8990376fa759a8c50b9168b3f8ca27a9afd4e5df9d656c52f8f1a11f2c01"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/oidc-registration.d.ts",
+      "change": "added",
+      "sha256": "1d7338fc3569332ece035aa0595e1678c06f200a7e482e4744ae217507d7b211"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/oidc-registration.js",
+      "change": "added",
+      "sha256": "3a78d9708fd8b076175e0ccc6e56235ecbe286ae066a391eb805f40bd68237b4"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/organisation-authority.d.ts",
+      "change": "added",
+      "sha256": "edaa85130f95273a00a07ad7b81dcbc5b9bb98e8281d8a291733ca983eaf8d7b"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/organisation-authority.js",
+      "change": "added",
+      "sha256": "82048173b9a50940de2e57054a0d436ce01b02ad644628601805d8b2171eda52"
+    },
+    {
+      "path": "titan-central/packages/control-plane/src/index.ts",
+      "change": "modified",
+      "sha256": "6b4851cefc52c021a5bacbef3a0af93fde4a9668d9747ea3236b4913c65b42bc"
+    },
+    {
+      "path": "titan-central/packages/control-plane/src/logto-management.ts",
+      "change": "modified",
+      "sha256": "e08f506c00275bf8e2230f8545238aaac885a4eeb0e504bda1991609f42ab017"
+    },
+    {
+      "path": "titan-central/packages/control-plane/src/oidc-registration.ts",
+      "change": "added",
+      "sha256": "f5807354dfb1e82d82a29633b0bcd7831ebdf9e7f2d2fe7cd98a1e1e4c0abdae"
+    },
+    {
+      "path": "titan-central/packages/control-plane/src/organisation-authority.ts",
+      "change": "added",
+      "sha256": "86fad0e3f0467232f1462732ea536b07975516b09b0fbf2bbde17aadab990bd5"
+    },
+    {
+      "path": "titan-central/packages/control-plane/test/oidc-registration.test.mjs",
+      "change": "added",
+      "sha256": "266530c34b0b84a9fd355b98d7a9deaa522ed2dbf13d03891169a0749c04cbcc"
+    },
+    {
+      "path": "titan-central/packages/control-plane/test/organisation-authority.test.mjs",
+      "change": "added",
+      "sha256": "0a79df6d5b07bd357c40e2e3e9637c7e2a771c248b0d8a29cdc6598a32d49732"
+    },
+    {
+      "path": "titan-central/tests/__pycache__/test_verify_logto_source.cpython-313.pyc",
+      "change": "modified",
+      "sha256": "452f9821cf15615ee77e39443d910be584ccc6052465ad07616396ef9ee184c6"
+    },
+    {
+      "path": "titan-central/tools/__pycache__/verify_logto_source.cpython-313.pyc",
+      "change": "modified",
+      "sha256": "a5259a0ed5e974f10ef9aa8867dac54d2455096c13363c4a552560fe2ae4ee2f"
+    }
+  ]
+}

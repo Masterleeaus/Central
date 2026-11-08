@@ -1,0 +1,18 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {LogtoApplicationInspector} from '../dist/logto-applications.js';
+import {createTitanOidcRegistrationPlans} from '../dist/oidc-registration.js';
+const plans=createTitanOidcRegistrationPlans({desk:'https://desk.titanzero.io',field:'https://field.titanzero.io',academy:'https://academy.titanzero.io'});
+const ids={desk:'desk01',field:'field01',academy:'academy01'};
+const entries=plans.map(p=>({id:ids[p.app],type:'Traditional',oidcClientMetadata:{redirectUris:p.redirectUris,postLogoutRedirectUris:p.postLogoutRedirectUris},secret:'never-send'}));
+const make=(data=entries,{status=200,throwError=false}={})=>new LogtoApplicationInspector({origin:'https://id.titanzero.io',accessToken:async()=> 'management-secret-token',fetcher:async(url,init)=>{assert.equal(init.headers.Authorization,'Bearer management-secret-token');assert.equal(init.redirect,'error');if(throwError)throw Error('network');return {ok:status===200,status,json:async()=>data}}});
+test('three registered OIDC clients match exact callback/logout',async()=>{const result=await make().inspect(plans,ids);assert.deepEqual(result.map(r=>r.state),['registered','registered','registered']);assert.ok(!JSON.stringify(result).includes('secret'));});
+test('missing application fails closed',async()=>assert.equal((await make(entries.slice(0,2)).inspect(plans,ids))[2].state,'missing'));
+test('missing trusted client ID is not matched by display name',async()=>assert.equal((await make().inspect(plans,{...ids,academy:undefined}))[2].state,'missing'));
+test('malicious extra redirect URI fails mismatch',async()=>{const modified=structuredClone(entries);modified[0].oidcClientMetadata.redirectUris.push('https://evil.example');assert.equal((await make(modified).inspect(plans,ids))[0].state,'mismatch')});
+test('different application type is a mismatch',async()=>{const modified=structuredClone(entries);modified[0].type='SPA';assert.equal((await make(modified).inspect(plans,ids))[0].state,'mismatch')});
+test('duplicate application IDs are ambiguous',async()=>{const r=await make([...entries,entries[0]]).inspect(plans,ids);assert.equal(r[0].state,'ambiguous')});
+test('unauthorised Management API is a hard failure',async()=>assert.rejects(()=>make(entries,{status:403}).inspect(plans,ids)));
+test('network failures do not give registration success',async()=>assert.rejects(()=>make(entries,{throwError:true}).inspect(plans,ids)));
+test('malformed response rejected',async()=>assert.rejects(()=>make({oops:true}).inspect(plans,ids)));
+test('unsafe management URLs rejected',()=>assert.throws(()=>new LogtoApplicationInspector({origin:'http://example.com',accessToken:async()=>''})));
+test('caller supplied untrusted ID rejected',async()=>assert.rejects(()=>make().inspect(plans,{...ids,desk:'bad id!'})));

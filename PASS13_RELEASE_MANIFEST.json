@@ -1,0 +1,33 @@
+{
+  "pass": 13,
+  "foundation": "Pass12 cumulative source",
+  "scope": "Titan Central SSO app-session handoff and local logout boundary",
+  "added": [
+    "titan-central/PASS13_IMPLEMENTATION.md",
+    "titan-central/apps/control-api/src/oidc-app-session.mjs",
+    "titan-central/apps/control-api/test/oidc-app-session.test.mjs"
+  ],
+  "modified": [
+    "titan-central/apps/control-api/src/oidc-http-adapter.mjs",
+    "titan-central/apps/control-api/test/oidc-http-adapter.test.mjs",
+    "titan-central/packages/control-plane/dist/applications.js",
+    "titan-central/packages/control-plane/src/applications.ts"
+  ],
+  "deleted": [],
+  "test_results": {
+    "node_control_plane": 93,
+    "node_control_api": 91,
+    "python_source_checks": 4
+  },
+  "live_deployment": "not performed",
+  "app_integration": "interfaces only; actual application adapters not mounted",
+  "source_hashes": {
+    "titan-central/PASS13_IMPLEMENTATION.md": "f7ef2704c0c851ef20bd5a389ce0313e3f9fa74ce50d5e97ae283a66cb70e5f0",
+    "titan-central/apps/control-api/src/oidc-app-session.mjs": "873fdd6166cb245f420d8483998e2acc10ab97412708adf3d44019065e130279",
+    "titan-central/apps/control-api/src/oidc-http-adapter.mjs": "fa09a357fc47cf932ca30f4250fd8c64b8e3f9954c997605c4a5afaca2dc634a",
+    "titan-central/apps/control-api/test/oidc-app-session.test.mjs": "a761a1f11564f0f4ae95d2389c5bd3660b12fe9f6b376e27978a073597d14590",
+    "titan-central/apps/control-api/test/oidc-http-adapter.test.mjs": "14867794b340c41ccabf80483cb2538fda98971435872c0d53a183efe464e9a7",
+    "titan-central/packages/control-plane/dist/applications.js": "5ff4c9f1fa89e366699e5d20cb106437e74abd01b632debe73407e42e3847f65",
+    "titan-central/packages/control-plane/src/applications.ts": "7540331904b9be8ec1fcd7b258d3a95b4ed49f5a63944602816de9ae385c2904"
+  }
+}

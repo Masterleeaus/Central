@@ -1,0 +1,62 @@
+{
+  "release": "Titan Central Logto Pass 07",
+  "baseline": "Titan-Central-Logto-Pass06-CUMULATIVE-SOURCE.zip",
+  "upstream_logto_changed": 0,
+  "baseline_files": 8244,
+  "added_files": 6,
+  "modified_files": 4,
+  "deleted_files": 0,
+  "local_tests": {
+    "control_plane_node": 67,
+    "control_api_node": 17,
+    "source_verification_python": 4
+  },
+  "deployment": "NOT DEPLOYED; M2M token client and verified management API adapter source only",
+  "changes": [
+    {
+      "path": "titan-central/PASS07_IMPLEMENTATION.md",
+      "change": "added",
+      "sha256": "a74c7a7254333e899bc120d0361ada88aaf9e79767a8f436f923f3faa4edc4c2"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/logto-m2m.d.ts",
+      "change": "added",
+      "sha256": "890544ca0ae7dd203d8ebc63491de8cf231ac92ecb9c398ec676fed8b70120fa"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/logto-m2m.js",
+      "change": "added",
+      "sha256": "fb07892485ca2102e60f25e897dcc79af989297984e142b57b7be0c126bea583"
+    },
+    {
+      "path": "titan-central/packages/control-plane/src/logto-m2m.ts",
+      "change": "added",
+      "sha256": "5c246f130c9053551504a061a432932a63311474ffe2d2c8ee866421baf4fc0f"
+    },
+    {
+      "path": "titan-central/packages/control-plane/test/logto-m2m.test.mjs",
+      "change": "added",
+      "sha256": "b90449c708b52374499788a08b81712396225ff6d8d299c89a2fa66d18919835"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/index.d.ts",
+      "change": "modified",
+      "sha256": "37c9873917d68799127ff480e0cf88944c9e8fe979d05b2e391c66246562eee2"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/index.js",
+      "change": "modified",
+      "sha256": "37c9873917d68799127ff480e0cf88944c9e8fe979d05b2e391c66246562eee2"
+    },
+    {
+      "path": "titan-central/packages/control-plane/package.json",
+      "change": "modified",
+      "sha256": "aafc68d14c569f6a6f2a8e0624189e4b700fdbb463928d42e607f61bef09324e"
+    },
+    {
+      "path": "titan-central/packages/control-plane/src/index.ts",
+      "change": "modified",
+      "sha256": "1c53a69713abe9ff95e4594221a9a714e578bd6ae1e839f6e4a93dba2c61a0bb"
+    }
+  ]
+}

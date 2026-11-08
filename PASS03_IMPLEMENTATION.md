@@ -1,0 +1,3 @@
+# Titan Central Pass 03 — Persistence boundary
+
+Adds parameterised PostgreSQL read repository, REPEATABLE READ / READ ONLY snapshot transaction, and optimistic-revision state mutation store for membership, entitlement and local-account-link revocation. Read and mutation entrypoints are driver-injected: supply a `pg.Pool` in the hosting application. This package deliberately does not connect to Logto or authenticate users; callers must verify OIDC tokens and authorise modifications before invoking mutations. DB schema remains *review only*, unapplied. Migrations should run only on an independent Central database after live PG compatibility checks. No production tenant isolation or revocation notification stream is claimed. Upstream Logto source unchanged.

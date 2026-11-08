@@ -1,0 +1,34 @@
+{
+  "release": "Titan Central Logto Pass 10",
+  "baseline": "Titan-Central-Logto-Pass09-CUMULATIVE-SOURCE.zip",
+  "baseline_files": 8270,
+  "added_files": 3,
+  "modified_files": 0,
+  "deleted_files": 0,
+  "upstream_logto_changed": 0,
+  "local_tests": {
+    "node": 140,
+    "python": 4
+  },
+  "live_deployment": "NOT DEPLOYED",
+  "changes": [
+    {
+      "path": "titan-central/PASS10_IMPLEMENTATION.md",
+      "change": "added",
+      "sha256": "38a0bf7dea3c4f75e213deed08c35880abb6743ae8fd1871a28104e3204edd4c",
+      "bytes": 1525
+    },
+    {
+      "path": "titan-central/apps/control-api/src/oidc-login.mjs",
+      "change": "added",
+      "sha256": "0b98283f4548c9e0dcbdaa617918c57c23505b949afb71560bd4f4925bd2ad2f",
+      "bytes": 5517
+    },
+    {
+      "path": "titan-central/apps/control-api/test/oidc-login.test.mjs",
+      "change": "added",
+      "sha256": "70315eef57fe0974a64b4a59a4a0c35b5188a8bad6bbb7712b241727454fc8ec",
+      "bytes": 5232
+    }
+  ]
+}

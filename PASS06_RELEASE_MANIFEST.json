@@ -1,0 +1,92 @@
+{
+  "release": "Titan Central Logto Pass 06",
+  "baseline": "Titan-Central-Logto-Pass05-CUMULATIVE-SOURCE.zip",
+  "upstream_logto_changed": 0,
+  "baseline_entries": 8231,
+  "added_files": 12,
+  "modified_files": 3,
+  "deleted_files": 0,
+  "local_tests": {
+    "control_plane_node": 57,
+    "control_api_node": 17,
+    "source_verification_python": 4
+  },
+  "deployment": "NOT DEPLOYED; read-only management verification and gated provisioning source only",
+  "changes": [
+    {
+      "path": "titan-central/PASS06_IMPLEMENTATION.md",
+      "change": "added",
+      "sha256": "8bee1c88942523ca0a60373e9861a6d025d4c14ed905f7188656d63c62f5c412"
+    },
+    {
+      "path": "titan-central/PASS06_SSO_REGISTRATION_GATE.md",
+      "change": "added",
+      "sha256": "0dcc5db6823aed4c35399b6923d5eb6a4eca0ab98552366896289d3a29abcf8a"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/index.d.ts",
+      "change": "modified",
+      "sha256": "df265ffb08e94d09430625ed610aeb380362354341bc34f900a38595003f4de8"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/index.js",
+      "change": "modified",
+      "sha256": "df265ffb08e94d09430625ed610aeb380362354341bc34f900a38595003f4de8"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/logto-management.d.ts",
+      "change": "added",
+      "sha256": "04fe069a38ef14abc5042b4c188960d60a57b0c894f0dd54b187d1b6cd685867"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/logto-management.js",
+      "change": "added",
+      "sha256": "b5d7fb8968f7155280ea5cbc9e40d02a700a390e95e052d0a7c728fc8ed78ae7"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/trusted-provisioning.d.ts",
+      "change": "added",
+      "sha256": "cb9e06942278c68267a3b3c7b80aad9b63134b65dc1c6741ce9cc0b89df518f0"
+    },
+    {
+      "path": "titan-central/packages/control-plane/dist/trusted-provisioning.js",
+      "change": "added",
+      "sha256": "118d9a264bfe8f4ea6cda93d4b099f3c4b3e6eb59be1b5851dfac519bb23cbf0"
+    },
+    {
+      "path": "titan-central/packages/control-plane/src/index.ts",
+      "change": "modified",
+      "sha256": "7c8cb645cc33fa22f8a0d0edd39d0c3620e2dbe357b34544968bd68ca0631d6f"
+    },
+    {
+      "path": "titan-central/packages/control-plane/src/logto-management.ts",
+      "change": "added",
+      "sha256": "c70c69136a58985b73493ecd27640bf1c592f354b9c1281afc5ba9007d4320c5"
+    },
+    {
+      "path": "titan-central/packages/control-plane/src/trusted-provisioning.ts",
+      "change": "added",
+      "sha256": "13ab77b9ca6075998d67cea84baf1e90b7d0972b3122f2df5eeae14dab2e0fcf"
+    },
+    {
+      "path": "titan-central/packages/control-plane/test/logto-management.test.mjs",
+      "change": "added",
+      "sha256": "668dcc68c4ad9e60f947cbde3a1c20349db388845813eee794166850f8f9aea3"
+    },
+    {
+      "path": "titan-central/packages/control-plane/test/trusted-provisioning.test.mjs",
+      "change": "added",
+      "sha256": "3819c98857a16eea5eb8da9481746cd3a7f06bc0302ed2d74c4f198aa2f06b39"
+    },
+    {
+      "path": "titan-central/tests/__pycache__/test_verify_logto_source.cpython-313.pyc",
+      "change": "added",
+      "sha256": "fbcbe45713f9bd59fc099abd1906256ce34466e2662ccaa607ff3b24f6ff9e4f"
+    },
+    {
+      "path": "titan-central/tools/__pycache__/verify_logto_source.cpython-313.pyc",
+      "change": "added",
+      "sha256": "cf3db9ace1407ee98646a1fcabbbb487f068e3fa1def0a7f3a973084f6325770"
+    }
+  ]
+}

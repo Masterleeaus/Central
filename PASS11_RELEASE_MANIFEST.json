@@ -1,0 +1,27 @@
+{
+  "pass": 11,
+  "baseline": "Titan-Central-Logto-Pass10-CUMULATIVE-SOURCE.zip",
+  "added": [
+    "titan-central/PASS11_IMPLEMENTATION.md",
+    "titan-central/apps/control-api/src/oidc-id-token.mjs",
+    "titan-central/apps/control-api/src/oidc-state-pg.mjs",
+    "titan-central/apps/control-api/test/oidc-id-token.test.mjs",
+    "titan-central/apps/control-api/test/oidc-state-pg.test.mjs",
+    "titan-central/migrations/0003_oidc_login_state_draft.sql"
+  ],
+  "modified": [],
+  "deleted": [],
+  "sha256_by_added_file": {
+    "titan-central/PASS11_IMPLEMENTATION.md": "6f70b72f1090f276eb700d7af7cda3dfdbced72211d2b680dd4fb42821c93007",
+    "titan-central/apps/control-api/src/oidc-id-token.mjs": "84c3a0952fd56d347ea65f0aaaf922f8b20a5e3a405f9885c9f8d19a56052993",
+    "titan-central/apps/control-api/src/oidc-state-pg.mjs": "6ab3bd1f264760a33bfda62146816fa8e2f4f0da606601d33932931bbfaa7495",
+    "titan-central/apps/control-api/test/oidc-id-token.test.mjs": "6159e675b38ce49f4eee242c3ba2b0aecdf0b707370d87952d206412ef7791d7",
+    "titan-central/apps/control-api/test/oidc-state-pg.test.mjs": "22746d12f9826b578f28199356220310d2d0b869151e97938e46e55e2e40dc3f",
+    "titan-central/migrations/0003_oidc_login_state_draft.sql": "f6aec41a790ce3a4c6a1e5d03116dc1efb8229f0ae9bfa02dc3178ab15880091"
+  },
+  "verified_prior_files_unchanged": 8274,
+  "node_tests_passed": 153,
+  "python_tests_passed": 4,
+  "live_deployment": false,
+  "production_ready": false
+}

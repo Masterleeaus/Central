@@ -1,0 +1,28 @@
+{
+  "oidc_origin": "https://identity.titanzero.io",
+  "central_origin": "https://central.titanzero.io",
+  "app_origins": {
+    "desk": "https://desk.titanzero.io",
+    "field": "https://field.titanzero.io",
+    "academy": "https://academy.titanzero.io"
+  },
+  "callback_paths": {
+    "desk": "/auth/titan/desk/callback",
+    "field": "/auth/titan/field/callback",
+    "academy": "/auth/titan/academy/callback"
+  },
+  "logout_paths": {
+    "desk": "/auth/titan/desk/logout",
+    "field": "/auth/titan/field/logout",
+    "academy": "/auth/titan/academy/logout"
+  },
+  "central_db_separate": false,
+  "logto_db_separate": false,
+  "supported_postgres": false,
+  "app_adapter_implemented": {"desk": false, "field": false, "academy": false},
+  "real_logto_verified": false,
+  "migration_verified": false,
+  "two_tenant_test_passed": false,
+  "global_logout_test_passed": false,
+  "rollback_test_passed": false
+}

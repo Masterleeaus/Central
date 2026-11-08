@@ -1,0 +1,32 @@
+{
+  "pass": 15,
+  "kind": "full_cumulative_source_candidate",
+  "base": "Titan-Central-Logto-Pass14-CUMULATIVE-SOURCE.zip",
+  "added": [
+    "titan-central/PASS15_DEPLOYMENT_RUNBOOK.md",
+    "titan-central/PASS15_IMPLEMENTATION.md",
+    "titan-central/PASS15_RELEASE_MANIFEST.json",
+    "titan-central/deploy/preflight.py",
+    "titan-central/deploy/staging.example.json",
+    "titan-central/deploy/tests/test_preflight.py"
+  ],
+  "modified": [],
+  "removed": [],
+  "source_sha256": {
+    "titan-central/PASS15_DEPLOYMENT_RUNBOOK.md": "6b4297aca04a6e543a057fc9fbdea216aa8ec7802ba07c65e55fba2367d37a6b",
+    "titan-central/PASS15_IMPLEMENTATION.md": "0aa631e8fe92faaa7291f4d589b47bee2f3b1ff23963644c5d000f8e96e62a37",
+    "titan-central/PASS15_RELEASE_MANIFEST.json": "ee14228e9f4345d9f12e4ef78605f66f39019f03d532ec4899105cbc686e640f",
+    "titan-central/deploy/preflight.py": "2510414fde20b9e457dbb15859744bdec43ede49e47fca8972298927b7b5388b",
+    "titan-central/deploy/staging.example.json": "37acdd439a1d8572ffa3a450aad5a5ded794fce39d5eb9e46fb5d32f627aec60",
+    "titan-central/deploy/tests/test_preflight.py": "00a4323093a874aa5212426e69584e58a1a4953b1db55692238de0ba4ec9515c"
+  },
+  "tests": {
+    "control_api_node_passed": 108,
+    "control_plane_node_passed": 93,
+    "preflight_python_passed": 16
+  },
+  "production_ready": false,
+  "live_deployment": "not performed",
+  "ss0_live": "not verified",
+  "notes": "Do not unpack over deployed apps; see PASS15_DEPLOYMENT_RUNBOOK.md"
+}
