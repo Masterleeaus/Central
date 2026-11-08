@@ -15,12 +15,12 @@ The old Central identifiers `field`, `desk` and `academy` were replaced before p
 | Component | Owner | Runtime |
 |---|---|---|
 | Logto | Upstream identity provider | Separate service and supported PostgreSQL database |
-| Titan Central | This repository | API, control-plane package and dedicated Central PostgreSQL database |
+| Titan Central | This repository | Live app source: API, control-plane package and dedicated Central PostgreSQL database |
 | Sorted | `Masterleeaus/Sorted` | Product service, local user/account sessions and business data |
 | Supercharged | `Masterleeaus/Supercharged` | Product service, local sessions and business data |
 | LMS | `Masterleeaus/Skilled` | LMS service, local sessions, training data and caller-scoped integration API |
 
-The repository's `SOURCE_INVENTORY.json` records an audit of an external Logto source archive. The upstream Logto workspace itself is not in this GitHub repository. Logto remains separately deployed and maintained; this Titan Central workspace does not fork or replace its authentication engine.
+Logto is a separate runtime identity service. Titan Central's source and release history are in this repository; Logto remains independently maintained and deployed.
 
 ## Go/no-go requirements
 
@@ -57,4 +57,4 @@ The checked-in example intentionally fails because the runtime, adapters and sec
 
 ## Verified status
 
-The repository contains the Titan Central source workspace and draft deployment configuration. Live Logto, database migrations, three product adapters, cross-tenant tests, global logout and production rollback have not been verified here. **This source is not production-ready.**
+This repository contains the Titan Central application source and draft deployment configuration. Live Logto, database migrations, three product adapters, cross-tenant tests, global logout and production rollback have not been verified here. **This source is not production-ready.**

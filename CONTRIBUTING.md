@@ -15,6 +15,7 @@ Use Node.js 22 or later and Python 3 for the preflight suite.
 ```sh
 npm install
 npm run build
+npm start
 npm test
 npm run test:preflight
 ```

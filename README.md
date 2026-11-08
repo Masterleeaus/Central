@@ -12,15 +12,16 @@ Titan Central is the shared identity, organisation-access and product-entitlemen
 
 ## One source workspace
 
-The API, control-plane package, deployment gate, migrations and tests live in this repository. The root npm workspace provides the common build and test entry points.
+This repository contains the Titan Central application source. The root npm workspace connects the API, control-plane package, deployment gate, migrations and tests into one buildable base.
 
-- `apps/control-api`: HTTP API, OIDC verification, app-local sessions and revocation adapters.
-- `packages/control-plane/src`: canonical TypeScript authorization and provisioning source.
+- `apps/control-api`: HTTP service, OIDC verification, app-local sessions and revocation adapters.
+- `packages/control-plane/src`: canonical TypeScript authorisation, provisioning and product registration.
 - `packages/control-plane/dist`: generated output consumed by the API; the root build refreshes it.
-- `migrations`: draft schema for a dedicated Titan Central PostgreSQL database.
+- `migrations`: draft schema for Titan Central's dedicated PostgreSQL database.
 - `deploy`: non-secret staging example and read-only preflight gate.
+- `docs/history/passes`: retained implementation notes and release snapshots.
 
-Logto remains an external identity provider. This repository contains its source audit and inventory, but **does not contain the upstream Logto workspace**. The source packages keep clear boundaries and are linked through npm workspaces.
+Logto is a separate identity service that Titan Central integrates with over OIDC and its Management API. It is not the Titan Central application source.
 
 ## Requirements and commands
 
@@ -29,6 +30,7 @@ Node.js 22 or later is required. From the repository root:
 ```sh
 npm install
 npm run build
+npm start
 npm test
 npm run test:preflight
 ```

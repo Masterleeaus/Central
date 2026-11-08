@@ -14,12 +14,12 @@ The old Central IDs `field`, `desk` and `academy` have been retired before produ
 
 ## Source ownership
 
-- The repository root is the single Titan Central source workspace.
+- This repository is the Titan Central application source.
 - `apps/control-api` is the HTTP service and its OIDC/session adapters.
-- `packages/control-plane/src` is the canonical authorization, provisioning and product-registration source.
-- `packages/control-plane/dist` is generated TypeScript output used by the API at runtime; regenerate it with the root build command.
+- `packages/control-plane/src` is the canonical authorisation, provisioning and product-registration source.
+- `packages/control-plane/dist` is generated TypeScript output used by the API runtime; regenerate it with the root build command.
 - `migrations`, `deploy`, and their tests belong to the same source base.
-- Logto remains a separate upstream identity provider. The current GitHub tree contains a Logto source audit/inventory, not the audited Logto upstream workspace itself. Do not treat that audit as a merged Logto codebase.
+- Logto is a separate runtime identity service integrated by Titan Central over OIDC and the Management API. It has its own source repository and deployment lifecycle.
 
 ## Security boundaries
 

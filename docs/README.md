@@ -12,4 +12,4 @@ Pass 01–14 implementation notes, source audits, release manifests and deployme
 
 ## Source boundaries
 
-The current source workspace is split into the HTTP host (`apps/control-api`) and reusable TypeScript authorization package (`packages/control-plane`). These are npm workspaces in a single repository. Logto remains an external upstream service; the source inventory is not a copy of its upstream code.
+This repository is the Titan Central application source. The current source workspace is split into the HTTP host (`apps/control-api`) and reusable TypeScript authorization package (`packages/control-plane/src`), both managed as npm workspaces. Logto is an external runtime identity service, not a missing part of the Central app source.
