@@ -310,3 +310,45 @@ an independent blocker.
 ## Migration collision reconciliation (tenth slice)
 
 The latest default branch introduced `0009_login_role_session_and_oidc_grants.sql` while this draft PR independently used version 0009. Before merging, the PR's session, OIDC, discovery, selection, revocation and locked-issuance migrations were renumbered in order to **0010–0015**; the exact 0009 source from `main` was added unchanged. `tests/test_migrate.py` now requires versions 1–15. Do not apply the earlier branch's original 0009–0014 manifests; those numbers are superseded. Re-run the full migration chain and schema checks before deployment.
+
+## Guarded browser routes in the actual API server (eleventh slice)
+
+`src/central-browser-router.mjs` now composes existing launcher,
+secure logout, verified OIDC ID-token verifier, sign-in callback,
+authoritative company access, and one-use multi-company selection.
+`server.mjs` delegates to this browser router **only** when
+`TITAN_CENTRAL_BROWSER_ENABLED=1`. The default (unset or `0`)
+does not mount any browser routes and preserves existing API behavior.
+Unknown paths fall through to the existing Central API handler.
+
+Required enabled-mode settings (no hidden fallback values):
+- `TITAN_CENTRAL_BROWSER_ENABLED=1`
+- `TITAN_CENTRAL_BROWSER_ORIGIN=https://central.example/`
+- `TITAN_CENTRAL_BROWSER_REDIRECT_URI=https://central.example/auth/central/callback`
+- `TITAN_CENTRAL_BROWSER_CLIENT_ID` and `TITAN_CENTRAL_BROWSER_CLIENT_SECRET`
+- `TITAN_OIDC_ISSUER` and `TITAN_OIDC_JWKS_URI` (already required by the Central API)
+- `TITAN_OIDC_STATE_KEY` (base64-encoded AES-256 key)
+- `TITAN_CENTRAL_SORTED_ORIGIN`, `TITAN_CENTRAL_SUPERCHARGED_ORIGIN`,
+  and `TITAN_CENTRAL_LMS_ORIGIN` (distinct HTTPS origins)
+
+The callback URL is validated for **exact** equality with the selected
+Central HTTPS origin and path; HTTP, fragments, alternative origins
+and changed paths fail at startup. A separate registered OIDC browser
+client is required. The production server must be explicitly supplied
+with a trusted `getCompanyName` callback; it does **not** accept a
+company-name header or synthesize a name. Enabled startup rejects
+missing trusted dependencies and closes the database pool before
+failing. The browser router reuses `createIdTokenVerifier` for
+cryptographic RS256 issuer/audience/nonce/expiry verification and
+never uses the resource-server's app access tokens as browser identity.
+
+Test coverage includes disabled/enabled feature gating, unsafe
+callback configuration, component-level sign-in → launcher → logout,
+and a real loopback HTTP server delegation test.
+
+**Not ready to enable on production:** the trusted company name
+resolver is an explicit injected dependency and has not been
+provided through the production CLI entrypoint; live Logto browser
+registration, production DB role memberships, canonical company
+schema (#43 / PR #46), and end-to-end product sign-in testing remain.
+The flag must remain off until these steps are completed and verified.
