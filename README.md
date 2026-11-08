@@ -61,6 +61,7 @@ The RLS test seeds two tenants and runs inside a transaction that is rolled back
 | 0006 | Row-level security on `titan.memberships`, `titan.entitlements`, `titan.local_account_links`. |
 | 0007 | Provisioning audit types for update and revoke commands; session-revocation and OIDC-state grants. |
 | 0008 | Trusted reader scoped to the organisation set for the transaction; `titan_trusted_writer` may read session revocations (needed by the revocation bump). |
+| 0009 | Login-role grants for the control-api stores: `titan_trusted_writer` may SELECT the OIDC login-state columns that consume and prune read. Nothing is granted to the login role itself. |
 
 Tenant isolation (0006, narrowed by 0008). Tenant scope is the transaction-local setting `titan.organisation_id`. Set it with a bound parameter, never by interpolation: `SELECT set_config('titan.organisation_id', $1, true)`. This has the same effect as `SET LOCAL` and is the only form that takes a bind parameter. With no scope set, tenant rows are invisible and writes fail (fail closed). A malformed value raises an error.
 
@@ -77,7 +78,16 @@ GRANT titan_trusted_reader, titan_trusted_writer TO titan_central_app;
 - `titan_trusted_writer` runs provisioning (`CentralProvisioner`). It runs `SET LOCAL ROLE titan_trusted_writer` and is cross-tenant by design. Every command is separately authorised and writes one audit row in the same transaction.
 - `titan_tenant_app` is tenant-scoped on the three tables and has no grant on identities, organisations or session revocations.
 
-Verified on PostgreSQL 16 with `tests/sql/rls_two_tenant.sql` (run as superuser) and, as a one-off manual run that is not in CI, the compiled access check and provisioner run through `pg` as `titan_central_app` against a database with 0001-0008. Not yet covered: `titan.titan_session_revocations` has no RLS; the session-revocation guard (`apps/control-api/src/session-revocation-pg.mjs`) and the OIDC state store (`oidc-state-pg.mjs`) query the pool directly without a role switch, so under the `NOINHERIT` login role they are denied until they are wrapped the same way. `titan_trusted_writer` has no SELECT on `titan.titan_oidc_login_states`, which the OIDC consume statement needs.
+Verified on PostgreSQL 16 with `tests/sql/rls_two_tenant.sql` (run as superuser) and `tests/sql/login_role_path.sql` (run as superuser, which becomes `titan_central_app` for its checks). The session-revocation store (`apps/control-api/src/session-revocation-pg.mjs`) and the OIDC state store (`oidc-state-pg.mjs`) run each statement in a transaction that does `SET LOCAL ROLE titan_trusted_reader` or `titan_trusted_writer` (`role-transaction.mjs`); migration 0009 grants the writer the SELECT that consume and prune need. Still not covered: `titan.titan_session_revocations` and `titan.titan_oidc_login_states` have no RLS. Their statements are restricted by role and by key, not by organisation.
+
+Running the login-role path test (`tests/test_login_role_path.py`): it runs only when `psql` and `TITAN_TEST_DATABASE_URL` are present, otherwise it is skipped with the reason printed. The database must hold migrations 0001-0009 and no tenant rows, and the URL should be a superuser URL for that database:
+
+```bash
+python3 tools/migrate.py --database-url "$TITAN_TEST_DATABASE_URL"
+python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
+```
+
+CI runs this against its PostgreSQL 16 service with `TITAN_REQUIRE_DB_TESTS=1`, so a skip fails the job.
 
 ## Compiled output (`packages/control-plane/dist`)
 
