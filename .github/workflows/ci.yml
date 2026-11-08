@@ -181,3 +181,14 @@ jobs:
           set -e
           test "$rc" -eq 2
           python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["blockers"]["entitlement_expiry_mismatch"]==1 and r["snapshots_consistent_within_each_database"] and not r["migration_authorised"]' "$RUNNER_TEMP/reconciliation-expiry-blocked.json"
+
+      - name: Canonical cutover preflight blocks without independently approved evidence
+        run: |
+          set +e
+          python3 tools/plan_company_cutover.py \
+            --reconciliation "$RUNNER_TEMP/reconciliation-matched.json" \
+            --output "$RUNNER_TEMP/cutover-preflight.json"
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["status"]=="blocked" and not p["migration_authorised"] and not p["writes_permitted"] and len(p["missing_gates"])>=7' "$RUNNER_TEMP/cutover-preflight.json"
