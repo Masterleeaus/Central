@@ -33,3 +33,23 @@ Sign-in and OIDC callback mounting; secure session creation/revocation;
 tenant-safe entitlement reader; server wiring; company selection; responsive
 browser accessibility/route E2E checks; integrated destinations; staging tests.
 Do not mark #44 complete until these have passed.
+
+## Trusted entitlement reader (next implementation slice)
+
+`src/central-product-reader.mjs` exports `createCentralProductReader`.
+It uses the existing `withCentralReadSnapshot` helper with transaction-local
+RLS and the trusted reader role. It verifies active identity, company and exactly
+one active non-expired membership, then checks each product's entitlement and
+verified local account link. An entitled product without a verified local link
+is labelled unavailable, not launchable.
+
+The reader temporarily maps the current main-branch application identifiers
+`field -> sorted`, `desk -> supercharged`, `academy -> lms`.
+These must be reconciled with the new canonical registry in issue #43 / PR #46.
+The caller must provide a verified Logto subject from a Central-owned secure
+session, and a trusted `getCompanyName` provider. The currently committed
+database schema does not provide a suitable company display name directly.
+
+This is an isolated service module. **Do not mount it** before Central's
+server-side session lifecycle and verified company-selection flow exist.
+Tests: `node --test test/central-product-reader.test.mjs`.
