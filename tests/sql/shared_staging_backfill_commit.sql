@@ -42,9 +42,11 @@ BEGIN
  IF NOT has_function_privilege('titan_staging_backfill_executor',
    'titan.execute_staging_backfill_approval(uuid)','EXECUTE')
  THEN RAISE EXCEPTION 'staging role missing exact function execute grant'; END IF;
- IF has_function_privilege('PUBLIC',
-   'titan.execute_staging_backfill_approval(uuid)','EXECUTE')
- THEN RAISE EXCEPTION 'public can execute staging backfill'; END IF;
+ IF EXISTS (
+  SELECT 1 FROM pg_proc p CROSS JOIN LATERAL aclexplode(p.proacl) AS acl
+  WHERE p.oid='titan.execute_staging_backfill_approval(uuid)'::regprocedure
+    AND acl.grantee=0 AND acl.privilege_type='EXECUTE'
+ ) THEN RAISE EXCEPTION 'public can execute staging backfill'; END IF;
 END $$;
 
 -- Superuser CI can switch to a NOLOGIN group role; production logins must
