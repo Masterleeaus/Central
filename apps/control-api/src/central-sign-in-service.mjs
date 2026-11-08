@@ -7,9 +7,12 @@ import {createOidcLogin} from './oidc-login.mjs';
 import {createCentralOidcStateStore} from './central-oidc-state-pg.mjs';
 import {createCentralOidcBrowserHandler} from './central-oidc-browser.mjs';
 import {createCentralCompanyAuthority} from './central-company-authority.mjs';
+import {createCentralSelectionHttp} from './central-selection-http.mjs';
+import {createPostgresCompanySelectionStore} from './central-selection-pg.mjs';
 
 export function createCentralSignInService({pool,sessions,issuer,clientId,clientSecret,redirectUri,
-  verifyIdToken,listEligibleCompanies,recheckCompany,getCompanyName,fetcher,stateStore,sealer,clock,
+  verifyIdToken,listEligibleCompanies,recheckCompany,listOrganisations,getCompanyName,fetcher,stateStore,selectionStore,sealer,clock,
+  enableCompanySelection=false,
   allowInsecureLocalhost=false,logger}={}){
   const customAuthority=typeof listEligibleCompanies==='function'&&typeof recheckCompany==='function';
   const builtinAuthority=listEligibleCompanies==null&&recheckCompany==null&&typeof getCompanyName==='function';
@@ -26,7 +29,14 @@ export function createCentralSignInService({pool,sessions,issuer,clientId,client
     loginStore:store,verifyIdToken,allowInsecureLocalhost,
     ...(fetcher?{fetcher}:{}),...(clock?{clock}:{})});
   const authority=builtinAuthority?createCentralCompanyAuthority({pool,issuer,getCompanyName}):null;
-  const handler=createCentralOidcBrowserHandler({oidcLogin,sessions,
+  const names=listOrganisations??authority?.listOrganisations;
+  if(enableCompanySelection&&typeof names!=='function')throw new TypeError('trusted organisation names required');
+  const selectionFlow=enableCompanySelection?createCentralSelectionHttp({
+    selectionStore:selectionStore??createPostgresCompanySelectionStore({pool,...(sealer?{sealer}:{}),...(clock?{clock}:{})}),
+    listOrganisations:names,recheckCompany:recheckCompany??authority.recheckCompany,
+    sessions,origin:redirect.origin
+  }):null;
+  const handler=createCentralOidcBrowserHandler({oidcLogin,sessions,selectionFlow,
     listEligibleCompanies:listEligibleCompanies??authority.listEligibleCompanies,
     recheckCompany:recheckCompany??authority.recheckCompany,allowInsecureLocalhost,
     ...(logger?{logger}:{})});
