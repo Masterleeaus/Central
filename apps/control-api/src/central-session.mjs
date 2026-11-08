@@ -80,6 +80,7 @@ export function createCentralSessionManager({store,clock=()=>Date.now(),random=(
     async rotate(req,{identityId,companyId}){
       const old=readSessionCookie(req);
       if(!old)throw new Error('session required');
+      if(!validIdentity(identityId)||!validCompany(companyId))throw new TypeError('verified identity and company required');
       const existing=safeRecord(await store.find(digest(old)),clock());
       if(!existing||existing.identityId!==identityId)throw new Error('session not authorised');
       const next=random();
