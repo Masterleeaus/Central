@@ -5,3 +5,5 @@ node_modules/
 *.tar*
 *.pem
 *.key
+__pycache__/
+*.py[cod]
