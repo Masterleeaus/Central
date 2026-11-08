@@ -14,7 +14,7 @@ CREATE FUNCTION titan.staging_approval_fingerprint(
 RETURNS text LANGUAGE sql IMMUTABLE
 SET search_path=pg_catalog
 AS $$
- SELECT encode(digest(
+ SELECT encode(public.digest(
   jsonb_build_array(
    'titan.staging.approval.v1',
    p.approval_id::text,p.legacy_organisation_id::text,p.company_id::text,
@@ -30,7 +30,7 @@ CREATE FUNCTION titan.staging_audit_fingerprint(
 RETURNS text LANGUAGE sql IMMUTABLE
 SET search_path=pg_catalog
 AS $$
- SELECT encode(digest(
+ SELECT encode(public.digest(
   jsonb_build_array(
    'titan.staging.audit.v1',
    p.event_id::text,p.approval_id::text,p.company_id::text,
