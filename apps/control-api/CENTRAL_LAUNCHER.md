@@ -68,3 +68,26 @@ organisation discovery query are not yet wired. The browser must never receive
 the issuer/subject or gain authority from a posted company ID.
 
 Tests: `node --test test/organisation-selection.test.mjs`.
+
+## Central-owned opaque browser sessions (third slice)
+
+`src/central-session.mjs` now provides a separate Central session manager:
+256-bit random opaque tokens; SHA-256 token digests only in a mandatory
+injected durable store; host-only `__Host-titan-central` cookie with
+`Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`, and eight-hour maximum
+age; strict duplicate-cookie rejection; expiry checks; revocation and
+token rotation on company switching. Rotation never reuses the previous
+token and rejects identity changes.
+
+**Not wired to the web server yet:** The `store` interface requires an
+atomic, durable PostgreSQL implementation and an approved migration.
+Session issuance must occur only *after* a verified Logto OIDC exchange
+and authorised company selection, with independent re-verification of
+company access. Company switching must recheck live membership before
+rotation. `readProducts` must still be called on each launcher request.
+A cryptographically secure token does not itself grant access to a company.
+
+Before deployment, add database-backed session storage and concurrency
+tests for revocation/rotation, including cross-worker behaviour and
+operator-driven global revocation. Do not rely on an in-memory store.
+Tests: `node --test test/central-session.test.mjs`.
