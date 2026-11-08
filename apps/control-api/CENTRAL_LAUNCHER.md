@@ -227,3 +227,38 @@ restrictions and revoked-company exclusion.
 HTTP form/POST handler, bind the one-use choice state to the same browser
 that completed OIDC, verify logout/revocations, reconcile the #43 canonical
 company table, and mount the system after live Logto staging verification.
+
+## Multi-company selection handoff (eighth slice)
+
+Migration `0012_central_company_selection.sql` creates a dedicated, short-lived
+`titan.central_company_selection_states` table. The NOLOGIN
+`titan_central_selection` role alone can read, insert and delete state;
+FORCE RLS blocks ordinary tenant and trusted-reader roles. Only digests
+of random selection tokens and browser bindings are readable in the
+table; the verified issuer, subject and permissible company IDs are
+AES-256-GCM sealed with state- and field-specific AAD.
+
+`src/central-selection-pg.mjs` implements atomic one-use
+`DELETE ... RETURNING`, bounded expiry and pruning. Existing
+`organisation-selection.mjs` coordinates the current membership recheck.
+`src/central-selection-http.mjs` renders an escaped, no-store HTML
+selection form to users with multiple eligible companies and handles
+an origin-checked `POST /auth/central/select` with bounded, strict
+form parsing. The OIDC binding cookie must be present on POST; the
+one-use selection token and allowed company set are server-stored.
+The selected company is rechecked against live tenant-scoped authority
+before issuance of the Central session. Replay, foreign companies,
+changed browser bindings and revoked memberships fail closed.
+
+The sign-in service enables this via `enableCompanySelection: true`,
+which requires a trusted `listOrganisations` resolver and either a
+dedicated `selectionStore` or the default PostgreSQL store. For
+production, grant the dedicated role to the approved login credential:
+```sql
+GRANT titan_central_selection TO titan_central_app;
+```
+It is **not automatically mounted or enabled** in the live API server.
+Configure and stage the protected OIDC path and session services before
+activation. Deployment also requires canonical company reconciliation
+with #43 / PR #46, live Logto verification, cookie/reverse-proxy checks,
+and logout/global revocation testing.
