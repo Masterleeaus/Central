@@ -91,3 +91,17 @@ Before deployment, add database-backed session storage and concurrency
 tests for revocation/rotation, including cross-worker behaviour and
 operator-driven global revocation. Do not rely on an in-memory store.
 Tests: `node --test test/central-session.test.mjs`.
+
+## Explicit launcher composition
+
+`src/central-launcher-service.mjs` composes the session manager,
+transaction-scoped product reader and HTML launcher. It is intentionally not
+mounted by `server.mjs` and cannot make an unverified OIDC claim trusted.
+The composition integration test exercises issuance, access, product display,
+session revocation, and denial after revocation.
+
+Required before production: persistent PostgreSQL session store/migration,
+trusted Logto OIDC callback, company-selection and membership revalidation,
+strict cookie policy verification behind the reverse proxy, staging flows,
+and product destination verification. Integration: `node --test
+test/central-launcher-service.test.mjs`.
