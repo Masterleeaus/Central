@@ -7,6 +7,7 @@ import { insecureLocalhostAllowed } from './endpoint-policy.mjs';
 import { createMetrics, pathnameOf, serveMetrics } from './metrics.mjs';
 import { createOperatorAdmin } from './operator-config.mjs';
 import { createCentralBrowserRouter } from './central-browser-router.mjs';
+import { createCanonicalCompanySource } from './central-shared-bootstrap.mjs';
 const log = createJsonLogger();
 
 export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log, getCompanyName, createBrowserRouter=createCentralBrowserRouter}={}) {
@@ -23,10 +24,18 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher});
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
-  let browserRouter;
+  let browserRouter,sharedPool;
   try {
-    browserRouter=createBrowserRouter({env,pool,getCompanyName,fetcher,logger:auditLog});
+    let nameProvider=getCompanyName;
+    if(env.TITAN_CENTRAL_BROWSER_ENABLED==='1'&&!nameProvider){
+      const canonical=await createCanonicalCompanySource({legacyUrl:TITAN_CENTRAL_DATABASE_URL,
+        sharedUrl:env.TITAN_CENTRAL_SHARED_DATABASE_URL,Pool});
+      sharedPool=canonical.sharedPool;
+      nameProvider=canonical.getCompanyName;
+    }
+    browserRouter=createBrowserRouter({env,pool,getCompanyName:nameProvider,fetcher,logger:auditLog});
   } catch(error){
+    try{await sharedPool?.end();}catch{/* startup error wins */}
     await pool.end();
     throw error;
   }
@@ -40,8 +49,16 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const server=createServer(handler);
   const port=Number(env.TITAN_CENTRAL_PORT||3102);
   if (!Number.isInteger(port)||port<1||port>65535) throw Error('invalid port');
-  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)});
-  return {server,pool,async close(){await new Promise((resolve,reject)=>server.close(err=>err?reject(err):resolve()));await pool.end();}};
+  try {
+    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)});
+  }catch(error){
+    await Promise.allSettled([pool.end(),...(sharedPool?[sharedPool.end()]:[])]);
+    throw error;
+  }
+  return {server,pool,async close(){
+    await new Promise((resolve,reject)=>server.close(err=>err?reject(err):resolve()));
+    await Promise.all([pool.end(),...(sharedPool?[sharedPool.end()]:[])]);
+  }};
 }
 // Closes the HTTP server and the database pool on SIGTERM/SIGINT, then exits.
 // A second signal after the first is left to the default handler (hard stop).
