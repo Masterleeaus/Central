@@ -12,7 +12,7 @@ export class TrustedProvisioningService {
         this.verifyLocalLink = verifyLocalLink;
     }
     async apply(actor, context, command) {
-        if (!actor || actor.managementCredentialVerified !== true || !actor.logtoSubject || actor.logtoSubject !== context.actorSubject)
+        if (!actor || actor.operatorAuthorityVerified !== true || !actor.logtoSubject || actor.logtoSubject !== context.actorSubject)
             throw Error('unverified provisioning actor');
         // Authorize before querying management services or writing SQL. Fail closed by default.
         if (await this.authorize(actor, command) !== true)

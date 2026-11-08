@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TrustedProvisioningService } from '../dist/trusted-provisioning.js';
 const a='a0000000-0000-4000-8000-000000000000',b='b0000000-0000-4000-8000-000000000000';
-const actor={logtoSubject:'admin_id',managementCredentialVerified:true},context={actorSubject:'admin_id',authorityReference:'trusted-policy:1',requestId:a};
+const actor={logtoSubject:'admin_id',operatorAuthorityVerified:true},context={actorSubject:'admin_id',authorityReference:'trusted-policy:1',requestId:a};
 function harness({allowed=true,link=true,member=true}={}){const calls=[];
  const repo={apply:async()=>{calls.push('write');return 'created'}};
  const logto={assertIdentity:async()=>calls.push('identity'),assertOrganisation:async()=>calls.push('organisation'),assertMembership:async()=>{calls.push('membership');if(!member)throw Error('no membership')}};
  const svc=new TrustedProvisioningService(repo,logto,async()=>{calls.push('authorize');return allowed},async()=>{calls.push('resolve');return 'trusted_external_id'},async()=>{calls.push('linkcheck');return link});return {svc,calls};}
 test('identity requires authority and live Logto validation',async()=>{const {svc,calls}=harness();assert.equal(await svc.apply(actor,context,{kind:'identity',id:a,logtoSubject:'x'}),'created');assert.deepEqual(calls,['authorize','identity','write']);});
-test('forbids untrusted actor before accessing backend',async()=>{const {svc,calls}=harness();await assert.rejects(svc.apply({...actor,managementCredentialVerified:false},context,{kind:'identity',id:a,logtoSubject:'x'}),/unverified/);assert.deepEqual(calls,[]);});
+test('forbids untrusted actor before accessing backend',async()=>{const {svc,calls}=harness();await assert.rejects(svc.apply({...actor,operatorAuthorityVerified:false},context,{kind:'identity',id:a,logtoSubject:'x'}),/unverified/);assert.deepEqual(calls,[]);});
 test('rejects actor impersonation',async()=>{const {svc}=harness();await assert.rejects(svc.apply(actor,{...context,actorSubject:'another'}, {kind:'identity',id:a,logtoSubject:'x'}),/unverified/);});
 test('rejects policy-denied actor',async()=>{const {svc,calls}=harness({allowed:false});await assert.rejects(svc.apply(actor,context,{kind:'identity',id:a,logtoSubject:'x'}),/forbidden/);assert.deepEqual(calls,['authorize']);});
 test('membership requires verified current Logto membership',async()=>{const {svc,calls}=harness();await svc.apply(actor,context,{kind:'membership',id:a,identityId:a,organisationId:b,role:'member'});assert.deepEqual(calls,['authorize','resolve','resolve','membership','write']);});

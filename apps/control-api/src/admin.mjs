@@ -84,11 +84,11 @@ export function createAdminHandler({verifyToken,authoriseOperator,provision,orig
     send(res,400,{error:'invalid_command'});return true;
   }
   try {
-   // managementCredentialVerified does NOT mean the bearer token is a machine credential: an end-user
+   // operatorAuthorityVerified does NOT mean the bearer token is a machine credential: an end-user
    // operator token is never trusted as one. It is set only here, from authoriseOperator returning true
    // (Logto organisation membership plus an administrator role, checked on this request via the
    // Management API). TrustedProvisioningService and the organisation authoriser re-check authority.
-   const result=await provision({logtoSubject:principal.logtoSubject,managementCredentialVerified:operatorAuthorised},
+   const result=await provision({logtoSubject:principal.logtoSubject,operatorAuthorityVerified:operatorAuthorised},
      {actorSubject:principal.logtoSubject,requestId:body.requestId,authorityReference:body.authorityReference},body.command);
    if(result!=='created'&&result!=='replayed')throw Error('invalid provisioning result');
    send(res,result==='created'?201:200,{status:result,requestId:body.requestId});
