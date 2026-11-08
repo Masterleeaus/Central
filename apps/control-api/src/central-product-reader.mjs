@@ -20,9 +20,8 @@ export function createCentralProductReader({pool,getCompanyName}) {
   return async function readProducts({identityId,companyId}) {
     if (!validSubject(identityId)||!validCompany(companyId)) return {authorised:false};
     return withCentralReadSnapshot(pool,companyId,async repo=>{
-      const [identity,company]=await Promise.all([
-        repo.identityBySubject(identityId),repo.organisation(companyId)
-      ]);
+      const identity=await repo.identityBySubject(identityId);
+      const company=await repo.organisation(companyId);
       if (!identity||identity.status!=='active'||!company||company.status!=='active') return {authorised:false};
       const memberships=await repo.memberships(identity.id,companyId);
       // Multiple active memberships are ambiguous and must not be resolved by guesswork.
