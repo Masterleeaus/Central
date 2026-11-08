@@ -18,7 +18,7 @@ export function createOrganisationProvisioningAuthorizer(opts:OrganisationAuthor
   if(!Array.isArray(roles)||roles.length===0||roles.length>32||roles.some(id=>!validId(id))||new Set(roles).size!==roles.length)
     throw new Error('explicit Logto administrator role IDs are required');
   return async (actor:TrustedActor, command:ProvisioningCommand):Promise<boolean>=>{
-    if(!validId(actor?.logtoSubject)||actor.managementCredentialVerified!==true) return false;
+    if(!validId(actor?.logtoSubject)||actor.operatorAuthorityVerified!==true) return false;
     // Creating canonical user/org identities requires a separate platform provisioning authority.
     // It must never be granted implicitly merely because someone is an org administrator.
     if(command.kind==='identity'||command.kind==='organisation') return false;
