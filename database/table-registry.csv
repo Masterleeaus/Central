@@ -3,5 +3,6 @@ titan.companies,Central,global,id,,database/migrations/0001_shared_company_core.
 titan.identities,Central,global,id,,database/migrations/0001_shared_company_core.sql,implemented
 titan.company_memberships,Central,company,id,company_id,database/migrations/0001_shared_company_core.sql,implemented
 titan.application_entitlements,Central,company,id,company_id,database/migrations/0001_shared_company_core.sql,implemented
+titan.application_company_links,Central,company,id,company_id,database/migrations/0001_shared_company_core.sql,implemented
 titan.application_user_links,Central,company,id,company_id,database/migrations/0001_shared_company_core.sql,implemented
 titan.schema_migrations,Central,global,migration_id,,database/migrations/0001_shared_company_core.sql,implemented
