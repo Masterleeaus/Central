@@ -19,12 +19,14 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from collections import Counter
 from pathlib import Path
 
 MAX_ROWS = 10000
 APPLICATIONS = {'field': 'sorted', 'desk': 'supercharged', 'academy': 'lms'}
 ACTIVE = {'active', 'trialing'}
+EXPIRY_TOLERANCE_SECONDS = 1
 # Static, predetermined SQL only: never interpolate user data into queries.
 LEGACY = {
  'companies': "SELECT id::text AS id,logto_organisation_id,state FROM titan.organisations",
@@ -72,9 +74,43 @@ def collect(legacy_url,canonical_url,*,psql='psql'):
     return ({key:query_snapshot(legacy_url,sql,psql=psql) for key,sql in LEGACY.items()},
             {key:query_snapshot(canonical_url,sql,psql=psql) for key,sql in CANONICAL.items()})
 
-def reconcile(legacy,canonical):
+def parse_expiry(value):
+    """An explicit UTC instant or None. Naive/unparseable values are blockers."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value or len(value) > 64:
+        raise ValueError('invalid expiry')
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError as exc:
+        raise ValueError('invalid expiry') from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError('expiry timezone required')
+    return parsed.astimezone(timezone.utc)
+
+def compare_expiry(legacy_value,canonical_value,now):
+    try:
+        left=parse_expiry(legacy_value)
+        right=parse_expiry(canonical_value)
+    except (ValueError,OverflowError):
+        return 'invalid'
+    if (left is None) != (right is None):
+        return 'mismatch'
+    if left is None:
+        return None
+    if abs((left-right).total_seconds()) > EXPIRY_TOLERANCE_SECONDS:
+        return 'mismatch'
+    if (left > now) != (right > now):
+        return 'access_mismatch'
+    return None
+
+def reconcile(legacy,canonical,*,now=None):
     """Pure, deterministic comparison; return aggregate findings without PII."""
     blockers=Counter()
+    now = now if now is not None else datetime.now(timezone.utc)
+    if not isinstance(now,datetime) or now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError('timezone-aware audit reference time required')
+    now=now.astimezone(timezone.utc)
     row_counts={'legacy':{k:len(v) for k,v in legacy.items()},
                 'canonical':{k:len(v) for k,v in canonical.items()}}
     companies={x['id']:x for x in legacy['companies']}
@@ -108,7 +144,7 @@ def reconcile(legacy,canonical):
     for member in legacy['memberships']:
         mapping=mappings.get(member['organisation_id'])
         identity=identities.get(member['identity_id'])
-        if mapping is None or identity is None:blockers['unresolvable_membership']+=1;continue
+        if mapping is None or mapping['status']!='verified' or identity is None:blockers['unresolvable_membership']+=1;continue
         target_identity=canon_identities.get(identity['logto_subject'])
         if not target_identity:continue  # reported as missing identity
         member_key=(mapping['company_id'],target_identity['id'])
@@ -117,6 +153,9 @@ def reconcile(legacy,canonical):
         if not target:blockers['missing_canonical_membership']+=1
         elif (member['role'],member['state']) != (target['role'],target['status']):
             blockers['membership_access_mismatch']+=1
+        if target:
+            expiry=compare_expiry(member.get('expires_at'),target.get('expires_at'),now)
+            if expiry: blockers['membership_expiry_'+expiry]+=1
     mapped_companies={x['company_id'] for x in mappings.values() if x['status']=='verified'}
     for key,member in canonical_members.items():
         if key[0] in mapped_companies and key not in expected_members and member['status']=='active':
@@ -126,7 +165,7 @@ def reconcile(legacy,canonical):
     for grant in legacy['entitlements']:
         mapping=mappings.get(grant['organisation_id'])
         product=APPLICATIONS.get(grant['application_id'])
-        if mapping is None or product is None:blockers['unresolvable_entitlement']+=1;continue
+        if mapping is None or mapping['status']!='verified' or product is None:blockers['unresolvable_entitlement']+=1;continue
         grant_key=(mapping['company_id'],product)
         expected_grants.add(grant_key)
         target=canonical_grants.get(grant_key)
@@ -135,6 +174,9 @@ def reconcile(legacy,canonical):
             blockers['entitlement_status_mismatch']+=1
         elif set(grant.get('features') or [])!=set(target.get('features') or []):
             blockers['entitlement_features_mismatch']+=1
+        if target:
+            expiry=compare_expiry(grant.get('expires_at'),target.get('expires_at'),now)
+            if expiry: blockers['entitlement_expiry_'+expiry]+=1
     for key,grant in canonical_grants.items():
         if key[0] in mapped_companies and key not in expected_grants and grant['status'] in ACTIVE:
             blockers['unexpected_canonical_active_entitlement']+=1
@@ -144,7 +186,7 @@ def reconcile(legacy,canonical):
         mapping=mappings.get(link['organisation_id'])
         identity=identities.get(link['identity_id'])
         product=APPLICATIONS.get(link['application_id'])
-        if not mapping or not identity or not product:
+        if not mapping or mapping['status']!='verified' or not identity or not product:
             blockers['unresolvable_user_link']+=1;continue
         target_id=canon_identities.get(identity['logto_subject'])
         if not target_id:continue
@@ -159,6 +201,7 @@ def reconcile(legacy,canonical):
             blockers['unexpected_canonical_verified_user_link']+=1
     return {'schema':'titan.company-reconciliation.v1','read_only':True,
             'migration_authorised':False,'snapshots_atomic_across_databases':False,
+            'expiry_tolerance_seconds':EXPIRY_TOLERANCE_SECONDS,
             'row_counts':row_counts,'blockers':dict(sorted(blockers.items())),
             'blocker_count':sum(blockers.values()),
             'status':'requires_review' if blockers else 'no_discrepancies_in_compared_fields'}
