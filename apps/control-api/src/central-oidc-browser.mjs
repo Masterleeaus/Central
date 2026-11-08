@@ -38,7 +38,7 @@ function uniqueEligible(entries){
  * records, not browser claims or cached profile metadata. Multi-company users
  * fail closed until issue #32's explicit selection handshake is implemented.
  */
-export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligibleCompanies,recheckCompany,
+export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligibleCompanies,recheckCompany,selectionFlow,
   allowInsecureLocalhost=insecureLocalhostAllowed(),clientIp=req=>req.socket?.remoteAddress??'unknown',
   logger=()=>{},rateLimits={ip:{limit:30,windowMs:60000},subject:{limit:10,windowMs:60000}}}={}){
   if(typeof oidcLogin?.begin!=='function'||typeof oidcLogin?.complete!=='function'||
@@ -50,6 +50,7 @@ export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligible
   return async function handleCentralOidc(req,res){
     let url;
     try{url=new URL(req.url??'/','http://localhost');}catch{respond(res,400,'invalid_url');return true;}
+    if(url.pathname==='/auth/central/select'&&selectionFlow)return selectionFlow.handle(req,res);
     const start=url.pathname==='/auth/central/start';
     const callback=url.pathname==='/auth/central/callback';
     if(!start&&!callback)return false;
@@ -84,8 +85,15 @@ export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligible
         throw Error('invalid_identity');
       if(!subjectLimiter.take(verified.subject).allowed){fail(429,'rate_limited');return true;}
       const identity={issuer:verified.issuer,subject:verified.subject};
-      const companyId=uniqueEligible(await listEligibleCompanies(identity));
-      if(!companyId){fail(403,'company_selection_required');return true;}
+      const eligible=await listEligibleCompanies(identity);
+      const companyId=uniqueEligible(eligible);
+      if(!companyId){
+        if(Array.isArray(eligible)&&eligible.length>1&&selectionFlow){
+          await selectionFlow.begin({...identity,browserBinding},res);
+          return true;
+        }
+        fail(403,'company_selection_required');return true;
+      }
       if(await recheckCompany({...identity,companyId})!==true){fail(403,'company_access_denied');return true;}
       const issued=await sessions.issue({identityId:verified.subject,companyId});
       if(typeof issued?.cookie!=='string'||!issued.cookie.startsWith('__Host-titan-central='))throw Error('invalid_session');
