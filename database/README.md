@@ -116,3 +116,37 @@ role-membership grants for the canonical service credential, and
 the legacy Central app credential requires its own previously
 documented restricted roles. No production connections, migrations
 or Logto registrations were changed.
+
+## Canonical migration execution contract — Pass 13
+
+Use `python3 tools/migrate_shared.py --database-url "$TITAN_SHARED_DATABASE_URL"`
+**only** for the clean, separately named canonical database. The runner
+executes `database/migrations/0001–0004` in order and records SHA-256
+checksums in the canonical `titan.schema_migrations` table, not the
+legacy `public.schema_migrations` registry. It reuses the established
+migration parser, per-transaction advisory lock and `psql` error handling
+but has a distinct lock ID and irreversible checksum-drift checks.
+
+Safety guards:
+- Existing legacy tables or legacy migration registry are refused before
+  creating any canonical object.
+- Applied version/name/checksum mismatches, removed migrations and
+  out-of-order pending versions are fatal.
+- The initial migration creates its own canonical ledger within the
+  same transaction as the schema, and its ledger record is inserted
+  **before COMMIT**, not later.
+- A second execution is a no-op; `--dry-run` reports pending versions
+  without installing any table.
+- CI uses one disposable legacy Central PostgreSQL DB and one separate
+  canonical DB. It proves the canonical runner cannot run against the
+  legacy DB, checks its complete SHA-256 ledger, and executes both
+  families' RLS tests independently.
+
+The existence of one authoritative canonical migration runner does
+**not** mean live tenant data has been moved. The ledger is unified
+for the canonical core only. Legacy Central remains on its own 15-step
+migration history while company/identity backfill, provisioning,
+link approval, product data and schemas, and application adapters
+await a reviewed transactional migration plan. Never silently
+rename `titan.identities.state` to `status`, treat unrelated
+UUIDs as equal or autoapprove legacy links.
