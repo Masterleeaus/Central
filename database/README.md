@@ -367,3 +367,49 @@ verification, least-privilege function ownership (the CI function is
 installed by the schema owner), controlled staging credentials,
 source freezes, rollback rehearsals and product/Logto verification.
 Do not grant this execution role to any live production service.
+
+## Pass 19 — Separate approval issuer, least-privilege function ownership, concurrency
+
+Canonical migrations `0006`–`0011` extend the migration chain without
+rewriting checksum-locked historical migrations:
+
+- Dedicated **NOLOGIN, NOINHERIT** `titan_staging_approval_owner` and
+  `titan_staging_backfill_owner` now own the respective
+  `SECURITY DEFINER` functions. Neither role owns canonical tenant
+  tables, bypasses RLS or retains schema `CREATE` privileges.
+- A distinct **NOLOGIN** `titan_staging_approval_issuer` may execute
+  only `titan.issue_staging_backfill_approval(...)`. The separate
+  `titan_staging_backfill_executor` may consume an approval but cannot
+  issue one. Neither role has direct table INSERT/SELECT privileges.
+- The issuer function records the database-authenticated
+  `session_user` as the approver (rather than accepting an arbitrary
+  name) and checks the exact active, verified company mapping before
+  creating a five-minute approval. The executor rechecks the mapping,
+  locks and consumes the approval, and creates the identity, membership
+  and audit event atomically.
+- RLS policies constrain function-owner permissions. PostgreSQL
+  requires specific column `UPDATE` grants and matching RLS policies
+  for `SELECT ... FOR SHARE` row locks; the owner can only keep active
+  company status active and verified link status verified, not change
+  company identities or statuses. Extra `SELECT` privileges for
+  `INSERT ... RETURNING` are limited to audit event and approval ID
+  columns for their respective function owners.
+- A consumed approval remains visible **only to the non-login owner**
+  during row locking, so replay is explicitly rejected. Concurrent
+  requests are serialized by the PostgreSQL row lock.
+
+CI uses **two separately authenticated non-superuser PostgreSQL
+logins**, proves approval issuance and consumption are distinct,
+rejects attempts to cross the separation boundary, races two
+execution attempts for the same approval, and requires **exactly one**
+successful identity/member commit with exactly one audit event and an
+approval attributed to the issuer's authenticated login. Database
+login membership is created only in disposable CI; deployment must
+provision logins and grants explicitly and separately.
+
+**Still not production-authorized:** A database-authenticated approver
+is not an independently human-signed approval. Database-name staging
+allowlists do not prove an environment is non-production; real human
+identity verification, independent change approval, least-privilege
+provisioning, backups and real Logto/product source verification are
+still required. No live production credentials or databases were used.
