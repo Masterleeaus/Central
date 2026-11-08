@@ -2,19 +2,23 @@
  * Unlike an access-token verifier, returns only verified identity claims. */
 import {createPublicKey,verify as verifySignature} from 'node:crypto';
 import {TitanOidcLoginError} from './oidc-login.mjs';
+import {insecureLocalhostAllowed, isSecureEndpoint} from './endpoint-policy.mjs';
+import {createJwksRefreshGuard} from './jwks-refresh-guard.mjs';
 const parse = part => {try{return JSON.parse(Buffer.from(part,'base64url').toString('utf8'));}catch{throw new TitanOidcLoginError('invalid_identity_token');}};
 const fail=()=>{throw new TitanOidcLoginError('invalid_identity_token');};
-export function createIdTokenVerifier({issuer,clientId,jwksUri,fetcher=fetch,clock=()=>Date.now(),maxAgeMs=300_000}={}) {
+export function createIdTokenVerifier({issuer,clientId,jwksUri,fetcher=fetch,clock=()=>Date.now(),maxAgeMs=300_000,allowInsecureLocalhost=insecureLocalhostAllowed(),refreshCooldownMs=30_000}={}) {
   for(const endpoint of [issuer,jwksUri]){
     if(typeof endpoint!=='string')throw new TypeError('OIDC endpoint required');
     const u=new URL(endpoint);
-    if(u.username||u.password||u.hash||u.search||!(u.protocol==='https:'||(u.protocol==='http:'&&u.hostname==='localhost')))throw new TypeError('insecure OIDC endpoint');
+    if(u.username||u.password||u.hash||u.search||!isSecureEndpoint(endpoint,allowInsecureLocalhost))throw new TypeError('insecure OIDC endpoint');
   }
   if(typeof clientId!=='string'||!clientId||!Number.isSafeInteger(maxAgeMs)||maxAgeMs<1000||maxAgeMs>900_000)throw new TypeError('invalid OIDC verifier configuration');
+  const guard=createJwksRefreshGuard({cooldownMs:refreshCooldownMs,clock});
   let keys=[],expires=0;
   async function getKeys(force=false) {
     if(!force && clock()<expires)return keys;
     let response,doc;
+    guard.recordFetch();
     try{response=await fetcher(jwksUri,{method:'GET',headers:{accept:'application/json'},redirect:'error',signal:AbortSignal.timeout(4000)});if(!response.ok)fail();doc=await response.json();}catch{fail();}
     if(!Array.isArray(doc?.keys)||doc.keys.length>64)fail();
     keys=doc.keys.filter(k=>k?.kty==='RSA'&&typeof k.kid==='string'&&k.kid&&(!k.use||k.use==='sig')&&(!k.alg||k.alg==='RS256'));
@@ -27,8 +31,8 @@ export function createIdTokenVerifier({issuer,clientId,jwksUri,fetcher=fetch,clo
     const [h,p,s]=parts,header=parse(h),payload=parse(p);
     if(header.alg!=='RS256'||typeof header.kid!=='string'||!header.kid||header.crit||header.jku||header.x5u||header.b64===false)fail();
     let key=(await getKeys()).find(k=>k.kid===header.kid);
-    if(!key)key=(await getKeys(true)).find(k=>k.kid===header.kid);
-    if(!key)fail();
+    if(!key&&guard.mayRefresh(header.kid))key=(await getKeys(true)).find(k=>k.kid===header.kid);
+    if(!key){guard.recordMiss(header.kid);fail();}
     try {if(!verifySignature('RSA-SHA256',Buffer.from(`${h}.${p}`),createPublicKey({key,format:'jwk'}),Buffer.from(s,'base64url')))fail();}catch{fail();}
     const now=Math.floor(clock()/1000);
     const aud=payload.aud;

@@ -4,6 +4,7 @@
  * independently secure HttpOnly SameSite session handling.
  */
 import {randomBytes, createHash} from 'node:crypto';
+import {insecureLocalhostAllowed} from './endpoint-policy.mjs';
 
 export class TitanOidcLoginError extends Error {
   constructor(message='oidc_login_failed'){super(message);this.name='TitanOidcLoginError';}
@@ -19,9 +20,10 @@ const b64=buf=>Buffer.from(buf).toString('base64url');
 const sha=value=>b64(createHash('sha256').update(value).digest());
 const random=()=>b64(randomBytes(32));
 /** The storage adapter must atomically delete and return pending state exactly once. */
-export function createOidcLogin({issuer,clientId,clientSecret,redirectUri,loginStore,verifyIdToken,fetcher=fetch,clock=()=>Date.now(),stateTtlMs=300_000,timeoutMs=5000}={}) {
-  const oidcIssuer=strictUrl(issuer,true);
-  const redirect=strictUrl(redirectUri,true);
+export function createOidcLogin({issuer,clientId,clientSecret,redirectUri,loginStore,verifyIdToken,fetcher=fetch,clock=()=>Date.now(),stateTtlMs=300_000,timeoutMs=5000,allowInsecureLocalhost=insecureLocalhostAllowed()}={}) {
+  // http://localhost is accepted only when allowInsecureLocalhost is set (TITAN_ALLOW_INSECURE_LOCALHOST=1).
+  const oidcIssuer=strictUrl(issuer,allowInsecureLocalhost);
+  const redirect=strictUrl(redirectUri,allowInsecureLocalhost);
   const authorize=new URL('oidc/auth',oidcIssuer.href.endsWith('/')?oidcIssuer.href:oidcIssuer.href+'/');
   const tokenEndpoint=new URL('oidc/token',oidcIssuer.href.endsWith('/')?oidcIssuer.href:oidcIssuer.href+'/');
   if(!safeString(clientId)||!safeString(clientSecret)||!loginStore||typeof loginStore.save!=='function'||typeof loginStore.consume!=='function'||typeof verifyIdToken!=='function'||!Number.isInteger(stateTtlMs)||stateTtlMs<60_000||stateTtlMs>600_000||!Number.isInteger(timeoutMs)||timeoutMs<500||timeoutMs>15000)throw new TypeError('invalid OIDC login dependencies');

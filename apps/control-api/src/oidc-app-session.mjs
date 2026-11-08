@@ -73,7 +73,9 @@ export function createAppLogoutHandler({applicationId,appOrigin,sessionCookieNam
   return async (req,res) => {
     if (new URL(req.url??'/',origin).pathname !== `/auth/titan/${applicationId}/logout`) return false;
     if(req.method!=='POST') {response(res,405,'method_not_allowed');return true;}
-    if (req.headers?.origin!==origin || !['same-origin','none'].includes(req.headers?.['sec-fetch-site']??'same-origin')) {response(res,403,'origin_denied');return true;}
+    // Both headers are required: a missing Origin or Sec-Fetch-Site is denied, never defaulted.
+    const site=req.headers?.['sec-fetch-site'];
+    if (typeof req.headers?.origin!=='string' || req.headers.origin!==origin || typeof site!=='string' || !['same-origin','none'].includes(site)) {response(res,403,'origin_denied');return true;}
     try {
       const session = await authenticateSession(req);
       if (!session || !valid(session.id) || !valid(session.userId)) {response(res,401,'unauthenticated');return true;}

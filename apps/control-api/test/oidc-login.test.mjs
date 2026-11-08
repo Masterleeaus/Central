@@ -25,3 +25,9 @@ test('rejects invalid browser binding',async()=>{const s=setup();await assert.re
 test('rejects callback with missing state',async()=>{const s=setup();await assert.rejects(s.login.complete({state:'',code:'abc',browserBinding:binding}),TitanOidcLoginError);});
 test('rejects non-https issuer',()=>{assert.throws(()=>setup({issuer:'http://evil.example'}),/invalid OIDC URL/);});
 test('rejects insecure callback',()=>{assert.throws(()=>setup({redirectUri:'http://evil.example/auth/callback'}),/invalid OIDC URL/);});
+
+test('localhost OIDC endpoints are refused without the dev flag and accepted with it',()=>{
+ const local={issuer:'http://localhost:9000',redirectUri:'http://localhost:9000/auth/callback'};
+ assert.throws(()=>setup(local),/invalid OIDC URL/);
+ assert.equal(typeof setup({...local,allowInsecureLocalhost:true}).login.begin,'function');
+});

@@ -13,3 +13,19 @@ test('accepts multiple audiences only with matching azp',async()=>{assert.equal(
 test('rejects none algorithm and external key URLs',async()=>{await assert.rejects(verifier()(make({}, {alg:'none'})));await assert.rejects(verifier()(make({}, {jku:'https://evil.test/jwks'})));});
 test('rejects missing nonce or stale iat',async()=>{await assert.rejects(verifier()(make({nonce:null})));await assert.rejects(verifier()(make({iat:now/1000-10000})));});
 test('rejects untrusted JWKS host configuration',()=>{assert.throws(()=>createIdTokenVerifier({issuer,clientId,jwksUri:'http://evil.test'}));});
+
+test('unknown kids trigger at most one forced JWKS fetch per cooldown window',async()=>{
+ let clockNow=now;let n=0;
+ const v=createIdTokenVerifier({issuer,clientId,jwksUri:'https://identity.titanzero.io/oidc/jwks',clock:()=>clockNow,fetcher:async()=>{n++;return {ok:true,json:async()=>({keys:[jwk]})}}});
+ for(let i=0;i<20;i++) await assert.rejects(v(make({},{kid:'unknown-'+i})));
+ assert.equal(n,1);
+ clockNow+=30_001;
+ for(let i=0;i<20;i++) await assert.rejects(v(make({},{kid:'ghost'})));
+ assert.equal(n,2);
+});
+test('localhost endpoints in the ID token verifier require the dev flag',()=>{
+ const local={issuer:'http://localhost:9000',clientId,jwksUri:'http://localhost:9000/jwks'};
+ assert.throws(()=>createIdTokenVerifier(local),TypeError);
+ assert.throws(()=>createIdTokenVerifier({...local,allowInsecureLocalhost:false}),TypeError);
+ assert.equal(typeof createIdTokenVerifier({...local,allowInsecureLocalhost:true}),'function');
+});

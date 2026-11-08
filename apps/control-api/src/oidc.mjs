@@ -1,17 +1,23 @@
 import { createPublicKey, verify as cryptoVerify } from 'node:crypto';
+import { insecureLocalhostAllowed, isSecureEndpoint } from './endpoint-policy.mjs';
+import { createJwksRefreshGuard } from './jwks-refresh-guard.mjs';
 
 export class OidcVerificationError extends Error { constructor(message) { super(message); this.name='OidcVerificationError'; } }
 const b64json = (part) => { try { return JSON.parse(Buffer.from(part, 'base64url').toString('utf8')); } catch { throw new OidcVerificationError('malformed JWT'); } };
 const validString = (v) => typeof v === 'string' && v.length > 0;
 /** Strict RS256 JWT resource-server verification with fixed issuer, audience and configured JWKS endpoint.
- * Tokens and JWKS URLs are NEVER taken from a request. No unverified claims are trusted. */
-export function createOidcVerifier({ issuer, audience, jwksUri, fetcher=fetch, clock=()=>Date.now(), cacheMs=60_000 }) {
+ * Tokens and JWKS URLs are NEVER taken from a request. No unverified claims are trusted.
+ * Unknown kids trigger at most one forced JWKS refresh per refreshCooldownMs (per instance). */
+export function createOidcVerifier({ issuer, audience, jwksUri, fetcher=fetch, clock=()=>Date.now(), cacheMs=60_000,
+  allowInsecureLocalhost=insecureLocalhostAllowed(), refreshCooldownMs=30_000 }) {
   if (!validString(issuer) || !validString(audience) || !validString(jwksUri)) throw new Error('OIDC configuration required');
-  if (!issuer.startsWith('https://') && !issuer.startsWith('http://localhost:')) throw new Error('secure OIDC issuer required');
-  if (!jwksUri.startsWith('https://') && !jwksUri.startsWith('http://localhost:')) throw new Error('secure JWKS URI required');
+  if (!isSecureEndpoint(issuer, allowInsecureLocalhost)) throw new Error('secure OIDC issuer required');
+  if (!isSecureEndpoint(jwksUri, allowInsecureLocalhost)) throw new Error('secure JWKS URI required');
+  const guard = createJwksRefreshGuard({ cooldownMs: refreshCooldownMs, clock });
   let cache, until=0;
   async function loadKeys(refresh=false) {
     if (!refresh && cache && clock() < until) return cache;
+    guard.recordFetch();
     const response = await fetcher(jwksUri, { headers: { accept:'application/json' }, signal: AbortSignal.timeout(4000), redirect:'error' });
     if (!response.ok) throw new OidcVerificationError('JWKS unavailable');
     const parsed = await response.json();
@@ -28,8 +34,8 @@ export function createOidcVerifier({ issuer, audience, jwksUri, fetcher=fetch, c
     if (header.alg!=='RS256' || !validString(header.kid) || header.crit || header.jku || header.x5u) throw new OidcVerificationError('unsupported JWT header');
     let keys=await loadKeys();
     let key=keys.find(k=>k.kid===header.kid);
-    if (!key) {keys=await loadKeys(true);key=keys.find(k=>k.kid===header.kid);}
-    if (!key) throw new OidcVerificationError('unrecognised key');
+    if (!key && guard.mayRefresh(header.kid)) {keys=await loadKeys(true);key=keys.find(k=>k.kid===header.kid);}
+    if (!key) {guard.recordMiss(header.kid);throw new OidcVerificationError('unrecognised key');}
     let publicKey; try {publicKey=createPublicKey({key,format:'jwk'});} catch {throw new OidcVerificationError('invalid signing key');}
     let signature; try {signature=Buffer.from(s,'base64url');} catch {throw new OidcVerificationError('invalid signature');}
     if (!cryptoVerify('RSA-SHA256',Buffer.from(`${h}.${p}`),publicKey,signature)) throw new OidcVerificationError('invalid signature');
