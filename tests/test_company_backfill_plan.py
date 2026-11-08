@@ -81,3 +81,13 @@ class BackfillPlanTests(unittest.TestCase):
         self.assertEqual(result['candidate_counts']['memberships'],0)
         self.assertEqual(result['candidate_counts']['entitlements'],0)
         self.assertEqual(result['candidate_counts']['user_links'],0)
+    def test_unexpected_canonical_access_blocks_candidate_plan(self):
+        c=target()
+        c['memberships'].append({'company_id':c['companies'][0]['id'],'identity_id':'another-id','role':'owner','status':'active'})
+        c['entitlements'].append({'company_id':c['companies'][0]['id'],'application_id':'lms','status':'active'})
+        c['links'].append({'company_id':c['companies'][0]['id'],'identity_id':'another-id','application_id':'lms','status':'verified','local_user_id':'stranger'})
+        result=plan(source(),c)
+        self.assertEqual(result['conflicts']['unexpected_active_canonical_membership'],1)
+        self.assertEqual(result['conflicts']['unexpected_active_canonical_entitlement'],1)
+        self.assertEqual(result['conflicts']['unexpected_verified_canonical_user_link'],1)
+        self.assertEqual(result['status'],'blocked')
