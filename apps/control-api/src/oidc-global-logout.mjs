@@ -56,3 +56,56 @@ export function verifyLogoutState(expected,returned){
   const a=Buffer.from(expected),b=Buffer.from(returned);
   return a.length===b.length&&timingSafeEqual(a,b);
 }
+
+/** HTTP route for RP-initiated global logout: POST /auth/titan/global-logout.
+ * Why POST: revoking sessions is state-changing, and a GET would let any page sign the user out
+ * (the same reason oidc-app-session.mjs refuses GET logout). GET on this path returns 405.
+ * The POST must come from an allowed application origin with Sec-Fetch-Site same-origin or same-site.
+ * The post-logout redirect is a fixed registered URI from config, never read from the request.
+ * Order: origin check, authenticate caller, revoke every app (fails closed), then 303 to Logto. */
+export const GLOBAL_LOGOUT_PATH='/auth/titan/global-logout';
+const STATE_COOKIE='titan_global_logout_state';
+const SESSION_COOKIE=/^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+const setCookie=(name,value,maxAge)=>`${name}=${value}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+
+/**
+ * globalLogout: object returned by createGlobalLogout (revocations and Logto URL builder injected there).
+ * authenticateSession(req): app-owned lookup of the caller's server-side session. Resolves to
+ *   {idTokenHint, scopes:[{logtoSubject, organisationId}]} or null. Never trusts client-supplied subjects.
+ * postLogoutRedirectUri: must be one of the registered URIs passed to createGlobalLogout (checked here at startup).
+ * allowedOrigins: exact application origins allowed to POST this route.
+ * sessionCookieName: the cookie the caller's session travels in; cleared on successful logout.
+ * Returns (req,res) => Promise<boolean>; false means the path is not this route.
+ */
+export function createGlobalLogoutHandler({globalLogout,authenticateSession,postLogoutRedirectUri,allowedOrigins,sessionCookieName,logger=()=>{}}={}) {
+  if(typeof globalLogout?.logout!=='function'||typeof globalLogout?.buildEndSessionUrl!=='function')throw new TypeError('global logout required');
+  if(typeof authenticateSession!=='function')throw new TypeError('session authenticator required');
+  if(typeof sessionCookieName!=='string'||!SESSION_COOKIE.test(sessionCookieName))throw new TypeError('invalid session cookie name');
+  if(!Array.isArray(allowedOrigins)||allowedOrigins.length<1||allowedOrigins.length>10||!allowedOrigins.every(o=>typeof o==='string'&&/^https:\/\/[A-Za-z0-9.-]{1,253}$/.test(o)&&new URL(o).origin===o))throw new TypeError('invalid allowed origins');
+  // Throws unless postLogoutRedirectUri is registered; no request is needed to check this.
+  globalLogout.buildEndSessionUrl({idTokenHint:'t.t.t',postLogoutRedirectUri});
+  const origins=new Set(allowedOrigins);
+  const send=(res,status,error,extra={})=>{res.writeHead(status,{'cache-control':'no-store','content-type':'application/json; charset=utf-8','x-content-type-options':'nosniff',...extra});res.end(JSON.stringify({error}));};
+
+  return async function globalLogoutHttpHandler(req,res){
+    let pathname;
+    try{pathname=new URL(req.url??'/','http://localhost').pathname;}catch{return false;}
+    if(pathname!==GLOBAL_LOGOUT_PATH)return false;
+    if(req.method!=='POST'){send(res,405,'method_not_allowed',{allow:'POST'});return true;}
+    const origin=req.headers?.origin;
+    const site=req.headers?.['sec-fetch-site'];
+    if(typeof origin!=='string'||!origins.has(origin)||typeof site!=='string'||!['same-origin','same-site'].includes(site)){send(res,403,'origin_denied');return true;}
+    try{
+      const session=await authenticateSession(req);
+      if(!session||typeof session.idTokenHint!=='string'||!Array.isArray(session.scopes)){send(res,401,'unauthenticated');return true;}
+      const {location,state,revoked}=await globalLogout.logout({idTokenHint:session.idTokenHint,postLogoutRedirectUri,scopes:session.scopes});
+      res.writeHead(303,{location,'cache-control':'no-store','set-cookie':[setCookie(sessionCookieName,'',0),setCookie(STATE_COOKIE,state,300)]});
+      res.end();
+      logger('global_logout_started',{revoked});
+    }catch(error){
+      logger('global_logout_failed',{error_class:typeof error?.name==='string'?error.name:'unknown'});
+      send(res,503,'logout_unavailable');
+    }
+    return true;
+  };
+}
