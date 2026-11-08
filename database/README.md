@@ -1,14 +1,15 @@
 # Shared Titan PostgreSQL database
 
-This is the canonical database contract for Titan Central, Sorted, Skilled, and
-Supercharged. PostgreSQL is the common database engine. This directory begins
-the new clean-install migration chain; the old `/migrations` SQL remains
+This is the canonical database contract for Titan Central, Sorted,
+Supercharged, and LMS. The LMS source repository is `Masterleeaus/Skilled`.
+PostgreSQL is the common database engine. This directory begins the new
+clean-install migration chain; the old `/migrations` SQL remains
 historical draft material until it is reconciled and promoted.
 
 ## Canonical tenant rule
 
 - `titan.companies.id` is the canonical company UUID.
-- Every company-owned row in app schemas uses a non-null `company_id UUID
+- Every company-owned row in app schemas uses a non-null `company_id` UUID
   foreign key to `titan.companies(id)`.
 - Shared identity and access records are in `titan.identities`,
   `titan.company_memberships`, `titan.application_entitlements`,
@@ -16,7 +17,7 @@ historical draft material until it is reconciled and promoted.
 - `titan.application_company_links` records each app's old tenant ID while it
   is migrated to the canonical company UUID.
 - App-specific profile IDs remain text at the identity-link boundary to
-  accommodate the current Sorted, Skilled, and Supercharged ID formats.
+  accommodate the current Sorted, LMS, and Supercharged ID formats.
 - Truly global reference data must be identified in the table registry; nullable
   tenant IDs must not be used to represent tenant-owned data.
 
@@ -32,7 +33,7 @@ unknown out-of-order migration.
 ## Current implementation boundary
 
 Migration `0001_shared_company_core.sql` creates the shared core only. It does
-not yet move Sorted, Skilled, or Supercharged domain tables, change their
+not yet move Sorted, LMS, or Supercharged domain tables, change their
 database clients, or prove RLS isolation. Do not mark the four-app database
 upgrade production-ready until those migrations and app adapters are completed
 and verified on a disposable PostgreSQL database.
