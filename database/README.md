@@ -236,3 +236,38 @@ The full CI dataset test checks:
 This preflight intentionally does not create an apply command or
 generate DML. A separate reviewed and reversible conversion plan
 must exist before any future migration executor is authorised.
+
+## Pass 16 — Deterministic staged-backfill candidate review and transaction rehearsal
+
+`tools/plan_company_backfill.py` uses the read-only legacy and canonical
+snapshot extraction to identify **candidate counts** for identities,
+memberships, entitlements and application-user links. It emits no SQL DML,
+identifiers, subjects or personally identifying rows, and never connects
+with write privileges. It cannot approve a migration. Company mapping
+requires a pre-existing **verified, exact Logto-matched and active**
+legacy-to-canonical link; the planner **never creates a company** or
+assumes legacy IDs equal canonical IDs. The planner blocks on
+ambiguous/unverified/inactive mappings, missing canonical identity
+provisioning, role/status/expiry/feature conflicts, duplicates and
+unexpected active canonical rights. Existing canonical access records
+are never silently overwritten, expanded or deleted.
+
+A zero-conflict `candidate_review_only` output is still only a
+review artifact. Missing canonical identities require independently
+approved identity provisioning and a stable canonical UUID mapping
+before membership/user-link candidates can be considered. It does
+not validate externally controlled Logto or product account state.
+
+`tests/sql/shared_backfill_rollback.sql` exercises identity →
+membership → application-link FK ordering against a **disposable**
+PostgreSQL canonical database, simulates a unique-key conflict,
+and verifies that a full transaction rollback leaves **no identity
+or access record** behind. The CI backfill step runs the planner
+against its separate two-database test fixtures and checks
+that no writes are authorised.
+
+**Not a live migration tool:** No production backfill writer,
+transactional cross-database coordinator, signed mapping approvals,
+restorable backup evidence or tested rollback execution exists.
+Do not execute the rehearsal SQL against a live database or
+interpret a candidate count as permission to create access.
