@@ -6,8 +6,9 @@ const NOW=Date.parse('2026-11-09T00:00:00.000Z');
 const response=()=>({status:0,headers:{},body:null,writeHead(status,headers){this.status=status;this.headers=headers},end(body){this.body=body}});
 function fixture(){
   const state=new Map(),trace=[];
+  let storedNonce=null;
   const stateStore={
-    async save(key,value){state.set(key,value);},
+    async save(key,value){state.set(key,value);storedNonce=value.nonce;},
     async consume(key){const value=state.get(key);state.delete(key);return value??null;}
   };
   const service=createCentralSignInService({
@@ -15,7 +16,7 @@ function fixture(){
     sessions:{async issue(value){trace.push(['issue',value]);return {cookie:'__Host-titan-central='+'A'.repeat(43)+'; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=28800'}}},
     issuer:'https://issuer.example',clientId:'central-client',clientSecret:'unit-test-secret',
     redirectUri:'https://central.example/auth/central/callback',
-    verifyIdToken:async()=>({sub:'subject-123',nonce:[...state.values()][0]?.nonce,iss:'https://issuer.example',aud:'central-client',exp:Math.floor(NOW/1000)+120}),
+    verifyIdToken:async()=>({sub:'subject-123',nonce:storedNonce,iss:'https://issuer.example',aud:'central-client',exp:Math.floor(NOW/1000)+120}),
     listEligibleCompanies:async identity=>{trace.push(['eligible',identity]);return [{companyId:ORG,authorised:true}]},
     recheckCompany:async identity=>{trace.push(['recheck',identity]);return true},
     fetcher:async()=>({ok:true,json:async()=>({id_token:'signed-token-placeholder',access_token:'access-token-placeholder',token_type:'Bearer'})}),
