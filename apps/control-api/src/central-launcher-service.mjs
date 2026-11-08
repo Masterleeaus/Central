@@ -4,12 +4,13 @@
  * and validated environment-owned product destinations.
  */
 import {createCentralSessionManager} from './central-session.mjs';
+import {createPostgresCentralSessionStore} from './central-session-pg.mjs';
 import {createCentralProductReader} from './central-product-reader.mjs';
 import {createCentralLauncherHandler} from './central-launcher.mjs';
 
 export function createCentralLauncherService({pool,sessionStore,getCompanyName,destinations,clock}={}){
-  if(!pool?.connect||!sessionStore||typeof getCompanyName!=='function')throw new TypeError('trusted Central launcher dependencies required');
-  const sessions=createCentralSessionManager({store:sessionStore,...(clock?{clock}:{})});
+  if(!pool?.connect||typeof getCompanyName!=='function')throw new TypeError('trusted Central launcher dependencies required');
+  const sessions=createCentralSessionManager({store:sessionStore??createPostgresCentralSessionStore({pool}),...(clock?{clock}:{})});
   const readProducts=createCentralProductReader({pool,getCompanyName});
   const handler=createCentralLauncherHandler({
     resolveSession:req=>sessions.resolve(req),
