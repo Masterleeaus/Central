@@ -116,22 +116,21 @@ jobs:
       # differently. CI uses a second disposable PostgreSQL database.
       - name: Create independent shared-core test database
         run: psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" -c "CREATE DATABASE titan_shared_ci"
-      - name: Apply shared-core clean-install migration
-        run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0001_shared_company_core.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Apply canonical migration registry 0001–0004
+        run: python3 tools/migrate_shared.py --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Canonical migration rerun applies nothing
+        run: |
+          out=$(python3 tools/migrate_shared.py --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci")
+          echo "$out"
+          test "$out" = "applied 0 canonical migration(s)"
       - name: Validate canonical companies and product IDs
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_core.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
 
-      - name: Apply canonical tenant RLS to shared-core database
-        run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0002_shared_company_rls.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
       - name: Verify canonical two-company isolation and links
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_rls.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
 
-      - name: Apply verified legacy-to-canonical company mapping
-        run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0003_legacy_central_company_links.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
       - name: Verify pending and cross-tenant company links deny access
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_legacy_mapping.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
 
-      - name: Install verified canonical company lookup
-        run: psql -X -v ON_ERROR_STOP=1 -f database/migrations/0004_verified_company_lookup.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
       - name: Check exact Logto legacy mapping with canonical RLS
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_verified_lookup.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
