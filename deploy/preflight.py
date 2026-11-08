@@ -1,20 +1,39 @@
 #!/usr/bin/env python3
 """Read-only Titan Central deployment gate. Never reads secrets or changes services.
 
-Usage: python3 preflight.py --config deploy/staging.example.json --root /path/to/extract
-Optional: --live /home/admin/apps (read-only filesystem checks)
+Usage:
+  python3 deploy/preflight.py --config deploy/staging.example.json \
+      [--root /path/to/extract --upstream /path/to/logto-checkout] \
+      [--live /home/admin/apps]
+
+  --root      extract that contains the titan-central/ source tree.
+  --upstream  explicit path to an upstream Logto checkout (must contain LICENSE).
+              Required whenever --root is given; a missing path is a failure.
+  --live      parent directory of the live applications. Subdirectory names come
+              from the config key live_app_dirs; deferred apps are not checked.
+
+Config keys:
+  deferred_apps         list of apps not blocking this release (only 'academy' may be deferred).
+  provisioned_hostnames hostnames that exist on the server; every hostname in
+                        oidc_origin, central_origin and blocking app origins must be listed.
+  live_app_dirs         app name -> directory name under --live.
 """
 from __future__ import annotations
 import argparse
 import json
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
 APPS = ('desk','field','academy')
+DEFERRABLE_APPS = ('academy',)
+FLAG_KEYS = ('central_db_separate','logto_db_separate','supported_postgres',
+             'real_logto_verified','migration_verified','two_tenant_test_passed',
+             'global_logout_test_passed','rollback_test_passed')
 NEEDED = ('oidc_origin','central_origin','app_origins','callback_paths','logout_paths',
-          'central_db_separate','logto_db_separate','supported_postgres',
-          'app_adapter_implemented','real_logto_verified','migration_verified',
-          'two_tenant_test_passed','global_logout_test_passed','rollback_test_passed')
+          'deferred_apps','provisioned_hostnames','live_app_dirs','app_adapter_implemented') + FLAG_KEYS
+_HOST_RE = re.compile(r'^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$')
+_DIR_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')
 
 
 def validate_origin(value: str) -> bool:
@@ -31,11 +50,29 @@ def validate_route(route: str) -> bool:
     return not any(x in route for x in ('\\','?','#','..','%','//')) and all(32<ord(x)<127 for x in route)
 
 
-def assess(config: dict, root: Path | None = None, live: Path | None = None) -> dict:
+def validate_hostname(value) -> bool:
+    return isinstance(value,str) and len(value)<=253 and bool(_HOST_RE.match(value))
+
+
+def validate_dirname(value) -> bool:
+    return isinstance(value,str) and bool(_DIR_RE.match(value)) and '..' not in value
+
+
+def _deferred_apps(config: dict, issues: list) -> set:
+    raw=config.get('deferred_apps')
+    if not isinstance(raw,list) or not all(isinstance(a,str) for a in raw) or len(set(raw))!=len(raw) or not set(raw)<=set(DEFERRABLE_APPS):
+        issues.append('invalid_deferred_apps')
+        return set()  # fail closed: nothing is deferred when the list is malformed
+    return set(raw)
+
+
+def assess(config: dict, root: Path | None = None, live: Path | None = None, upstream: Path | None = None) -> dict:
     issues=[]
     if not isinstance(config,dict): return {'ready':False,'issues':['invalid_configuration'],'checked':0}
     for k in NEEDED:
         if k not in config: issues.append('missing:'+k)
+    blocking=set(APPS)-_deferred_apps(config,issues)
+
     for k in ('oidc_origin','central_origin'):
         if not validate_origin(config.get(k)): issues.append('invalid_origin:'+k)
     origins=config.get('app_origins')
@@ -45,20 +82,39 @@ def assess(config: dict, root: Path | None = None, live: Path | None = None) -> 
         if any(not validate_origin(v) for v in origins.values()): issues.append('invalid_app_origin')
         all_origins=list(origins.values())+[config.get('oidc_origin'),config.get('central_origin')]
         if len(set(all_origins))!=len(all_origins): issues.append('duplicate_origin')
+
+    hosts=config.get('provisioned_hostnames')
+    if not isinstance(hosts,list) or not all(validate_hostname(h) for h in hosts):
+        issues.append('invalid_provisioned_hostnames')
+        hosts=[]
+    named={'oidc_origin':config.get('oidc_origin'),'central_origin':config.get('central_origin')}
+    if isinstance(origins,dict):
+        for app in blocking: named['app_origins.'+app]=origins.get(app)
+    for name,value in named.items():
+        if validate_origin(value) and urlsplit(value).hostname not in hosts:
+            issues.append('unprovisioned_host:'+name)
+
     for key in ('callback_paths','logout_paths'):
         routes=config.get(key)
         if not isinstance(routes,dict) or set(routes)!=set(APPS) or not all(validate_route(v) for v in routes.values()):
             issues.append('invalid_routes:'+key)
-    for key in NEEDED[5:]:
-        flags=config.get(key)
-        if key == 'app_adapter_implemented':
-            ok = isinstance(flags,dict) and set(flags)==set(APPS) and all(v is True for v in flags.values())
-        else:
-            ok = flags is True
-        if not ok:
-            issues.append('unverified:'+key)
+
+    for key in FLAG_KEYS:
+        if config.get(key) is not True: issues.append('unverified:'+key)
+    adapters=config.get('app_adapter_implemented')
+    if not isinstance(adapters,dict) or set(adapters)!=set(APPS):
+        issues.append('invalid_app_adapter_implemented')
+    else:
+        for app in sorted(blocking):
+            if adapters.get(app) is not True: issues.append('unverified:app_adapter_implemented.'+app)
+
+    live_dirs=config.get('live_app_dirs')
+    if not isinstance(live_dirs,dict) or set(live_dirs)!=set(APPS) or not all(validate_dirname(v) for v in live_dirs.values()):
+        issues.append('invalid_live_app_dirs')
+        live_dirs=None
+
     if root is not None:
-        for rel in ('logto-master/LICENSE','titan-central/apps/control-api/src/server.mjs',
+        for rel in ('titan-central/apps/control-api/src/server.mjs',
                     'titan-central/packages/control-plane/src/index.ts',
                     'titan-central/migrations/0004_session_revocations_draft.sql'):
             if not (root/rel).is_file(): issues.append('missing_source:'+rel)
@@ -68,26 +124,30 @@ def assess(config: dict, root: Path | None = None, live: Path | None = None) -> 
             try:
                 data=json.loads(manifest.read_text())
                 if data.get('pass')!=14: issues.append('unexpected_baseline')
-            except (ValueError,OSError): issues.append('invalid_baseline_manifest')
-    if live is not None:
-        for app,dirname in (('desk','desk'),('field','ai-fsm')):
-            if not (live/dirname).is_dir(): issues.append('missing_live_app:'+app)
-        # Academy presence only; its path may not yet be created.
-        if not (live/'academy').is_dir(): issues.append('missing_live_app:academy')
+            except (ValueError,OSError,AttributeError): issues.append('invalid_baseline_manifest')
+    if upstream is not None:
+        if not upstream.is_dir() or not (upstream/'LICENSE').is_file(): issues.append('missing_upstream')
+    elif root is not None:
+        issues.append('missing_upstream_argument')
+
+    if live is not None and live_dirs is not None:
+        for app in sorted(blocking):
+            if not (live/live_dirs[app]).is_dir(): issues.append('missing_live_app:'+app)
     return {'ready':not issues, 'issues':sorted(set(issues)),'checked':len(NEEDED)}
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__)
+    p=argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--config',type=Path,required=True)
     p.add_argument('--root',type=Path)
+    p.add_argument('--upstream',type=Path)
     p.add_argument('--live',type=Path)
     a=p.parse_args()
     try:
         config=json.loads(a.config.read_text())
     except (OSError,ValueError):
         print(json.dumps({'ready':False,'issues':['unreadable_configuration']}));raise SystemExit(2)
-    result=assess(config,a.root,a.live)
+    result=assess(config,a.root,a.live,a.upstream)
     print(json.dumps(result,indent=2))
     raise SystemExit(0 if result['ready'] else 1)
 

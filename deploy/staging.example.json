@@ -1,5 +1,5 @@
 {
-  "oidc_origin": "https://identity.titanzero.io",
+  "oidc_origin": "https://auth.titanzero.io",
   "central_origin": "https://central.titanzero.io",
   "app_origins": {
     "desk": "https://desk.titanzero.io",
@@ -15,6 +15,18 @@
     "desk": "/auth/titan/desk/logout",
     "field": "/auth/titan/field/logout",
     "academy": "/auth/titan/academy/logout"
+  },
+  "deferred_apps": ["academy"],
+  "provisioned_hostnames": [
+    "auth.titanzero.io",
+    "central.titanzero.io",
+    "desk.titanzero.io",
+    "field.titanzero.io"
+  ],
+  "live_app_dirs": {
+    "desk": "desk",
+    "field": "ai-fsm",
+    "academy": "academy"
   },
   "central_db_separate": false,
   "logto_db_separate": false,
