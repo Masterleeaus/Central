@@ -1,3 +1,4 @@
+BEGIN;
 -- REVIEW BEFORE APPLYING. Titan Central database ONLY (not Logto/Desk/Field/Academy).
 -- Session stores snapshot generation at issuance; the guard verifies current version
 -- on every protected request; trusted admin writes increment generation.
@@ -11,3 +12,4 @@ CREATE TABLE IF NOT EXISTS titan_session_revocations (
 );
 -- Grant SELECT to the trusted guard role only. Increment privileges must be
 -- restricted to a server-side trusted provisioning identity; never a browser.
+COMMIT;

@@ -12,7 +12,7 @@ export function createPostgresSessionRevocations({pool}={}) {
   return {
     async readVersion(args){
       check(args);
-      const result=await pool.query('SELECT generation FROM titan_session_revocations WHERE application_id=$1 AND logto_subject=$2 AND organisation_id=$3',[args.applicationId,args.logtoSubject,args.organisationId]);
+      const result=await pool.query('SELECT generation FROM titan.titan_session_revocations WHERE application_id=$1 AND logto_subject=$2 AND organisation_id=$3',[args.applicationId,args.logtoSubject,args.organisationId]);
       if(result.rows.length>1)throw new Error('ambiguous revocation record');
       const value=result.rows.length===0?0:Number(result.rows[0].generation);
       if(!Number.isSafeInteger(value)||value<0)throw new Error('invalid revocation generation');
@@ -20,7 +20,7 @@ export function createPostgresSessionRevocations({pool}={}) {
     },
     async revokeAll(args){
       check(args);
-      const result=await pool.query(`INSERT INTO titan_session_revocations (application_id,logto_subject,organisation_id,generation)
+      const result=await pool.query(`INSERT INTO titan.titan_session_revocations (application_id,logto_subject,organisation_id,generation)
 VALUES ($1,$2,$3,1) ON CONFLICT (application_id,logto_subject,organisation_id)
 DO UPDATE SET generation=titan_session_revocations.generation+1,revoked_at=now()
 RETURNING generation`,[args.applicationId,args.logtoSubject,args.organisationId]);

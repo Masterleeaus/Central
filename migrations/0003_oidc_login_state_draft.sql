@@ -1,3 +1,4 @@
+BEGIN;
 -- Apply only to Titan Central's OWN dedicated PostgreSQL database after review.
 -- Do not apply to Logto, titan_desk, ai_fsm or titan_academy databases.
 CREATE TABLE IF NOT EXISTS titan_oidc_login_states (
@@ -13,3 +14,4 @@ CREATE TABLE IF NOT EXISTS titan_oidc_login_states (
 CREATE INDEX IF NOT EXISTS titan_oidc_login_states_expiry_idx ON titan_oidc_login_states (expires_at);
 -- Operate scheduled expiry pruning with narrow privileges. Never return pending
 -- state data through public HTTP routes.
+COMMIT;
