@@ -21,6 +21,12 @@ The `dist/` directory contains compiled source for local testing. A future build
 - Results are advisory authorization decisions. The destination app must independently enforce tenant access; Field's PostgreSQL RLS remains authoritative.
 - Production services must use a persistence adapter that fails closed and checks revocation on every authorization or within explicitly bounded caches.
 
+## Logto membership checks (`LogtoManagementVerifier`)
+
+- A cold membership check makes **one** Management API call: `GET /api/users/{userId}/organizations`, then looks for the requested organisation ID in the response. Upstream Logto (v1.45.0, `packages/core/src/routes/admin-user/organization.ts`, `router.get('/users/:userId/organizations')`) does not paginate this endpoint, so the response is capped at 1,000 organisations and fails closed above that. A missing user returns 404 and is rejected. The earlier approach paged `/api/organizations/{id}/users` (up to 25 pages of 100), which was O(members) per check.
+- Positive results are cached per `(organisation, user)` for `membershipCacheTtlMs` (default 30 seconds, maximum 5 minutes, 0 disables). The cache holds at most `membershipCacheMaxEntries` entries (default 1,000, oldest evicted first). Denials are never cached.
+- **Trade-off:** a removed member can still pass a membership check for up to one TTL after removal in Logto. Lower the TTL, or set it to 0, where that window is unacceptable. The cache still saves a call on privileged decisions, since the role check makes a second request (`/roles`) after membership.
+
 ## Scope of this build
 
 Implemented: typed contracts, three app registrations, role/action policy, entitlements, time-limited membership checks, local-account link checks, test suite, and draft SQL.

@@ -34,10 +34,13 @@ export declare class LogtoManagementVerifier {
     private get;
     /** Confirm a Logto identity currently belongs to an independently known organisation.
      * A positive result is reused for at most membershipCacheTtlMs; a cache hit costs zero Logto calls.
-     * Cold lookups exhaust pages (up to a configured safe bound); never infer membership from email or profile.
+     * A cold lookup is exactly one bounded Logto call, independent of organisation size; never infer membership from email or profile.
      */
     assertMembership(logtoUserId: string, logtoOrganisationId: string): Promise<void>;
     private rememberMembership;
+    /** One Logto call: GET /api/users/{userId}/organizations (upstream logto-io/logto v1.45.0,
+     * packages/core/src/routes/admin-user/organization.ts). That endpoint is NOT paginated, so the
+     * response is bounded here instead; a missing user returns 404 and is rejected by get(). */
     private lookupMembership;
     assertIdentity(logtoUserId: string): Promise<void>;
     assertOrganisation(logtoOrganisationId: string): Promise<void>;

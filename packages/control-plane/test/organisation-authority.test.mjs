@@ -11,7 +11,7 @@ function build(members=['user_a'], roles=[{id:role}],err=false){
   if(err)return {ok:false};
   if(u.pathname==='/api/users/user_a')return response({id:'user_a'});
   if(u.pathname==='/api/organizations/org_a')return response({id:'org_a'});
-  if(u.pathname==='/api/organizations/org_a/users')return response(members.map(id=>({id})));
+  if(u.pathname==='/api/users/user_a/organizations')return response(members.includes('user_a')?[{id:'org_a'}]:[]);
   if(u.pathname==='/api/organizations/org_a/users/user_a/roles')return response(roles);
   return {ok:false};
  }});
