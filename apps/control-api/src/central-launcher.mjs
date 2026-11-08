@@ -7,7 +7,7 @@
 const PRODUCTS = Object.freeze(['sorted', 'supercharged', 'lms']);
 const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value);
-const verifiedSubject = value => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\\s\\x00-\\x1f\\x7f]/u.test(value);
+const verifiedSubject = value => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\s\x00-\x1f\x7f]/u.test(value);
 const noStore = Object.freeze({'cache-control':'no-store, private','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"});
 const response = (res,status,body,type='text/plain; charset=utf-8') => {
   res.writeHead(status,{...noStore,'content-type':type});
