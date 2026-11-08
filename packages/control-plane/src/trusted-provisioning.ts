@@ -13,7 +13,7 @@ export class TrustedProvisioningService {
  constructor(private readonly provisioner:CentralProvisioner,private readonly logto:LogtoManagementVerifier,
   private readonly authorize:AuthorizeProvisioning,private readonly resolve:GetCanonicalLogtoId,
   private readonly verifyLocalLink:VerifyLocalLink){}
- async apply(actor:TrustedActor,context:ProvisioningContext,command:ProvisioningCommand):Promise<'created'|'replayed'> {
+ async apply(actor:TrustedActor,context:ProvisioningContext,command:ProvisioningCommand):Promise<'created'|'updated'|'replayed'> {
   if(!actor||actor.managementCredentialVerified!==true||!actor.logtoSubject||actor.logtoSubject!==context.actorSubject) throw Error('unverified provisioning actor');
   // Authorize before querying management services or writing SQL. Fail closed by default.
   if(await this.authorize(actor,command)!==true) throw Error('provisioning forbidden');
@@ -37,6 +37,16 @@ export class TrustedProvisioningService {
     if(!user||!org) throw Error('unverified canonical identity or organisation');
     await this.logto.assertMembership(user,org);
     if(await this.verifyLocalLink(command)!==true)throw Error('unverified application account control');
+    break;
+   }
+   // Reductions (suspend, demote, revoke) must still succeed after Logto has removed the
+   // membership, so no live Logto membership check applies. The organisation must still
+   // resolve canonically; the authorize policy above is the control for the row itself.
+   case 'membership_update':
+   case 'entitlement_update':
+   case 'link_revoke':{
+    const org=await this.resolve('organisation',command.organisationId);
+    if(!org) throw Error('unverified organisation');
     break;
    }
    default:throw Error('unsupported provisioning');

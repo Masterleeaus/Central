@@ -49,6 +49,17 @@ export class TrustedProvisioningService {
                     throw Error('unverified application account control');
                 break;
             }
+            // Reductions (suspend, demote, revoke) must still succeed after Logto has removed the
+            // membership, so no live Logto membership check applies. The organisation must still
+            // resolve canonically; the authorize policy above is the control for the row itself.
+            case 'membership_update':
+            case 'entitlement_update':
+            case 'link_revoke': {
+                const org = await this.resolve('organisation', command.organisationId);
+                if (!org)
+                    throw Error('unverified organisation');
+                break;
+            }
             default: throw Error('unsupported provisioning');
         }
         return this.provisioner.apply(context, command);

@@ -3,7 +3,7 @@
  * Logto remains authoritative for the existence and membership of its organisations.
  */
 import type { ApplicationId, MembershipRole } from './contracts.js';
-import type { SqlPool } from './postgres.js';
+import type { SqlPool, MemberState, GrantState } from './postgres.js';
 export type ProvisioningCommand = {
     kind: 'identity';
     id: string;
@@ -34,6 +34,24 @@ export type ProvisioningCommand = {
     localUserId: string;
     localAccountId: string;
     verifiedAt: string;
+} | {
+    kind: 'membership_update';
+    id: string;
+    organisationId: string;
+    expectedRevision: number;
+    role?: MembershipRole;
+    state?: MemberState;
+} | {
+    kind: 'entitlement_update';
+    id: string;
+    organisationId: string;
+    expectedRevision: number;
+    state: GrantState;
+} | {
+    kind: 'link_revoke';
+    id: string;
+    organisationId: string;
+    expectedRevision: number;
 };
 export interface ProvisioningContext {
     /** Immutable ID from server-validated management credential; NEVER a header supplied by the browser. */
@@ -44,9 +62,11 @@ export interface ProvisioningContext {
 }
 /** Exactly one transaction and one audit event per idempotency key.
  * Conflicts never mutate another identity's mapping. Replays return the original result.
+ * Reductions of access (suspend, demote, revoke) bump the session revocation generation
+ * in the same transaction as the row change and the audit record.
  */
 export declare class CentralProvisioner {
     private readonly pool;
     constructor(pool: SqlPool);
-    apply(context: ProvisioningContext, command: ProvisioningCommand): Promise<'created' | 'replayed'>;
+    apply(context: ProvisioningContext, command: ProvisioningCommand): Promise<'created' | 'updated' | 'replayed'>;
 }
