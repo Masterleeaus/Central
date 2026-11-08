@@ -87,3 +87,11 @@ test('unrecognised paths are delegated without response',async()=>{
   assert.equal(await f.router.handler(req('/v1/access/check'),r),false);
   assert.equal(r.status,0);
 });
+
+test('browser startup validates 256-bit state key from its provided environment',()=>{
+  assert.throws(()=>createCentralBrowserRouter({
+    env:{...env,TITAN_OIDC_STATE_KEY:'bad'},
+    pool:{connect:async()=>{}},
+    getCompanyName:async()=> 'Trusted Company'
+  }),/base64 encoding of 32 bytes/);
+});
