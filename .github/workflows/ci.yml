@@ -92,3 +92,6 @@ jobs:
           test "$out" = "applied 0 migration(s)"
       - name: Two-tenant RLS tests
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Browser-session role isolation and atomic deletion
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_browser_sessions.sql "$TITAN_CI_DATABASE_URL"
