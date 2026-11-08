@@ -65,3 +65,37 @@ test('misregistered callback paths are rejected before OIDC construction',()=>{
     }),TypeError);
   }
 });
+
+test('default company authority performs restricted discovery and current RLS membership check',async()=>{
+  const state=new Map(),trace=[];let nonce;
+  const pool={async connect(){return {
+    async query(sql,args){
+      trace.push([sql,args]);
+      if(sql.includes('central_eligible_companies'))return {rows:[{organisation_id:ORG,logto_organisation_id:'org-logto'}]};
+      if(sql.includes('FROM titan.identities'))return {rows:[{id:'identity-1',logto_subject:'subject-123',state:'active'}]};
+      if(sql.includes('FROM titan.organisations'))return {rows:[{id:ORG,logto_organisation_id:'org-logto',state:'active'}]};
+      if(sql.includes('FROM titan.memberships'))return {rows:[{id:'m1',identity_id:'identity-1',organisation_id:ORG,role:'owner',state:'active',expires_at:null,revision:1}]};
+      if(sql.includes('FROM titan.entitlements'))return {rows:[{id:'e1',organisation_id:ORG,application_id:args[1],state:'active',features:[],expires_at:null,revision:1}]};
+      return {rows:[]};
+    },release(){}
+  }}};
+  const calls=[];
+  const service=createCentralSignInService({
+    pool,sessions:{async issue(value){calls.push(value);return {cookie:'__Host-titan-central='+'A'.repeat(43)+'; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=28800'}}},
+    issuer:'https://issuer.example',clientId:'central-client',clientSecret:'secret',
+    redirectUri:'https://central.example/auth/central/callback',
+    verifyIdToken:async()=>({sub:'subject-123',nonce,iss:'https://issuer.example',aud:'central-client',exp:Math.floor(NOW/1000)+120}),
+    stateStore:{async save(key,value){state.set(key,value);nonce=value.nonce},async consume(key){const record=state.get(key);state.delete(key);return record??null}},
+    fetcher:async()=>({ok:true,json:async()=>({id_token:'id-token',access_token:'access-token',token_type:'Bearer'})}),
+    getCompanyName:async()=> 'Verified Company',clock:()=>NOW
+  });
+  const begin=response();await service.handler({method:'GET',url:'/auth/central/start',headers:{}},begin);
+  const cb=response();await service.handler({method:'GET',url:'/auth/central/callback?state='+new URL(begin.headers.location).searchParams.get('state')+'&code=code',headers:{cookie:begin.headers['set-cookie'].split(';')[0]}},cb);
+  assert.equal(cb.status,303);
+  assert.deepEqual(calls,[{identityId:'subject-123',companyId:ORG}]);
+  const discovery=trace.find(([sql])=>sql.includes('central_eligible_companies'));
+  assert.deepEqual(discovery[1],['subject-123']);
+  assert.ok(trace.some(([sql])=>sql==='SET LOCAL ROLE titan_central_discovery'));
+  assert.ok(trace.some(([sql])=>sql==='SET LOCAL ROLE titan_trusted_reader'));
+  assert.ok(trace.some(([sql,args])=>sql.includes('set_config')&&args[0]===ORG));
+});
