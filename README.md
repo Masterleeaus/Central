@@ -1,6 +1,6 @@
 # Titan Central
 
-Titan Central is the central control plane for the Titan applications (Desk, Field, Academy). It keeps the authorization facts that the apps must agree on: which canonical identity belongs to which organisation, which application entitlements an organisation holds, which local app accounts are verified links to a central identity, and which sessions have been revoked. Logto remains the identity provider. Tenant data stays in each application.
+Titan Central is the central identity and access-control service for Sorted, Supercharged and LMS. It keeps the identity, organisation, entitlement, verified account-link and session-revocation facts these products share. Logto remains the identity provider. The repository still uses the legacy application identifiers field, desk and academy in compatibility-sensitive interfaces; they map to Sorted, Supercharged and LMS, respectively. Tenant data stays in each application.
 
 Status: pre-deployment. The migrations are reviewed drafts, the HTTP service is not deployed, and nothing in this repository has been applied to a live environment. Read [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md) for the decisions and [PASS15_DEPLOYMENT_RUNBOOK.md](PASS15_DEPLOYMENT_RUNBOOK.md) for the gates that must pass before any deployment.
 
@@ -80,7 +80,10 @@ Names only. Values are supplied by the deployment environment and must never be 
 | --- | --- | --- |
 | `TITAN_CENTRAL_DATABASE_URL` | control-api (required) | PostgreSQL connection string for the `titan_central` database. |
 | `TITAN_OIDC_ISSUER` | control-api (required) | Expected token issuer (the Logto OIDC issuer). |
-| `TITAN_OIDC_AUDIENCE` | control-api (required) | Expected token audience. |
+| `TITAN_FIELD_AUDIENCE` | control-api (required) | Expected audience for Sorted (legacy application ID: `field`). |
+| `TITAN_DESK_AUDIENCE` | control-api (required) | Expected audience for Supercharged (legacy application ID: `desk`). |
+| `TITAN_ACADEMY_AUDIENCE` | control-api (required) | Expected audience for LMS (legacy application ID: `academy`). |
+| `TITAN_OIDC_STATE_KEY` | control-api (required for browser login state) | Base64-encoded 32-byte key used to seal short-lived OIDC state. |
 | `TITAN_OIDC_JWKS_URI` | control-api (required) | JWKS endpoint used to verify token signatures. |
 | `TITAN_CENTRAL_PORT` | control-api (optional) | Loopback port. Defaults to 3102. |
 | `TITAN_CI_DATABASE_URL` | CI only | Throwaway PostgreSQL URL for the database steps in CI. |
@@ -96,5 +99,6 @@ cd apps/control-api && npm start   # requires the control-api variables above
 ## Further reading
 
 - [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md): architecture decisions ADR-001 to ADR-007.
-- [PASS15_DEPLOYMENT_RUNBOOK.md](PASS15_DEPLOYMENT_RUNBOOK.md): deployment runbook and gates.
+- [PASS15_DEPLOYMENT_RUNBOOK.md](PASS15_DEPLOYMENT_RUNBOOK.md): integration and production go/no-go gates.
+- [deploy/OPERATIONS.md](deploy/OPERATIONS.md): systemd template installation, secret storage, service operations and rollback.
 - [packages/control-plane/README.md](packages/control-plane/README.md): the authorization library's trust boundaries.
