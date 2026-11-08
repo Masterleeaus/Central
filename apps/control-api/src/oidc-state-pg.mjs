@@ -9,7 +9,7 @@ const digest = value => createHash('sha256').update(value).digest('hex');
 const valid = value => typeof value==='string' && /^[A-Za-z0-9_-]{32,256}$/.test(value);
 const aadFor = (applicationId, stateDigest, field) => `titan_oidc_login_states|${applicationId}|${stateDigest}|${field}`;
 export function createPostgresOidcStateStore({pool,applicationId,clock=()=>Date.now(),sealer=createStateSealerFromEnv()}={}) {
-  if(!pool?.query || !['desk','field','academy'].includes(applicationId) || typeof sealer?.seal!=='function' || typeof sealer?.open!=='function')throw new TypeError('invalid OIDC state store configuration');
+  if(!pool?.query || !['desk','field','academy','central'].includes(applicationId) || typeof sealer?.seal!=='function' || typeof sealer?.open!=='function')throw new TypeError('invalid OIDC state store configuration');
   return {
     async save(state,record) {
       if(!valid(state)||!valid(record?.nonce)||!valid(record?.verifier)||!valid(record?.bindingHash)||!Number.isSafeInteger(record.expiresAt)||record.expiresAt<=clock()||record.expiresAt>clock()+600_000)throw new TypeError('invalid OIDC login state');
