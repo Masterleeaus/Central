@@ -253,3 +253,6 @@ jobs:
 
       - name: Verify restricted staging commit, approval consumption, audit ledger and replay rejection
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_backfill_commit.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Verify outer transaction rollback restores approval and durable audit atomically
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_backfill_atomic_rollback.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
