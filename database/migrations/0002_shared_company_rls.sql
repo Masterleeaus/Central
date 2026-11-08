@@ -33,7 +33,7 @@ ALTER TABLE titan.identities FORCE ROW LEVEL SECURITY;
 CREATE POLICY shared_identity_member_read ON titan.identities FOR SELECT
  TO titan_shared_company_reader USING(
    EXISTS(SELECT 1 FROM titan.company_memberships AS cm
-          WHERE cm.identity_id=id AND cm.company_id=titan.current_company_id())
+          WHERE cm.identity_id=identities.id AND cm.company_id=titan.current_company_id())
  );
 ALTER TABLE titan.company_memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE titan.company_memberships FORCE ROW LEVEL SECURITY;
