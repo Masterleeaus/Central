@@ -9,7 +9,7 @@ const makePool=(handler)=>{const calls=[];let released=0;return {calls,get relea
 test('creates new record with transaction and audit',async()=>{
  const pool=makePool((q)=> q.startsWith('SELECT command_kind')?{rows:[]}:{rows:[{id}],rowCount:1});
  assert.equal(await new CentralProvisioner(pool).apply(context,command),'created');
- assert.equal(pool.calls[0][0],'BEGIN');assert.equal(pool.calls.at(-1)[0],'COMMIT');assert.equal(pool.released,1);
+ assert.equal(pool.calls[0][0],'BEGIN');assert.equal(pool.calls[1][0],'SET LOCAL ROLE titan_trusted_writer');assert.equal(pool.calls.at(-1)[0],'COMMIT');assert.equal(pool.released,1);
  assert.equal(pool.calls.filter(([q])=>q.startsWith('INSERT')).length,2);
  assert.deepEqual(pool.calls.find(([q])=>q.startsWith('INSERT INTO titan.identities'))[1],[id,'usr_123']);
 });

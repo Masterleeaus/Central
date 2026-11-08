@@ -57,7 +57,7 @@ export function createCentralHandler({ pool, verifyToken, issuer, audiences, adm
     const action=url.searchParams.get('action');
     if (!organisationId || !/^[a-f0-9-]{36}$/i.test(organisationId) || !apps.has(applicationId) || !action || !/^[a-z][a-z0-9:_-]{0,79}$/.test(action)) return respond(res,400,{error:'invalid_parameters'});
     try {
-      const decision=await withCentralReadSnapshot(pool, repo=>new CentralAccessService(repo,trust).authorise({principal,organisationId,applicationId,action}));
+      const decision=await withCentralReadSnapshot(pool, organisationId, repo=>new CentralAccessService(repo,trust).authorise({principal,organisationId,applicationId,action}));
       if (!decision.allowed) {
         audit('access_decision',{decision:'deny',application:applicationId,action,organisation_id:organisationId,reason:decision.reason,status:403});
         return respond(res,403,{allowed:false,role:null,reason:decision.reason});
