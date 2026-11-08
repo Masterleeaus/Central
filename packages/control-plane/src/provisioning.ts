@@ -22,7 +22,7 @@ export interface ProvisioningContext {
 const uuid = (v:unknown):v is string=>typeof v==='string' && /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i.test(v);
 const nonempty=(s:unknown,max=256):s is string=>typeof s==='string' && s.length>0 && s.length<=max && s.trim()===s && !/[\x00-\x1f\x7f]/.test(s);
 const roles=new Set(['owner','admin','manager','member','learner']);
-const apps=new Set(['field','desk','academy']);
+const apps=new Set(['sorted','supercharged','lms']);
 const validDate=(d:string|undefined)=>!d || (Number.isFinite(Date.parse(d)) && new Date(d).toISOString()===d);
 function validate(c:ProvisioningCommand, context:ProvisioningContext):void {
   if(!uuid(context.requestId)||!nonempty(context.actorSubject)||!nonempty(context.authorityReference,500)) throw Error('invalid provisioning authority context');

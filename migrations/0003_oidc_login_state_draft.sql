@@ -1,7 +1,7 @@
 -- Apply only to Titan Central's OWN dedicated PostgreSQL database after review.
 -- Do not apply to Logto, titan_desk, ai_fsm or titan_academy databases.
 CREATE TABLE IF NOT EXISTS titan_oidc_login_states (
-  application_id text NOT NULL CHECK (application_id IN ('desk','field','academy')),
+  application_id text NOT NULL CHECK (application_id IN ('supercharged','sorted','lms')),
   state_digest text NOT NULL CHECK (length(state_digest)=64),
   nonce text NOT NULL,
   code_verifier text NOT NULL,

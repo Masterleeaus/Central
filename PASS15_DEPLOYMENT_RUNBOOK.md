@@ -1,49 +1,60 @@
-# Titan Central Pass 15 — Deployment and integration handoff
+# Titan Central — deployment and integration runbook
+
+## Current integration targets
+
+| Product | Repository | Central ID | Data owner |
+|---|---|---|---|
+| Sorted | `Masterleeaus/Sorted` | `sorted` | Sorted |
+| Supercharged | `Masterleeaus/Supercharged` | `supercharged` | Supercharged |
+| LMS | `Masterleeaus/Skilled` | `lms` | LMS |
+
+The old Central identifiers `field`, `desk` and `academy` were replaced before production records existed. They are retained only in earlier pass reports as historical descriptions.
+
+## Ownership and service boundaries
+
+| Component | Owner | Runtime |
+|---|---|---|
+| Logto | Upstream identity provider | Separate service and supported PostgreSQL database |
+| Titan Central | This repository | API, control-plane package and dedicated Central PostgreSQL database |
+| Sorted | `Masterleeaus/Sorted` | Product service, local user/account sessions and business data |
+| Supercharged | `Masterleeaus/Supercharged` | Product service, local sessions and business data |
+| LMS | `Masterleeaus/Skilled` | LMS service, local sessions, training data and caller-scoped integration API |
+
+The repository's `SOURCE_INVENTORY.json` records an audit of an external Logto source archive. The upstream Logto workspace itself is not in this GitHub repository. Logto remains separately deployed and maintained; this Titan Central workspace does not fork or replace its authentication engine.
+
+## Go/no-go requirements
+
+1. Inventory the live host, process manager, supported Node.js and PostgreSQL versions, ports, proxy, certificates and backups. Preserve existing application files and data.
+2. Provision separate Logto and Titan Central databases with least-privilege roles. Review Central migrations before applying them; never apply them to a product database.
+3. Verify the deployed Logto HTTPS discovery document, JWKS, management scopes and signing-key rotation.
+4. Register distinct OIDC clients for Sorted, Supercharged and LMS. Confirm each real origin, exact callback/logout URI and audience with the owning service before enabling sign-in. The example config retains legacy hostnames until deployment DNS is confirmed.
+5. Implement each product's OIDC-to-local-session adapter while preserving its local authorisation checks. Central identity alone does not grant access to product data.
+6. Verify identity and account links with the product that owns the account: Sorted `account_id`, Supercharged's company/account identity, and LMS `companyRef`. Never match by email or accept a client-supplied account ID as proof.
+7. Do not enable tenant-scoped Supercharged access until company tenancy and data isolation are implemented and verified. Sorted must continue to enforce its account-scoped access and RLS. LMS machine credentials and tenant allowlists remain separate from interactive user sign-in.
+8. Wire membership, role, entitlement and link revocation through to every app session. Prove cross-instance invalidation and account switching.
+9. Verify end-to-end login, tenant isolation, logout and rollback for all three products. Enable adapters incrementally behind feature flags.
+10. Production readiness requires actual Logto, database, product-adapter and two-tenant evidence. A passing preflight alone is not proof of security or live integration.
+
+## Read-only preflight
+
+From the repository root:
+
+```sh
+python3 deploy/preflight.py \
+  --config deploy/staging.example.json \
+  --root . \
+  --live /path/to/live/apps
+```
+
+The checked-in example intentionally fails because the runtime, adapters and security checks have not been verified. Do not mark a check true without evidence from the corresponding live environment.
+
+## Rollback
+
+- Back up deployed bundles and databases before enabling product adapters.
+- Keep existing product login routes available until new session flows and rollback have been exercised.
+- Disable Central adapter flags first if callbacks, sessions or tenant checks fail.
+- Preserve Central identity mappings and product data during rollback unless an approved recovery plan requires otherwise.
 
 ## Verified status
-This archive is a **full cumulative SOURCE release**, not an installed product, a replacement for the existing Desk/Field/Academy apps, or evidence of production SSO. No real Logto server, Titan Central database, or three-app login journey has been verified in this development environment. **Do not deploy by extracting over live application directories.**
 
-### Ownership and service boundaries
-| Component | Owner | Expected runtime |
-|---|---|---|
-| Logto | Unmodified upstream `/logto-master` | Independent authentication service, separate supported PostgreSQL DB |
-| Titan Central | `titan-central/packages/control-plane` and `apps/control-api` | Independent service + separate PostgreSQL DB |
-| Titan Desk | `/home/admin/apps/desk` | Existing AgentLabs; app-specific session adapter NOT mounted |
-| Titan Field | `/home/admin/apps/ai-fsm` | Existing operational system; app-specific session adapter NOT mounted |
-| Titan Academy | To be verified on server | LMS integration NOT mounted |
-
-### Go/no-go requirements
-1. Inventory live server: process manager, OS, Node/pnpm, free disk, ports, DirectAdmin proxy, certificates, backups. Never overwrite live local-only changes.
-2. PostgreSQL 13.23 is not a supported foundation for contemporary Logto deployment. Use a supported isolated PostgreSQL instance, or execute separately approved backup-tested upgrade plan. Never run source migrations in the Desk/Field DBs.
-3. Create independent `logto` and `titan_central` databases with separate restricted service roles. Audit/apply Central migrations 0001–0004 only to new Central DB; test RLS and indexing in actual PostgreSQL.
-4. Deploy Logto and verify HTTPS discovery, JWKS, management scopes and signing-key rotation; configure three confidential OIDC clients with exact callback/logout URLs. Never store client secrets in ZIPs.
-5. Reconcile existing app login/session stores and integrate `oidc-http-adapter`, `oidc-app-session`, `session-security` with **real** Desk, Field and Academy sessions. Do not remove original login until rollback tested. Every app must validate Central entitlements and local account links on protected requests.
-6. Verify `app_account_id` / Field account membership mapping independently; never derive tenant from email or arbitrary query params. Validate two tenants and cross-tenant attempts (read, session, link, role changes).
-7. Wire trusted provisioning mutations to revocation generation updates; prove multi-instance invalidation for membership removal, role demotion, entitlement change and account-link revocation.
-8. Complete Logto RP-initiated logout and session revocation across all three apps. The current code supports only app-local logout; **global logout is NOT implemented**.
-9. Run staged complete sign-in → Desk → Field → Academy → logout tests, restart and database-unavailable tests, rollback/recovery rehearsal, privacy/security review. Enable feature flags incrementally.
-10. Only then remove temporary Desk direct-SELECT grants on five Field tables if the signed bridge has been separately validated and can operate without them.
-
-### Safe read-only preflight
-```
-python3 titan-central/deploy/preflight.py \
- --config titan-central/deploy/staging.example.json \
- --root /path/to/extracted/archive \
- --live /home/admin/apps
-```
-The example **must FAIL** because all live deployment flags are false. Do not set any flag true without the corresponding executed evidence. There are no credentials or automatic migrations in the script. A successful exit from this checklist alone **does not prove** production security or function; it is an explicit operator evidence gate.
-
-### Rollback
-- Retain original app login routes and back up exact deployed application bundles and database schema before enabling SSO.
-- Turn off Central/SSO feature flags before reversing proxy and session routing changes.
-- Restore prior app versions if SSO callback/session state cannot be validated.
-- Do not delete identity mappings or drop Logto/Central databases during a failed cutover unless a reviewed recovery plan explicitly requires it.
-
-### Outstanding blockers
-- No deployed Logto or working supported database verified.
-- No live Central PostgreSQL persistence validated.
-- No signed/actual OIDC application registrations confirmed.
-- No real Desk, Field or Academy session adapters mounted and exercised.
-- No global logout integration or real two-tenant security test.
-
-**Decision:** release is staged-source complete, **NOT production-installable**.
+The repository contains the Titan Central source workspace and draft deployment configuration. Live Logto, database migrations, three product adapters, cross-tenant tests, global logout and production rollback have not been verified here. **This source is not production-ready.**

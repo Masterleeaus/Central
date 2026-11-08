@@ -10,14 +10,14 @@ class GateTests(unittest.TestCase):
   def setUp(self): self.data=json.loads(EXAMPLE.read_text())
   def ready(self):
     for name in ('central_db_separate','logto_db_separate','supported_postgres','real_logto_verified','migration_verified','two_tenant_test_passed','global_logout_test_passed','rollback_test_passed'): self.data[name]=True
-    self.data['app_adapter_implemented']={a:True for a in ('desk','field','academy')}
+    self.data['app_adapter_implemented']={a:True for a in ('supercharged','sorted','lms')}
   def test_example_blocks(self): self.assertFalse(assess(self.data)['ready'])
   def test_full_config_ready(self): self.ready();self.assertTrue(assess(self.data)['ready'])
   def test_missing_field_blocks(self): self.ready();del self.data['central_origin'];self.assertFalse(assess(self.data)['ready'])
-  def test_missing_adapter_blocks(self): self.ready();self.data['app_adapter_implemented']['academy']=False;self.assertFalse(assess(self.data)['ready'])
+  def test_missing_adapter_blocks(self): self.ready();self.data['app_adapter_implemented']['lms']=False;self.assertFalse(assess(self.data)['ready'])
   def test_missing_tenant_gate_blocks(self): self.ready();self.data['two_tenant_test_passed']=False;self.assertFalse(assess(self.data)['ready'])
   def test_missing_logout_gate_blocks(self): self.ready();self.data['global_logout_test_passed']=False;self.assertFalse(assess(self.data)['ready'])
-  def test_duplicate_origin_blocks(self): self.ready();self.data['app_origins']['academy']=self.data['app_origins']['desk'];self.assertFalse(assess(self.data)['ready'])
+  def test_duplicate_origin_blocks(self): self.ready();self.data['app_origins']['lms']=self.data['app_origins']['supercharged'];self.assertFalse(assess(self.data)['ready'])
   def test_insecure_origin_blocks(self): self.ready();self.data['oidc_origin']='http://identity.titanzero.io';self.assertFalse(assess(self.data)['ready'])
   def test_origin_with_credentials_blocks(self): self.assertFalse(validate_origin('https://alice:secret@example.com'))
   def test_origin_with_nondefault_port_blocks(self): self.assertFalse(validate_origin('https://example.com:8443'))

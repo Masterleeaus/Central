@@ -1,13 +1,13 @@
 import { CentralAccessService, withCentralReadSnapshot } from '../../../packages/control-plane/dist/index.js';
 
-const apps=new Set(['field','desk','academy']);
+const apps=new Set(['sorted','supercharged','lms']);
 const noStore={ 'cache-control':'no-store', 'content-type':'application/json; charset=utf-8', 'x-content-type-options':'nosniff' };
 function respond(res, status, body) {res.writeHead(status,noStore);res.end(JSON.stringify(body));}
 function bearer(req) {const h=req.headers.authorization;if(typeof h!=='string'||!/^Bearer [A-Za-z0-9_\-.]+$/.test(h)) return;return h.slice(7);}
 /** No administrative mutations or user-controlled SQL. Organisation/app/action are the only request inputs. */
 export function createCentralHandler({ pool, verifyToken, issuer, audience, adminHandler, logger=()=>{} }) {
   if (!pool || !verifyToken || !issuer || !audience) throw new Error('missing Central API dependencies');
-  const trust={expectedIssuer:issuer,audienceByApplication:{field:audience,desk:audience,academy:audience}};
+  const trust={expectedIssuer:issuer,audienceByApplication:{sorted:audience,supercharged:audience,lms:audience}};
   return async (req,res)=>{
     const pathname=new URL(req.url??'/', 'http://localhost').pathname;
     if (req.method==='GET' && pathname==='/healthz') return respond(res,200,{status:'ok'});

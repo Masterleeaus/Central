@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS titan.memberships (
 CREATE TABLE IF NOT EXISTS titan.entitlements (
   id uuid PRIMARY KEY,
   organisation_id uuid NOT NULL REFERENCES titan.organisations(id),
-  application_id text NOT NULL CHECK (application_id IN ('desk','field','academy')),
+  application_id text NOT NULL CHECK (application_id IN ('supercharged','sorted','lms')),
   state text NOT NULL CHECK (state IN ('active','trialing','paused','expired','revoked')),
   features text[] NOT NULL DEFAULT '{}',
   expires_at timestamptz,
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS titan.local_account_links (
   id uuid PRIMARY KEY,
   identity_id uuid NOT NULL REFERENCES titan.identities(id),
   organisation_id uuid NOT NULL REFERENCES titan.organisations(id),
-  application_id text NOT NULL CHECK (application_id IN ('desk','field','academy')),
+  application_id text NOT NULL CHECK (application_id IN ('supercharged','sorted','lms')),
   local_user_id text NOT NULL CHECK(length(local_user_id)>0),
   local_account_id text NOT NULL CHECK(length(local_account_id)>0),
   state text NOT NULL CHECK(state IN ('verified','revoked')),

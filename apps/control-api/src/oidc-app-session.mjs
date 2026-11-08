@@ -1,8 +1,8 @@
 /** Pass 13: Application-owned OIDC session handoff + logout boundary.
- * Does not replace Desk/Field/Academy authentication internals. Each app injects
+ * Does not replace Supercharged/Sorted/Lms authentication internals. Each app injects
  * a trusted local account lookup, atomic session rotation, and revocation.
  */
-const APPS = new Set(['desk', 'field', 'academy']);
+const APPS = new Set(['supercharged', 'sorted', 'lms']);
 const ID = /^[A-Za-z0-9:_-]{1,200}$/;
 const valid = (v) => typeof v === 'string' && ID.test(v);
 const validIssuer = value => {try {const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash&&u.origin===value;}catch{return false;}};

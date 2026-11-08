@@ -1,5 +1,5 @@
 /** Titan Central reusable OIDC Authorization Code + PKCE login flow.
- * Does not modify Logto or implicitly install routes in Desk, Field or Academy.
+ * Does not modify Logto or implicitly install routes in Supercharged, Sorted or Academy.
  * Each application must inject durable, shared, atomic one-use state storage and
  * independently secure HttpOnly SameSite session handling.
  */

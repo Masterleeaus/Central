@@ -1,7 +1,7 @@
 /** Exact, operator-reviewed OIDC client registration plans. No management mutations.
  * Client IDs are assigned by running Logto, not guessed or seeded by the browser.
  */
-export type TitanApp = 'desk' | 'field' | 'academy';
+export type TitanApp = 'supercharged' | 'sorted' | 'lms';
 export interface OidcApplicationPlan {
     app: TitanApp;
     origin: string;

@@ -1,5 +1,5 @@
 /** Titan-owned contracts. Logto remains authoritative for identity and OIDC authentication. */
-export type ApplicationId = 'field' | 'desk' | 'academy';
+export type ApplicationId = 'sorted' | 'supercharged' | 'lms';
 export type IdentityId = string;
 export type OrganisationId = string;
 export type MembershipRole = 'owner' | 'admin' | 'manager' | 'member' | 'learner';

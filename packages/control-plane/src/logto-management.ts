@@ -63,7 +63,7 @@ export class LogtoManagementVerifier {
     if(!obj(org)||org.id!==logtoOrganisationId) throw new LogtoAuthorityError('organisation not found');
   }
   /** Require at least one exact Logto organisation role ID, fetched at decision time.
-   * Does not infer privileges from email, role display names, or local Desk/Field profiles.
+   * Does not infer privileges from email, role display names, or local Supercharged/Sorted profiles.
    */
   async assertAnyOrganisationRole(logtoUserId:string,logtoOrganisationId:string,allowedRoleIds:readonly string[]):Promise<void>{
     if(!identifier(logtoUserId)||!identifier(logtoOrganisationId)||!Array.isArray(allowedRoleIds)||allowedRoleIds.length<1||allowedRoleIds.length>32||!allowedRoleIds.every(identifier))

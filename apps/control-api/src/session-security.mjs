@@ -2,7 +2,7 @@
  * App servers MUST invoke this before serving a protected request. Does not
  * accept tenant/user/role context from client headers or query parameters.
  */
-const APP_IDS = new Set(['desk','field','academy']);
+const APP_IDS = new Set(['supercharged','sorted','lms']);
 const ID = /^[A-Za-z0-9:_-]{1,200}$/;
 const valid = value => typeof value === 'string' && ID.test(value);
 const deny = reason => ({allowed:false,reason});

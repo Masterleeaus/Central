@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from urllib.parse import urlsplit
 
-APPS = ('desk','field','academy')
+APPS = ('supercharged','sorted','lms')
 NEEDED = ('oidc_origin','central_origin','app_origins','callback_paths','logout_paths',
           'central_db_separate','logto_db_separate','supported_postgres',
           'app_adapter_implemented','real_logto_verified','migration_verified',
@@ -58,22 +58,21 @@ def assess(config: dict, root: Path | None = None, live: Path | None = None) -> 
         if not ok:
             issues.append('unverified:'+key)
     if root is not None:
-        for rel in ('logto-master/LICENSE','titan-central/apps/control-api/src/server.mjs',
-                    'titan-central/packages/control-plane/src/index.ts',
-                    'titan-central/migrations/0004_session_revocations_draft.sql'):
+        for rel in ('apps/control-api/src/server.mjs','packages/control-plane/src/index.ts',
+                    'migrations/0004_session_revocations_draft.sql'):
             if not (root/rel).is_file(): issues.append('missing_source:'+rel)
-        manifest=root/'titan-central'/'PASS14_RELEASE_MANIFEST.json'
+        manifest=root/'PASS15_RELEASE_MANIFEST.json'
         if not manifest.is_file(): issues.append('missing_pass14_manifest')
         else:
             try:
                 data=json.loads(manifest.read_text())
-                if data.get('pass')!=14: issues.append('unexpected_baseline')
+                if data.get('pass')!=15: issues.append('unexpected_baseline')
             except (ValueError,OSError): issues.append('invalid_baseline_manifest')
     if live is not None:
-        for app,dirname in (('desk','desk'),('field','ai-fsm')):
+        for app,dirname in (('supercharged','supercharged'),('sorted','sorted')):
             if not (live/dirname).is_dir(): issues.append('missing_live_app:'+app)
-        # Academy presence only; its path may not yet be created.
-        if not (live/'academy').is_dir(): issues.append('missing_live_app:academy')
+        # Lms presence only; its path may not yet be created.
+        if not (live/'lms').is_dir(): issues.append('missing_live_app:lms')
     return {'ready':not issues, 'issues':sorted(set(issues)),'checked':len(NEEDED)}
 
 

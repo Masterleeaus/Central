@@ -27,7 +27,7 @@ export declare class LogtoManagementVerifier {
     assertIdentity(logtoUserId: string): Promise<void>;
     assertOrganisation(logtoOrganisationId: string): Promise<void>;
     /** Require at least one exact Logto organisation role ID, fetched at decision time.
-     * Does not infer privileges from email, role display names, or local Desk/Field profiles.
+     * Does not infer privileges from email, role display names, or local Supercharged/Sorted profiles.
      */
     assertAnyOrganisationRole(logtoUserId: string, logtoOrganisationId: string, allowedRoleIds: readonly string[]): Promise<void>;
 }

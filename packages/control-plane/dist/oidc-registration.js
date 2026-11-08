@@ -5,7 +5,7 @@ function safeOrigin(s) {
     return u.origin;
 }
 export function createTitanOidcRegistrationPlans(origins) {
-    const apps = ['desk', 'field', 'academy'];
+    const apps = ['supercharged', 'sorted', 'lms'];
     const selected = apps.map(app => ({ app, origin: safeOrigin(origins[app]) }));
     if (new Set(selected.map(x => x.origin)).size !== apps.length)
         throw Error('applications require distinct origins');

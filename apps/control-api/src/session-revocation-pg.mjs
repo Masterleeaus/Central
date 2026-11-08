@@ -2,7 +2,7 @@
  * A version increment invalidates all app sessions bound to that user+org+app.
  * Writes must be called exclusively after trusted administrator authority checks.
  */
-const APPS=new Set(['desk','field','academy']);
+const APPS=new Set(['supercharged','sorted','lms']);
 const ID=/^[A-Za-z0-9:_-]{1,200}$/;
 const check=({applicationId,logtoSubject,organisationId})=>{
   if(!APPS.has(applicationId)||![logtoSubject,organisationId].every(v=>typeof v==='string'&&ID.test(v)))throw new TypeError('invalid revocation scope');

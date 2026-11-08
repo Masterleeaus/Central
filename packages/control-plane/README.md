@@ -18,7 +18,7 @@ The `dist/` directory contains compiled source for local testing. A future build
 - A `VerifiedPrincipal` **must only** be provided by an OIDC middleware that checks cryptographic signature, issuer, audience, expiry, nonce/state and PKCE where applicable. This library does not perform those checks.
 - A local account link must only be created after the destination app confirms the authenticated member and their current organisation. The `linkFromVerifiedAssertion()` helper checks structure and freshness but **not** proof signatures.
 - `AccessRequest.organisationId` is a requested context, never a grant. Access is denied unless the authenticated subject has current active membership, a specific app entitlement and a verified local-account link.
-- Results are advisory authorization decisions. The destination app must independently enforce tenant access; Field's PostgreSQL RLS remains authoritative.
+- Results are advisory authorization decisions. The destination app must independently enforce tenant access; Sorted's PostgreSQL RLS remains authoritative.
 - Production services must use a persistence adapter that fails closed and checks revocation on every authorization or within explicitly bounded caches.
 
 ## Scope of this build

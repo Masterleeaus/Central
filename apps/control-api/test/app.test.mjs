@@ -6,8 +6,8 @@ async function run(path,{auth=true,verify=async()=>principal,query=async()=>({ro
 test('health is up without database',async()=>assert.equal((await run('/healthz',{auth:false})).status,200));
 test('rejects requests without bearer',async()=>assert.equal((await run('/v1/access/check',{auth:false})).status,401));
 test('rejects invalid bearer',async()=>assert.equal((await run('/v1/access/check',{verify:async()=>{throw Error('invalid')}})).status,401));
-test('rejects caller-supplied identity',async()=>assert.equal((await run(`/v1/access/check?organisation_id=${ORG}&application=desk&action=read:jobs&user_id=someone`)).status,400));
-test('rejects duplicated tenant params',async()=>assert.equal((await run(`/v1/access/check?organisation_id=${ORG}&organisation_id=${ORG}&application=desk&action=read:jobs`)).status,400));
-test('rejects invalid organisation',async()=>assert.equal((await run('/v1/access/check?organisation_id=none&application=desk&action=read:jobs')).status,400));
-test('denies unknown identity, releases client',async()=>{const r=await run(`/v1/access/check?organisation_id=${ORG}&application=desk&action=read:jobs`);assert.equal(r.status,403);assert.equal(r.calls.at(-1)[0],'RELEASE');assert.ok(r.calls.some(x=>x[0]==='COMMIT'))});
-test('query failure returns 503 and rolls back',async()=>{const r=await run(`/v1/access/check?organisation_id=${ORG}&application=desk&action=read:jobs`,{query:async(sql)=>{if(sql.startsWith('SELECT'))throw Error('db offline');return {rows:[]}}});assert.equal(r.status,503);assert.ok(r.calls.some(x=>x[0]==='ROLLBACK'));});
+test('rejects caller-supplied identity',async()=>assert.equal((await run(`/v1/access/check?organisation_id=${ORG}&application=supercharged&action=read:jobs&user_id=someone`)).status,400));
+test('rejects duplicated tenant params',async()=>assert.equal((await run(`/v1/access/check?organisation_id=${ORG}&organisation_id=${ORG}&application=supercharged&action=read:jobs`)).status,400));
+test('rejects invalid organisation',async()=>assert.equal((await run('/v1/access/check?organisation_id=none&application=supercharged&action=read:jobs')).status,400));
+test('denies unknown identity, releases client',async()=>{const r=await run(`/v1/access/check?organisation_id=${ORG}&application=supercharged&action=read:jobs`);assert.equal(r.status,403);assert.equal(r.calls.at(-1)[0],'RELEASE');assert.ok(r.calls.some(x=>x[0]==='COMMIT'))});
+test('query failure returns 503 and rolls back',async()=>{const r=await run(`/v1/access/check?organisation_id=${ORG}&application=supercharged&action=read:jobs`,{query:async(sql)=>{if(sql.startsWith('SELECT'))throw Error('db offline');return {rows:[]}}});assert.equal(r.status,503);assert.ok(r.calls.some(x=>x[0]==='ROLLBACK'));});

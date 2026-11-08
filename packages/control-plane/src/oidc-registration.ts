@@ -1,7 +1,7 @@
 /** Exact, operator-reviewed OIDC client registration plans. No management mutations.
  * Client IDs are assigned by running Logto, not guessed or seeded by the browser.
  */
-export type TitanApp='desk'|'field'|'academy';
+export type TitanApp='supercharged'|'sorted'|'lms';
 export interface OidcApplicationPlan {
   app:TitanApp;
   origin:string;
@@ -18,7 +18,7 @@ function safeOrigin(s:string):string {
  return u.origin;
 }
 export function createTitanOidcRegistrationPlans(origins:Record<TitanApp,string>):readonly OidcApplicationPlan[]{
- const apps:readonly TitanApp[]=['desk','field','academy'];
+ const apps:readonly TitanApp[]=['supercharged','sorted','lms'];
  const selected=apps.map(app=>({app,origin:safeOrigin(origins[app])}));
  if(new Set(selected.map(x=>x.origin)).size!==apps.length)throw Error('applications require distinct origins');
  return selected.map(({app,origin})=>({

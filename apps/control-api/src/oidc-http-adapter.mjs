@@ -3,7 +3,7 @@
  */
 import { randomBytes } from 'node:crypto';
 
-const allowedApps = new Set(['desk', 'field', 'academy']);
+const allowedApps = new Set(['supercharged', 'sorted', 'lms']);
 const token = () => randomBytes(32).toString('base64url');
 const reply = (res, status, body) => {
   res.writeHead(status, {'cache-control':'no-store','content-type':'application/json; charset=utf-8','x-content-type-options':'nosniff'});

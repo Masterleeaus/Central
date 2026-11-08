@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const valid = value => typeof value==='string' && /^[A-Za-z0-9_-]{32,256}$/.test(value);
 export function createPostgresOidcStateStore({pool,applicationId,clock=()=>Date.now()}={}) {
-  if(!pool?.query || !['desk','field','academy'].includes(applicationId))throw new TypeError('invalid OIDC state store configuration');
+  if(!pool?.query || !['supercharged','sorted','lms'].includes(applicationId))throw new TypeError('invalid OIDC state store configuration');
   return {
     async save(state,record) {
       if(!valid(state)||!valid(record?.nonce)||!valid(record?.verifier)||!valid(record?.bindingHash)||!Number.isSafeInteger(record.expiresAt)||record.expiresAt<=clock()||record.expiresAt>clock()+600_000)throw new TypeError('invalid OIDC login state');

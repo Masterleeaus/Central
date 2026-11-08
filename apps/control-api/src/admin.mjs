@@ -17,8 +17,8 @@ function validCommand(command) {
  if(!isObject(command)||!Object.hasOwn(allowedCommands,command.kind)||!attrs(command,allowedCommands[command.kind])||!uuid(command.id))return false;
  const str = v => typeof v==='string'&&v.length>0&&v.length<=256;
  if(command.kind==='membership')return uuid(command.identityId)&&uuid(command.organisationId)&&['owner','admin','manager','member','learner'].includes(command.role);
- if(command.kind==='entitlement')return uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&Array.isArray(command.features)&&command.features.length<=100&&command.features.every(f=>str(f)&&f.length<=100)&&new Set(command.features).size===command.features.length&&(command.expiresAt===undefined||(str(command.expiresAt)&&Number.isFinite(Date.parse(command.expiresAt))&&new Date(command.expiresAt).toISOString()===command.expiresAt));
- if(command.kind==='link')return uuid(command.identityId)&&uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&str(command.localUserId)&&str(command.localAccountId)&&str(command.verifiedAt)&&Number.isFinite(Date.parse(command.verifiedAt));
+ if(command.kind==='entitlement')return uuid(command.organisationId)&&['supercharged','sorted','lms'].includes(command.applicationId)&&Array.isArray(command.features)&&command.features.length<=100&&command.features.every(f=>str(f)&&f.length<=100)&&new Set(command.features).size===command.features.length&&(command.expiresAt===undefined||(str(command.expiresAt)&&Number.isFinite(Date.parse(command.expiresAt))&&new Date(command.expiresAt).toISOString()===command.expiresAt));
+ if(command.kind==='link')return uuid(command.identityId)&&uuid(command.organisationId)&&['supercharged','sorted','lms'].includes(command.applicationId)&&str(command.localUserId)&&str(command.localAccountId)&&str(command.verifiedAt)&&Number.isFinite(Date.parse(command.verifiedAt));
  return false;
 }
 async function readJson(req, maxBytes=8192) {
