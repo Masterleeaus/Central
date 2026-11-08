@@ -40,7 +40,9 @@ for(const plan of plans){
   });
   test(`${plan.app}: login configuration sends the exact registered redirect_uri`,async()=>{
     const uri=plan.redirectUris[0];
-    const login=createOidcLogin({issuer:'https://id.example',clientId:'client',clientSecret:'secret',redirectUri:uri,
+    const meta={issuer:'https://id.example',authorization_endpoint:'https://id.example/oidc/auth',token_endpoint:'https://id.example/oidc/token'};
+    const fetcher=async()=>({ok:true,redirected:false,json:async()=>meta,text:async()=>JSON.stringify(meta)});
+    const login=createOidcLogin({issuer:'https://id.example',clientId:'client',clientSecret:'secret',redirectUri:uri,fetcher,
       loginStore:{save:async()=>{},consume:async()=>null},verifyIdToken:async()=>({})});
     const {authorizationUrl}=await login.begin({browserBinding:binding});
     assert.equal(new URL(authorizationUrl).searchParams.get('redirect_uri'),uri);
