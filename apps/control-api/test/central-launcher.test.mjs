@@ -54,3 +54,16 @@ test('accepts verified OIDC subjects containing issuer delimiters',async()=>{
  await make({resolveSession:async()=>({identityId:'issuer|user:42',companyId})})({url:'/central',method:'GET'},res);
  assert.equal(res.status,200);
 });
+
+test('sign-out form and same-origin form policy appear only when logout is mounted',async()=>{
+  const res=fakeRes();
+  await make({logoutEnabled:true})({url:'/central',method:'GET'},res);
+  assert.equal(res.status,200);
+  assert.match(res.body,/<form method="post" action="\/auth\/central\/logout">/);
+  assert.match(res.body,/Sign out of Central/);
+  assert.match(res.headers['content-security-policy'],/form-action 'self'/);
+  const without=fakeRes();
+  await make()({url:'/central',method:'GET'},without);
+  assert.doesNotMatch(without.body,/Sign out of Central/);
+  assert.match(without.headers['content-security-policy'],/form-action 'none'/);
+});
