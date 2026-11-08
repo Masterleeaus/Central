@@ -28,9 +28,10 @@ Do this before any production maintenance. Record each result in the table below
 
 | Field | Value |
 | --- | --- |
-| Release tag | _not yet recorded_ |
-| Commit SHA (full) | _not yet recorded_ |
-| Verified by / date | _not yet recorded_ |
+| Release tag | `v1.45.0` (annotated tag object `73218842ea4bc1552531bc2126a75893e9a25f66`) |
+| Commit SHA (full) | `94c088f9e4f87ba93df1f72ed20edf16ce364f61` (the commit the tag peels to) |
+| Verified | `packages/core/package.json` at that commit reports `@logto/core` 1.45.0, license MPL-2.0 (read from GitHub raw). **Not yet done:** comparing the full source tree with the audited ZIP (step 3). Until that comparison is recorded, treat the pin as provisional. |
+| Verified by / date | Recorded by the repository owner's session on 2026-11-08; the tree comparison is still open. |
 
 ## PostgreSQL requirement
 
