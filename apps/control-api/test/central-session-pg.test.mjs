@@ -11,18 +11,18 @@ function setup({fail=false,rows=[]}={}){
     async query(sql,values){
       calls.push({sql,values});
       if(fail && sql.includes('titan.central_browser_sessions'))throw Error('connection lost');
-      return {rows:sql.includes('titan.central_browser_sessions')?rows:[]};
+      return {rows:(sql.includes('titan.central_browser_sessions')||sql.includes('titan.central_issue_browser_session'))?rows:[]};
     },
     release(){released++;}
   };
   const store=createPostgresCentralSessionStore({pool:{connect:async()=>client}});
   return {store,calls,get released(){return released}};
 }
-test('insert binds digest, subject, company and expiry and switches to least-privileged role',async()=>{
+test('issuance calls locked authority function with bound digest, subject, company and expiry',async()=>{
   const ctx=setup({rows:[{token_digest:DIGEST}]});
   await ctx.store.insert({digest:DIGEST,identityId:'issuer|sub',companyId:ID,expiresAt:Date.now()+60000});
   assert.deepEqual(ctx.calls.map(x=>x.sql).slice(0,3),['BEGIN','SET LOCAL ROLE titan_central_sessions',"SET LOCAL statement_timeout = '5000ms'"]);
-  const insert=ctx.calls.find(x=>x.sql.includes('INSERT INTO titan.central_browser_sessions'));
+  const insert=ctx.calls.find(x=>x.sql.includes('central_issue_browser_session'));
   assert.deepEqual(insert.values.slice(0,3),[DIGEST,'issuer|sub',ID]);
   assert.equal(ctx.calls.at(-1).sql,'COMMIT');
   assert.equal(ctx.released,1);
