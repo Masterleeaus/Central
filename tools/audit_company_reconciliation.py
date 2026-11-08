@@ -69,10 +69,48 @@ def query_snapshot(url, query, *, psql='psql'):
         if len(records)>MAX_ROWS:raise RuntimeError('snapshot row limit exceeded')
     return records
 
+def extract_dataset(url, queries, *, psql='psql'):
+    """One REPEATABLE READ snapshot across all tables of a database."""
+    if not isinstance(url,str) or not url.startswith(('postgresql://','postgres://')):
+        raise ValueError('PostgreSQL URL required')
+    if not isinstance(queries,dict) or not queries or any(
+        key not in (LEGACY if queries is LEGACY else CANONICAL) for key in queries
+    ):
+        raise ValueError('untrusted dataset query')
+    # Statically selected queries only. LIMIT + 1 detects oversize, never
+    # silently emits a truncated or misleading comparison.
+    sections = [
+        "SELECT json_build_object('section', " + json.dumps(key) +
+        ", 'record', row_to_json(t))::text AS audit_row FROM (" +
+        sql + f' LIMIT {MAX_ROWS + 1}) t'
+        for key,sql in queries.items()
+    ]
+    script=('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;\n'
+            + 'SELECT audit_row FROM (' + ' UNION ALL '.join(
+                'SELECT audit_row FROM (' + section + ') as section_' + str(i)
+                for i,section in enumerate(sections)) +
+            ') AS dataset;\nROLLBACK;\n')
+    run=subprocess.run([psql,'-X','-A','-t','-q','-v','ON_ERROR_STOP=1','-d',url],
+        input=script,capture_output=True,text=True,timeout=60,check=False)
+    if run.returncode:
+        raise RuntimeError('read-only PostgreSQL dataset snapshot failed')
+    records={key:[] for key in queries}
+    for raw in run.stdout.splitlines():
+        if not raw.strip() or raw in ('BEGIN','ROLLBACK'): continue
+        try: item=json.loads(raw)
+        except (ValueError,TypeError) as exc:
+            raise RuntimeError('invalid dataset snapshot row') from exc
+        if not isinstance(item,dict) or item.get('section') not in records or not isinstance(item.get('record'),dict):
+            raise RuntimeError('invalid dataset snapshot row')
+        key=item['section']
+        records[key].append(item['record'])
+        if len(records[key])>MAX_ROWS:
+            raise RuntimeError('dataset snapshot row limit exceeded')
+    return records
+
 def collect(legacy_url,canonical_url,*,psql='psql'):
     if legacy_url==canonical_url:raise ValueError('legacy and canonical database URLs must differ')
-    return ({key:query_snapshot(legacy_url,sql,psql=psql) for key,sql in LEGACY.items()},
-            {key:query_snapshot(canonical_url,sql,psql=psql) for key,sql in CANONICAL.items()})
+    return extract_dataset(legacy_url,LEGACY,psql=psql),extract_dataset(canonical_url,CANONICAL,psql=psql)
 
 def parse_expiry(value):
     """An explicit UTC instant or None. Naive/unparseable values are blockers."""
@@ -201,6 +239,7 @@ def reconcile(legacy,canonical,*,now=None):
             blockers['unexpected_canonical_verified_user_link']+=1
     return {'schema':'titan.company-reconciliation.v1','read_only':True,
             'migration_authorised':False,'snapshots_atomic_across_databases':False,
+            'snapshots_consistent_within_each_database':True,
             'expiry_tolerance_seconds':EXPIRY_TOLERANCE_SECONDS,
             'row_counts':row_counts,'blockers':dict(sorted(blockers.items())),
             'blocker_count':sum(blockers.values()),
