@@ -271,3 +271,42 @@ transactional cross-database coordinator, signed mapping approvals,
 restorable backup evidence or tested rollback execution exists.
 Do not execute the rehearsal SQL against a live database or
 interpret a candidate count as permission to create access.
+
+## Pass 17 — Signed, rolled-back identity/member rehearsal
+
+`tools/rehearse_signed_backfill.py` exercises a **single, narrow
+staging-only transaction**, not a production backfill. A private manifest
+contains an existing canonical company UUID, reviewed legacy Central
+organisation UUID, exact Logto organisation ID, a proposed new canonical
+identity UUID, Logto subject and one membership role. A separate approval
+artifact HMAC-SHA256-signs the **exact canonical JSON manifest digest**
+with the domain `titan:staging-backfill-rehearsal:v1`, has a maximum
+15-minute validity and is checked using constant-time signature matching.
+Use a random 32-byte secret distinct from all login/OIDC secrets; never
+commit or print it, the manifest or the approval file.
+
+The CLI requires an explicit `--execute-staging-rehearsal`,
+`TITAN_BACKFILL_STAGING_ENABLED=1`, a dedicated canonical staging DB name
+and a valid approval. Inside a **SERIALIZABLE** transaction it acquires
+an advisory lock; checks the exact, previously verified and still-active
+company mapping; rejects duplicate identity IDs and Logto subjects;
+then inserts one **new** canonical identity and one membership. It
+**unconditionally ROLLBACKs**. There is no `COMMIT` path, no update,
+no UPSERT, no implicit company creation, and no bulk data import.
+
+CI signs a synthetic manifest with a throwaway key, runs the rehearsal
+against its disposable `titan_shared_ci` database, then verifies both
+identity and membership counts remain zero. Other tests reject expiry,
+signature mismatch, changed roles, SQL injection, malformed IDs, missing
+feature flags and non-staging database names. A failed SQL statement
+cannot expose private row values in the CLI response.
+
+**Deliberate limitations:** HMAC validates possession of a shared secret,
+not an independently identifiable human signatory or a durable
+approval audit. This rehearsal uses the CI/staging database credential;
+a future actual backfill must use a minimally privileged restricted
+writer, a durable signed and auditable approval record, a staged
+idempotent/rollback procedure, stable source snapshots and verified
+product/Logto policies. The rehearsal is not evidence that a
+production migration can be executed safely, nor is it permission
+to grant those write privileges.
