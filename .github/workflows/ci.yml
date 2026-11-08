@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-only-throwaway
+          POSTGRES_DB: titan_central
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TITAN_CI_DATABASE_URL: postgresql://postgres:ci-only-throwaway@localhost:5432/titan_central
+    steps:
+      - uses: actions/checkout@v4 # major-version pin only
+      - uses: actions/setup-node@v4 # major-version pin only
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5 # major-version pin only
+        with:
+          python-version: '3.13'
+
+      # Dependencies come only from the committed lockfiles.
+      - name: Install control-api dependencies
+        working-directory: apps/control-api
+        run: npm ci
+      - name: Install control-plane dependencies
+        working-directory: packages/control-plane
+        run: npm ci
+
+      # Build to a scratch directory and fail if the committed dist/ differs.
+      # Rebuild with: (cd packages/control-plane && npx tsc -p tsconfig.json)
+      - name: Build control-plane (tsc, scratch output)
+        working-directory: packages/control-plane
+        run: npx tsc -p tsconfig.json --outDir "$RUNNER_TEMP/dist-fresh"
+      - name: Fail if committed control-plane dist is stale
+        working-directory: packages/control-plane
+        run: |
+          if ! diff -r dist "$RUNNER_TEMP/dist-fresh"; then
+            echo "packages/control-plane/dist does not match a fresh build. Run: cd packages/control-plane && npx tsc -p tsconfig.json"
+            exit 1
+          fi
+
+      - name: control-plane tests
+        working-directory: packages/control-plane
+        run: node --test test/*.test.mjs
+      - name: control-api tests
+        working-directory: apps/control-api
+        run: node --test test/*.test.mjs
+
+      - name: Python tests (deploy)
+        run: python3 -m unittest discover -s deploy/tests -p 'test_*.py' -v
+      - name: Python tests (tools and migration runner)
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+      # Check mode: the example config must parse and be assessed as NOT ready (exit 1).
+      # Exit 2 (unreadable) or 0 (ready) fails the job.
+      - name: Preflight check mode
+        run: |
+          set +e
+          python3 deploy/preflight.py --config deploy/staging.example.json > "$RUNNER_TEMP/preflight.json"
+          rc=$?
+          set -e
+          if [ "$rc" -ne 1 ]; then
+            echo "preflight exited $rc; expected 1 (example config is not ready)"
+            cat "$RUNNER_TEMP/preflight.json"
+            exit 1
+          fi
+          python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["ready"] is False' "$RUNNER_TEMP/preflight.json"
+
+      # Database: fresh schema, idempotent re-run, then two-tenant RLS. Any cross-tenant success fails.
+      - name: Apply migrations to a fresh database
+        run: python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL"
+      - name: Re-running migrations applies nothing
+        run: |
+          out=$(python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL")
+          echo "$out"
+          test "$out" = "applied 0 migration(s)"
+      - name: Two-tenant RLS tests
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$TITAN_CI_DATABASE_URL"
