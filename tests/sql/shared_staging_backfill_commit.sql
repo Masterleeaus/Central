@@ -5,30 +5,26 @@ BEGIN;
 INSERT INTO titan.staging_backfill_approvals(
  approval_id,legacy_organisation_id,company_id,logto_organisation_id,
  identity_id,logto_subject,identity_status,membership_role,
- approved_by,change_ticket,expires_at
+ approved_by,change_ticket,created_at,expires_at
 ) VALUES
  ('00000000-0000-4000-8000-000000000701',
   '00000000-0000-4000-8000-000000000001',
   '00000000-0000-4000-8000-000000000011','logto-company-a',
   '00000000-0000-4000-8000-000000000801','staging-ledger-subject',
   'active','member','approved-staging-operator','CI-EXPLICIT-001',
-  now()+interval '5 minutes'),
+  now(),now()+interval '5 minutes'),
  ('00000000-0000-4000-8000-000000000702',
   '00000000-0000-4000-8000-000000000002',
   '00000000-0000-4000-8000-000000000012','logto-company-wrong',
   '00000000-0000-4000-8000-000000000802','staging-wrong-company-subject',
   'active','owner','approved-staging-operator','CI-EXPLICIT-002',
-  now()+interval '5 minutes'),
+  now(),now()+interval '5 minutes'),
  ('00000000-0000-4000-8000-000000000703',
   '00000000-0000-4000-8000-000000000001',
   '00000000-0000-4000-8000-000000000011','logto-company-a',
   '00000000-0000-4000-8000-000000000803','staging-expired-subject',
   'active','member','approved-staging-operator','CI-EXPLICIT-003',
-  now()+interval '1 minute');
-UPDATE titan.staging_backfill_approvals
- SET created_at=now()-interval '20 minutes',
-     expires_at=now()-interval '10 minutes'
- WHERE approval_id='00000000-0000-4000-8000-000000000703';
+  now()-interval '20 minutes',now()-interval '10 minutes');
 COMMIT;
 
 DO $$
