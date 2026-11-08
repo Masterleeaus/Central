@@ -63,3 +63,21 @@ class BackfillPlanTests(unittest.TestCase):
         self.assertNotIn('person-a',str(result))
         self.assertNotIn('org-a',str(result))
         self.assertNotIn('00000000',str(result))
+    def test_mismatched_logto_mapping_never_produces_access_candidates(self):
+        c=target()
+        c['mappings'][0]['logto_organisation_id']='imposter'
+        c['memberships']=[];c['entitlements']=[];c['links']=[]
+        result=plan(source(),c)
+        self.assertEqual(result['conflicts']['mapping_identity_conflict'],1)
+        self.assertEqual(result['candidate_counts']['memberships'],0)
+        self.assertEqual(result['candidate_counts']['entitlements'],0)
+        self.assertEqual(result['candidate_counts']['user_links'],0)
+    def test_inactive_canonical_company_never_produces_access_candidates(self):
+        c=target()
+        c['companies'][0]['status']='suspended'
+        c['memberships']=[];c['entitlements']=[];c['links']=[]
+        result=plan(source(),c)
+        self.assertEqual(result['conflicts']['inactive_mapped_company'],1)
+        self.assertEqual(result['candidate_counts']['memberships'],0)
+        self.assertEqual(result['candidate_counts']['entitlements'],0)
+        self.assertEqual(result['candidate_counts']['user_links'],0)
