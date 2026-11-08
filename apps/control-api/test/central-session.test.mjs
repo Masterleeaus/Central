@@ -11,7 +11,7 @@ function setup(){
   const store={
     async insert(row){if(records.has(row.digest))throw Error('duplicate');records.set(row.digest,row);},
     async find(hash){return records.get(hash)||null;},
-    async delete(hash){records.delete(hash);}
+    async delete(hash){return records.delete(hash);}
   };
   const manager=createCentralSessionManager({store,clock:()=>now,random:()=>TOKENS[index++]});
   return {manager,store,records,setNow:v=>now=v};
@@ -69,4 +69,17 @@ test('store failures fail closed instead of manufacturing access',async()=>{
   const manager=createCentralSessionManager({store,random:()=>TOKENS[0]});
   await assert.rejects(manager.issue({identityId:'subject',companyId:COMPANY}),/db offline/);
   await assert.rejects(manager.resolve(request(`${CENTRAL_COOKIE}=${TOKENS[0]}`)),/db offline/);
+});
+
+test('concurrent rotation attempts cannot reuse a consumed session',async()=>{
+  const {manager}=setup();
+  const initial=await manager.issue({identityId:'subject',companyId:COMPANY});
+  const req=request(initial.cookie.split(';')[0]);
+  const attempts=await Promise.allSettled([
+    manager.rotate(req,{identityId:'subject',companyId:OTHER}),
+    manager.rotate(req,{identityId:'subject',companyId:OTHER})
+  ]);
+  assert.equal(attempts.filter(x=>x.status==='fulfilled').length,1);
+  assert.equal(attempts.filter(x=>x.status==='rejected').length,1);
+  assert.equal(await manager.resolve(req),null);
 });
