@@ -167,3 +167,17 @@ jobs:
           set -e
           test "$rc" -eq 2
           python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["blockers"]["membership_access_mismatch"]==1; assert "audit-person" not in str(r) and not r["migration_authorised"]' "$RUNNER_TEMP/reconciliation-blocked.json"
+
+      - name: Audit must detect entitlement expiry extension
+        run: |
+          psql -X -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "UPDATE titan.company_memberships SET role='owner' WHERE company_id='00000000-0000-4000-8000-000000000011'"
+          psql -X -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "UPDATE titan.application_entitlements SET expires_at='2027-01-01T00:00:00Z' WHERE company_id='00000000-0000-4000-8000-000000000011'"
+          set +e
+          python3 tools/audit_company_reconciliation.py \
+            --legacy-url "$TITAN_CI_DATABASE_URL" \
+            --canonical-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --output "$RUNNER_TEMP/reconciliation-expiry-blocked.json"
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["blockers"]["entitlement_expiry_mismatch"]==1 and r["snapshots_consistent_within_each_database"] and not r["migration_authorised"]' "$RUNNER_TEMP/reconciliation-expiry-blocked.json"
