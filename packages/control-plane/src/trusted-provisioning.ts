@@ -5,9 +5,9 @@
 import type { ProvisioningCommand, ProvisioningContext } from './provisioning.js';
 import { CentralProvisioner } from './provisioning.js';
 import { LogtoManagementVerifier } from './logto-management.js';
-/** `managementCredentialVerified` records that the caller's Logto organisation authority was checked against the
+/** `operatorAuthorityVerified` records that the caller's Logto organisation authority was checked against the
  * Management API for this request. It is NOT evidence that an end-user bearer token is a machine credential. */
-export type TrustedActor={logtoSubject:string; managementCredentialVerified:true};
+export type TrustedActor={logtoSubject:string; operatorAuthorityVerified:true};
 export type AuthorizeProvisioning=(actor:TrustedActor,command:ProvisioningCommand)=>Promise<boolean>;
 export type VerifyLocalLink=(command:Extract<ProvisioningCommand,{kind:'link'}>)=>Promise<boolean>;
 export type GetCanonicalLogtoId=(type:'identity'|'organisation',uuid:string)=>Promise<string|undefined>;
@@ -16,7 +16,7 @@ export class TrustedProvisioningService {
   private readonly authorize:AuthorizeProvisioning,private readonly resolve:GetCanonicalLogtoId,
   private readonly verifyLocalLink:VerifyLocalLink){}
  async apply(actor:TrustedActor,context:ProvisioningContext,command:ProvisioningCommand):Promise<'created'|'updated'|'replayed'> {
-  if(!actor||actor.managementCredentialVerified!==true||!actor.logtoSubject||actor.logtoSubject!==context.actorSubject) throw Error('unverified provisioning actor');
+  if(!actor||actor.operatorAuthorityVerified!==true||!actor.logtoSubject||actor.logtoSubject!==context.actorSubject) throw Error('unverified provisioning actor');
   // Authorize before querying management services or writing SQL. Fail closed by default.
   if(await this.authorize(actor,command)!==true) throw Error('provisioning forbidden');
   switch(command.kind){
