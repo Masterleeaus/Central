@@ -41,18 +41,18 @@ class SharedMigrationTests(unittest.TestCase):
     def test_all_migrations_have_contiguous_order_and_one_transaction(self):
         files=shared.discover(shared.CANONICAL)
         shared.validate_chain(files)
-        self.assertEqual([m.version for m in files],[1,2,3,4,5,6,7,8])
+        self.assertEqual([m.version for m in files],[1,2,3,4,5,6,7,8,9])
         for m in files:
             self.assertIn('BEGIN;',m.text)
             self.assertIn('COMMIT;',m.text)
 
     def test_first_install_uses_authoritative_canonical_registry(self):
         client=MemoryClient()
-        self.assertEqual(shared.run(client,dry_run=True),[1,2,3,4,5,6,7,8])
+        self.assertEqual(shared.run(client,dry_run=True),[1,2,3,4,5,6,7,8,9])
         self.assertEqual(client.scripts,[])
-        self.assertEqual(shared.run(client),[1,2,3,4,5,6,7,8])
+        self.assertEqual(shared.run(client),[1,2,3,4,5,6,7,8,9])
         self.assertEqual(shared.run(client),[])
-        self.assertEqual(len(client.scripts),8)
+        self.assertEqual(len(client.scripts),9)
         for script in client.scripts:
             self.assertIn('pg_advisory_xact_lock',script)
             self.assertIn('INSERT INTO titan.schema_migrations',script)
