@@ -4,6 +4,8 @@
  * verified subject afterwards. Production limits must also be set at the reverse proxy.
  */
 import { randomBytes } from 'node:crypto';
+import { oidcStartPath, oidcCallbackPath } from '../../../packages/control-plane/dist/applications.js';
+import { bindingCookiePolicy, appSessionCookiePolicy, buildPolicyCookie, buildClearCookie, isPolicySetCookie } from './oidc-cookie-policy.mjs';
 import { insecureLocalhostAllowed, isSecureEndpoint } from './endpoint-policy.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
 
@@ -31,8 +33,6 @@ const parseCookies = (req) => {
   return cookies;
 };
 const validBinding = value => typeof value==='string' && /^[A-Za-z0-9_-]{43}$/.test(value);
-const cookieValue = (name,value,ttl) => `${name}=${value}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${ttl}`;
-const clearCookie = name => cookieValue(name,'',0);
 const errorClass = error => (typeof error?.name==='string' ? error.name : 'unknown');
 
 /**
@@ -48,14 +48,19 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
   const ipLimiter=createRateLimiter(rateLimits.ip);
   const subjectLimiter=createRateLimiter(rateLimits.subject);
   const audit=(event,fields={})=>{try{logger(event,{application:applicationId,...fields});}catch{/* logging never alters the outcome */}};
-  const bindingCookie=`titan_${applicationId}_oidc_binding`;
+  const bindingPolicy=bindingCookiePolicy(applicationId);
+  const sessionPolicy=appSessionCookiePolicy(applicationId);
+  const clear=buildClearCookie(bindingPolicy);
 
   async function handle(req,res) {
     let url;
     try {url=new URL(req.url??'/', 'http://localhost');}catch{reply(res,400,{error:'invalid_url'});return true;}
-    const expectedStart=`/auth/titan/${applicationId}/start`;
-    const expectedCallback=`/auth/titan/${applicationId}/callback`;
+    const expectedStart=oidcStartPath(applicationId);
+    const expectedCallback=oidcCallbackPath(applicationId);
+    // Exact match on the raw request target: near-matches (trailing slash, case, encoded slash, dot segments) are not routes.
+    const rawPath=(req.url??'/').split('?')[0];
     if(url.pathname!==expectedStart&&url.pathname!==expectedCallback)return false;
+    if(rawPath!==expectedStart&&rawPath!==expectedCallback)return false;
     if(req.method!=='GET'){reply(res,405,{error:'method_not_allowed'});return true;}
     if(url.pathname===expectedStart){
       if(url.search){reply(res,400,{error:'unexpected_login_parameters'});return true;}
@@ -64,18 +69,17 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
         const {authorizationUrl}=await oidcLogin.begin({browserBinding:binding});
         const authUrl=new URL(authorizationUrl);
         if(!isSecureEndpoint(authUrl.href,allowInsecureLocalhost))throw Error('invalid_authorization_url');
-        redirect(res,authUrl.href,cookieValue(bindingCookie,binding,600));
+        redirect(res,authUrl.href,buildPolicyCookie(bindingPolicy,binding,600));
       }catch(error){audit('login_begin_failed',{error_class:errorClass(error)});reply(res,503,{error:'login_unavailable'});}
       return true;
     }
-    const clear=clearCookie(bindingCookie);
     const fail=(status,reason,extra={})=>{res.writeHead(status,{'cache-control':'no-store','content-type':'application/json','set-cookie':clear,...extra});res.end(JSON.stringify({error:reason}));};
     // Per-IP limit before any state consumption or token exchange.
     const ipDecision=ipLimiter.take(clientIp(req));
     if(!ipDecision.allowed){audit('login_rate_limited',{scope:'ip'});reply(res,429,{error:'rate_limited'},{'retry-after':String(ipDecision.retryAfterSeconds)});return true;}
     if(Array.from(url.searchParams.keys()).some(k=>!['state','code','error','error_description'].includes(k)||url.searchParams.getAll(k).length!==1)) {audit('login_rejected',{reason:'invalid_callback'});fail(400,'invalid_callback');return true;}
     if(url.searchParams.has('error')) {audit('login_rejected',{reason:'identity_provider_rejected'});fail(401,'identity_provider_rejected');return true;}
-    const binding=parseCookies(req)[bindingCookie];
+    const binding=parseCookies(req)[bindingPolicy.name];
     if(!validBinding(binding)||!url.searchParams.get('code')||!url.searchParams.get('state')) {audit('login_rejected',{reason:'invalid_callback'});fail(400,'invalid_callback');return true;}
     try {
       const verified=await oidcLogin.complete({state:url.searchParams.get('state'),code:url.searchParams.get('code'),browserBinding:binding});
@@ -86,7 +90,7 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
       const local=await resolveLocalIdentity({issuer:verified.issuer,subject:verified.subject,applicationId});
       if(!local || !local.authorised || typeof local.localUserId!=='string'||!local.localUserId||typeof local.localAccountId!=='string'||!local.localAccountId||typeof local.organisationId!=='string'||!local.organisationId) {audit('login_denied',{reason:'account_not_authorised'});fail(403,'account_not_authorised');return true;}
       const sessionCookie=await establishSession({applicationId,localUserId:local.localUserId,localAccountId:local.localAccountId,organisationId:local.organisationId,oidcSubject:verified.subject,oidcIssuer:verified.issuer});
-      if(typeof sessionCookie!=='string'||!/^([A-Za-z0-9_-]+)=[A-Za-z0-9_-]+;.*Secure;.*HttpOnly;.*SameSite=/i.test(sessionCookie)||/[\r\n]/.test(sessionCookie))throw Error('unsafe_session_cookie');
+      if(!isPolicySetCookie(sessionPolicy,sessionCookie))throw Error('unsafe_session_cookie');
       res.writeHead(303,{location:afterLogin,'cache-control':'no-store','set-cookie':[clear,sessionCookie]});res.end();
       audit('login_succeeded',{outcome:'allow'});
     }catch(error){

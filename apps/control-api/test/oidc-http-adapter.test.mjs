@@ -5,7 +5,7 @@ const makeRes=()=>({status:null,headers:null,body:'',writeHead(s,h){this.status=
 const token='x'.repeat(43);
 function setup(overrides={}) {
  let begin=0, complete=0, resolve=0, establish=0;
- const adapter=createOidcHttpAdapter({applicationId:'desk',afterLogin:'/workspace',oidcLogin:{async begin(){begin++;return {authorizationUrl:'https://id.example/oidc/auth?state=s'}},async complete(){complete++;return {subject:'uid',issuer:'https://id.example'}}},async resolveLocalIdentity(){resolve++;return {authorised:true,localUserId:'local-42',localAccountId:'account-42',organisationId:'org-42'}},async establishSession(){establish++;return 'desk_sid=validtoken; Path=/; Secure; HttpOnly; SameSite=Lax'},...overrides});
+ const adapter=createOidcHttpAdapter({applicationId:'desk',afterLogin:'/workspace',oidcLogin:{async begin(){begin++;return {authorizationUrl:'https://id.example/oidc/auth?state=s'}},async complete(){complete++;return {subject:'uid',issuer:'https://id.example'}}},async resolveLocalIdentity(){resolve++;return {authorised:true,localUserId:'local-42',localAccountId:'account-42',organisationId:'org-42'}},async establishSession(){establish++;return 'desk_sid='+'v'.repeat(43)+'; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=3600'},...overrides});
  return {adapter,counts:()=>({begin,complete,resolve,establish})};
 }
 const call=async (adapter,url,headers={},method='GET')=>{const res=makeRes();const handled=await adapter({url,method,headers},res);return {handled,res};};
@@ -59,3 +59,23 @@ test('login outcomes are logged as structured fields without tokens, codes or su
  assert.ok(!dump.includes('secret-code-999'),'error text must not be logged');
  assert.ok(!dump.includes(token),'browser binding must not be logged');
 });
+// Session cookies returned by establishSession are validated against the app's cookie policy (issue #31).
+const goodSession=`desk_sid=${'v'.repeat(43)}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=3600`;
+for (const [label,bad] of [
+ ['Domain attribute',`${goodSession}; Domain=.titanzero.io`],
+ ['SameSite=None',goodSession.replace('SameSite=Lax','SameSite=None')],
+ ['duplicate attribute',`${goodSession}; Secure`],
+ ['unknown attribute',`${goodSession}; Foo=bar`],
+ ['CRLF injected second cookie',`${goodSession}\r\nSet-Cookie: evil_sid=x`],
+ ['LF injection',`${goodSession}\nSet-Cookie: evil=1`],
+ ['unexpected cookie name (other app session)',goodSession.replace('desk_sid','field_sid')],
+ ['binding cookie name',goodSession.replace('desk_sid','titan_desk_oidc_binding')],
+ ['missing Max-Age',goodSession.replace('; Max-Age=3600','')],
+ ['unbounded Max-Age',goodSession.replace('Max-Age=3600','Max-Age=99999999')],
+ ['missing HttpOnly',goodSession.replace('HttpOnly; ','')],
+ ['short session value',goodSession.replace('v'.repeat(43),'v'.repeat(8))],
+]) {
+ test(`session cookie refused: ${label}`,async()=>{let issued=0;const x=setup({establishSession:async()=>{issued++;return bad}});const {res}=await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});assert.equal(res.status,401);assert.ok(!String(res.headers['set-cookie']).includes('desk_sid='),'no session cookie is sent');assert.equal(issued,1);});
+}
+test('session cookie accepted only when it matches the policy exactly',async()=>{const x=setup({establishSession:async()=>goodSession});const {res}=await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});assert.equal(res.status,303);assert.ok(res.headers['set-cookie'].includes(goodSession));});
+test('binding and clearing cookies are host-only, exact and bounded',async()=>{const x=setup();const {res}=await call(x.adapter,'/auth/titan/desk/start');const set=res.headers['set-cookie'];assert.match(set,/^titan_desk_oidc_binding=[A-Za-z0-9_-]{43}; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=600$/);assert.ok(!set.includes('Domain'));});
