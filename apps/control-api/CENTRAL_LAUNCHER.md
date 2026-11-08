@@ -135,3 +135,41 @@ PR #46, and its `organisation_id` FK must be migrated to canonical
 New verification: `node --test test/central-session-pg.test.mjs` and
 `psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_browser_sessions.sql
 "$TITAN_CI_DATABASE_URL"` on disposable PostgreSQL after migration 0009.
+
+## Central OIDC browser callback and isolated login state (fifth slice)
+
+`src/central-oidc-browser.mjs` implements exact, rate-limited
+`GET /auth/central/start` and `GET /auth/central/callback` handlers,
+still deliberately unmounted. The callback accepts only one-time OIDC
+state, code and host-only browser binding, and calls an injected
+`oidcLogin.complete` that must verify issuer, audience, nonce and PKCE
+code exchange. Only an independently verified Logto subject can reach
+membership lookup. A single eligible company must be returned; multiple
+eligible companies fail closed until #32 implements bound explicit selection.
+The handler rechecks live company membership before issuing a Central
+session. Query-string company selection is rejected.
+
+Migration `0010_central_oidc_login_namespace.sql` adds the `central`
+application namespace to the existing OIDC state schema. A dedicated
+NOLOGIN `titan_central_oidc` role and FORCE RLS isolate Central's
+state from product writers; `src/central-oidc-state-pg.mjs` reuses
+the AES-256-GCM sealed, atomically consumed state store inside
+transaction-local role changes. The production login credential requires:
+
+```sql
+GRANT titan_central_oidc TO titan_central_app;
+```
+
+The browser flow is **not production-ready**: an operator must register
+the exact Central callback URI with Logto; configure the verified
+OIDC client, secret and issuer discovery (see #30); provide live,
+authoritative company eligibility and recheck implementations; and
+mount the authenticated router only after company selection and
+cross-product revocation behavior are verified. In particular,
+`createCentralOidcBrowserHandler` accepts externally injected
+`listEligibleCompanies` and `recheckCompany` but does not implement
+those callbacks; client-supplied selections must never be accepted.
+
+Test: `node --test test/central-oidc-browser.test.mjs
+test/central-oidc-state-pg.test.mjs` plus
+`tests/sql/central_oidc_state_isolation.sql` in disposable PostgreSQL.
