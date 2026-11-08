@@ -109,3 +109,44 @@ test('partially injected company authority cannot silently bypass trusted RLS ch
     stateStore:{save:async()=>{},consume:async()=>{}}
   }),/trusted Central sign-in dependencies required/);
 });
+
+test('multi-company OIDC callback hands off to one-use selection and issues session after POST',async()=>{
+  const state=new Map(),choices=new Map(),trace=[];
+  let nonce;
+  const A='00000000-0000-4000-8000-000000000001',B='00000000-0000-4000-8000-000000000002';
+  const service=createCentralSignInService({
+    pool:{async connect(){throw Error('injected stores do not touch database')}},
+    sessions:{async issue(payload){trace.push(['issue',payload]);return {cookie:'__Host-titan-central='+'A'.repeat(43)+'; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=28800'}}},
+    issuer:'https://issuer.example',clientId:'central-client',clientSecret:'unit-test-secret',
+    redirectUri:'https://central.example/auth/central/callback',enableCompanySelection:true,
+    verifyIdToken:async()=>({sub:'subject-123',nonce,iss:'https://issuer.example',aud:'central-client',exp:Math.floor(NOW/1000)+120}),
+    listEligibleCompanies:async()=>[{companyId:A,authorised:true},{companyId:B,authorised:true}],
+    listOrganisations:async()=>[{id:A,name:'Alpha & Co'},{id:B,name:'Beta Co'}],
+    recheckCompany:async record=>{trace.push(['recheck',record]);return true},
+    stateStore:{async save(key,value){state.set(key,value);nonce=value.nonce},async consume(key){const record=state.get(key);state.delete(key);return record??null}},
+    selectionStore:{async save(key,value){choices.set(key,value)},async consume(key){const record=choices.get(key);choices.delete(key);return record??null}},
+    fetcher:async()=>({ok:true,json:async()=>({id_token:'signed-token',access_token:'access-token',token_type:'Bearer'})}),
+    clock:()=>NOW
+  });
+  const start=response();await service.handler({method:'GET',url:'/auth/central/start',headers:{}},start);
+  const binding=start.headers['set-cookie'].split(';')[0];
+  const oidcState=new URL(start.headers.location).searchParams.get('state');
+  const callback=response();
+  await service.handler({method:'GET',url:'/auth/central/callback?state='+oidcState+'&code=auth-code',headers:{cookie:binding}},callback);
+  assert.equal(callback.status,200);
+  assert.match(callback.body,/Choose your company/);
+  assert.match(callback.body,/Alpha &amp; Co/);
+  assert.equal(trace.length,0);
+  const choiceState=/name="state" value="([^"]+)"/.exec(callback.body)?.[1];
+  assert.ok(choices.has(choiceState));
+  const request={method:'POST',url:'/auth/central/select',headers:{cookie:binding,origin:'https://central.example','content-type':'application/x-www-form-urlencoded'},
+    async *[Symbol.asyncIterator](){yield Buffer.from('state='+choiceState+'&organisation_id='+B)}};
+  const selected=response();await service.handler(request,selected);
+  assert.equal(selected.status,303);
+  assert.equal(selected.headers.location,'/central');
+  assert.deepEqual(trace.map(x=>x[0]),['recheck','issue']);
+  assert.deepEqual(trace.at(-1)[1],{identityId:'subject-123',companyId:B});
+  const replay=response();await service.handler(request,replay);
+  assert.equal(replay.status,403);
+  assert.equal(trace.filter(x=>x[0]==='issue').length,1);
+});
