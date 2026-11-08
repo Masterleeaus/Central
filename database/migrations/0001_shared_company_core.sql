@@ -50,6 +50,21 @@ CREATE TABLE titan.application_entitlements (
   UNIQUE (company_id, application_id)
 );
 
+-- Transitional mapping from each app's pre-unification tenant identifier to
+-- the canonical UUID. This can be retired after every app has adopted company_id.
+CREATE TABLE titan.application_company_links (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES titan.companies(id) ON DELETE RESTRICT,
+  application_id text NOT NULL CHECK (application_id IN ('sorted', 'skilled', 'supercharged')),
+  local_company_id text NOT NULL CHECK (length(btrim(local_company_id)) > 0),
+  status text NOT NULL DEFAULT 'verified' CHECK (status IN ('verified', 'revoked')),
+  verified_at timestamptz NOT NULL DEFAULT now(),
+  revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (company_id, application_id),
+  UNIQUE (application_id, local_company_id)
+);
+
 -- A shared identity can map to an app-specific user/profile ID. The app-local
 -- user IDs stay text because the current repos use different ID formats.
 CREATE TABLE titan.application_user_links (
@@ -70,6 +85,8 @@ CREATE INDEX titan_membership_identity_status_idx
   ON titan.company_memberships(identity_id, status);
 CREATE INDEX titan_entitlement_company_status_idx
   ON titan.application_entitlements(company_id, status);
+CREATE INDEX titan_company_link_app_local_idx
+  ON titan.application_company_links(application_id, local_company_id);
 CREATE INDEX titan_user_link_app_local_idx
   ON titan.application_user_links(application_id, local_user_id);
 
