@@ -79,3 +79,17 @@ class AuditTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'snapshot failed') as error:
                 audit.query_snapshot('postgresql://user:secret_password@localhost:5432/test','SELECT 1')
             self.assertNotIn('secret_password',str(error.exception))
+
+    def test_unexpected_active_canonical_access_is_a_blocker(self):
+        c=target()
+        c['memberships'].append({'company_id':B,'identity_id':'unknown-user','role':'owner','status':'active'})
+        c['entitlements'].append({'company_id':B,'application_id':'supercharged','status':'active'})
+        c['links'].append({'company_id':B,'identity_id':'unknown-user','application_id':'supercharged','status':'verified','local_user_id':'extra-user'})
+        r=audit.reconcile(source(),c)
+        self.assertEqual(r['blockers']['unexpected_canonical_active_membership'],1)
+        self.assertEqual(r['blockers']['unexpected_canonical_active_entitlement'],1)
+        self.assertEqual(r['blockers']['unexpected_canonical_verified_user_link'],1)
+    def test_different_entitlement_features_are_detected(self):
+        s=source();s['entitlements'][0]['features']=['invoices']
+        r=audit.reconcile(s,target())
+        self.assertEqual(r['blockers']['entitlement_features_mismatch'],1)
