@@ -279,3 +279,6 @@ jobs:
         run: |
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_issuer_login_setup.sql "$TITAN_SHARED_CI_DATABASE_URL"
           python3 tests/integration/staging_approval_concurrency.py
+
+      - name: Verify immutable approval and audit record hashes and tamper detection
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_approval_integrity.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
