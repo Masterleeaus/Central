@@ -368,3 +368,39 @@ Central listens on loopback behind a proxy, the per-socket application key
 will normally be the proxy address. The public nginx/Apache proxy must
 enforce the per-client limits documented in `deploy/proxy/README.md`.
 Do not trust HTTP forwarding headers supplied by clients.
+
+## Mega pass — verified selection boundary and account-link proof (issues #32, #37)
+
+The verified OIDC callback now strictly validates the original eligible company
+list (IDs unique, typed `authorised` booleans and bounded count). For a
+multi-company choice it passes ONLY the originally authorised IDs into
+`organisation-selection.mjs`. That coordinator intersects later discovered
+company names with the original verified set; even a trusted naming provider
+returning extra companies cannot expand the user's original selection rights.
+The posted choice still needs the one-use browser-bound state, fresh tenant RLS
+membership/entitlement recheck and a newly issued host-only Central session.
+Foreign, revoked, replayed, missing-cookie and malformed selections fail closed.
+
+Storage now validates decrypted issuer and subject as well as the encrypted
+company list before returning a consumed state. Cross-tenant discovery detects
+duplicate Logto organisation mappings. Session rotation rejects a no-op
+same-company change; the PostgreSQL adapter verifies returned digest and
+validates session rows. OIDC origin/callback and launcher error paths are
+constrained more strictly.
+
+The concurrently integrated product-proof contract introduces a **product
+Ed25519 signature requirement** for local-account linking, independently
+pinned verification keys and a durable one-use PostgreSQL proof-nonce ledger
+(migration `0016_product_link_proof_nonces.sql`). These proofs are intended
+for destination-product backends rather than arbitrary browser claims.
+New tests cover mismatched subjects/companies, stale evidence, replay and
+atomic nonce contention. **It is still not a complete user-facing
+link/unlink lifecycle:** each product must deploy and verify its signing
+adapter, and Central must implement reviewed relink/unlink operations with
+revision checks, audit and cross-product session revocation.
+
+**Issue closure status:** #32 stays OPEN until product-side app-session
+handoff and account-switching are exercised with real integrations and
+isolation; #37 stays OPEN until end-to-end product link/relink/unlink
+and revocation controls are integrated. Source/tests alone are not
+proof of deployed Logto or application connectivity.
