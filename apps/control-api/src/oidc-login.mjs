@@ -149,7 +149,8 @@ export function createOidcLogin({issuer,clientId,clientSecret,redirectUri,loginS
       let principal;
       try { principal=await verifyIdToken(tokens.id_token); }catch{throw new TitanOidcLoginError('invalid_identity_token');}
       if(!principal || !safeString(principal.sub)||principal.nonce!==transaction.nonce || principal.iss!==issuer || !(principal.aud===clientId||(Array.isArray(principal.aud)&&principal.aud.includes(clientId))) || !Number.isSafeInteger(principal.exp)||principal.exp<=Math.floor(clock()/1000))throw new TitanOidcLoginError('invalid_identity_claims');
-      return {subject:principal.sub,issuer:principal.iss,verifiedAt:new Date(clock()).toISOString()};
+      // idToken is the verified raw token, returned only so the app adapter can seal it for logout (issue #6). Never logged.
+      return {subject:principal.sub,issuer:principal.iss,verifiedAt:new Date(clock()).toISOString(),idToken:tokens.id_token};
     }
   };
 }
