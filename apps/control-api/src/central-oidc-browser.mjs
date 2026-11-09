@@ -30,10 +30,16 @@ function readBinding(req){
   }
   return found;
 }
-function uniqueEligible(entries){
-  if(!Array.isArray(entries)||entries.length!==1)return null;
-  const candidate=entries[0];
-  return candidate?.authorised===true && typeof candidate.companyId==='string' && UUID.test(candidate.companyId)?candidate.companyId:null;
+function eligibleCompanyIds(entries){
+  if(!Array.isArray(entries)||entries.length>128)return null;
+  const seen=new Set(),eligible=[];
+  for(const item of entries){
+    if(!item||typeof item.companyId!=='string'||!UUID.test(item.companyId)||
+      typeof item.authorised!=='boolean'||seen.has(item.companyId))return null;
+    seen.add(item.companyId);
+    if(item.authorised)eligible.push(item.companyId);
+  }
+  return eligible;
 }
 /** listEligibleCompanies and recheckCompany MUST query authoritative membership
  * records, not browser claims or cached profile metadata. Multi-company users
@@ -88,10 +94,11 @@ export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligible
       if(!subjectLimiter.take(verified.subject).allowed){fail(429,'rate_limited');return true;}
       const identity={issuer:verified.issuer,subject:verified.subject};
       const eligible=await listEligibleCompanies(identity);
-      const companyId=uniqueEligible(eligible);
+      const companyIds=eligibleCompanyIds(eligible);
+      const companyId=companyIds?.length===1?companyIds[0]:null;
       if(!companyId){
-        if(Array.isArray(eligible)&&eligible.length>1&&selectionFlow){
-          await selectionFlow.begin({...identity,browserBinding},res);
+        if(companyIds?.length>1&&selectionFlow){
+          await selectionFlow.begin({...identity,browserBinding,allowedCompanyIds:companyIds},res);
           return true;
         }
         fail(403,'company_selection_required');return true;
