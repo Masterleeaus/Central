@@ -71,3 +71,20 @@ test('link revoke bumps only the linked application',async()=>{
  await service(linkPool).apply(actor,ctx(6),{kind:'link_revoke',id:IDENT,organisationId:ORG,expectedRevision:1});
  assert.equal(db.generations.get('field|usr_1|'+ORG),1);assert.equal(db.generations.get('desk|usr_1|'+ORG),undefined);
 });
+
+test('unlink revokes the affected product session and leaves the other products sessions valid',async()=>{
+ const {db,pool}=makeDatabase();
+ const linkPool={connect:async()=>({query:async(q,p)=>{if(q.includes('FOR UPDATE OF l'))return {rows:[{organisation_id:ORG,application_id:'field',state:'verified',revision:1,logto_subject:'usr_1'}]};if(q.startsWith('UPDATE titan.local_account_links'))return {rowCount:1,rows:[]};return pool().query(q,p)},release(){}}),query:pool().query};
+ const guardForApp=(applicationId)=>createProtectedSessionGuard({applicationId,clock:()=>1000,
+  loadSession:async()=>({applicationId,localUserId:'u1',localAccountId:'a1',organisationId:ORG,logtoSubject:'usr_1',generation:0,expiresAt:900000}),
+  readVersion:args=>createPostgresSessionRevocations({pool:pool()}).readVersion(args),
+  checkAccess:async()=>({allowed:true,applicationId,organisationId:ORG,localUserId:'u1',localAccountId:'a1'}),
+  checkLocalAccount:async()=>true});
+ assert.equal((await guardForApp('field')({sessionId:'s_field'})).allowed,true);
+ assert.equal((await guardForApp('desk')({sessionId:'s_desk'})).allowed,true);
+ assert.equal(await service(linkPool).apply(actor,ctx(20),{kind:'link_revoke',id:IDENT,organisationId:ORG,expectedRevision:1}),'updated');
+ assert.equal((await guardForApp('field')({sessionId:'s_field'})).reason,'session_revoked');
+ assert.equal((await guardForApp('desk')({sessionId:'s_desk'})).allowed,true);
+ assert.equal(db.generations.get('field|usr_1|'+ORG),1);
+ assert.equal(db.generations.get('desk|usr_1|'+ORG),undefined);
+});

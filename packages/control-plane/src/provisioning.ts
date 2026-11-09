@@ -1,7 +1,10 @@
 /** Server-side provisioning; this module MUST NOT be called with unverified browser claims.
  * The caller must validate Logto management credentials, actor authority, and consent.
  * Logto remains authoritative for the existence and membership of its organisations.
+ * Account links are written only here. Their assertions are verified by TrustedProvisioningService
+ * before this class is called (see link-assertion.ts and docs/LINKING.md).
  */
+import { createHash } from 'node:crypto';
 import type { ApplicationId, MembershipRole } from './contracts.js';
 import type { SqlPool, SqlClient, MemberState, GrantState } from './postgres.js';
 import { recordActivity } from './activity-events.js';
@@ -12,12 +15,27 @@ export type ProvisioningCommand =
  | { kind:'organisation'; id:string; logtoOrganisationId:string }
  | { kind:'membership'; id:string; identityId:string; organisationId:string; role:MembershipRole }
  | { kind:'entitlement'; id:string; organisationId:string; applicationId:ApplicationId; features:readonly string[]; expiresAt?:string }
- | { kind:'link'; id:string; identityId:string; organisationId:string; applicationId:ApplicationId; localUserId:string; localAccountId:string; verifiedAt:string }
+ | { kind:'link'; id:string; identityId:string; organisationId:string; applicationId:ApplicationId; localUserId:string; localAccountId:string; assertion:string }
+ | { kind:'link_relink'; id:string; identityId:string; organisationId:string; applicationId:ApplicationId; expectedRevision:number; localUserId:string; localAccountId:string; assertion:string }
  | { kind:'membership_update'; id:string; organisationId:string; expectedRevision:number; role?:MembershipRole; state?:MemberState }
  | { kind:'entitlement_update'; id:string; organisationId:string; expectedRevision:number; state:GrantState }
  | { kind:'link_revoke'; id:string; organisationId:string; expectedRevision:number };
 
 type CreateCommand = Extract<ProvisioningCommand, { kind:'identity'|'organisation'|'membership'|'entitlement'|'link' }>;
+type LinkCommand = Extract<ProvisioningCommand, { kind:'link' }>;
+type RelinkCommand = Extract<ProvisioningCommand, { kind:'link_relink' }>;
+type LinkWrite = LinkCommand | RelinkCommand;
+
+/** Why an account link was not written and was recorded for review instead. Fail closed; nothing is auto-resolved. */
+export type LinkReviewReason = 'existing_link_other_account' | 'account_claimed_elsewhere' | 'concurrent_conflict';
+
+/** Thrown after the review row and its audit row have committed. The link itself was NOT written. */
+export class LinkReviewRequired extends Error {
+ constructor(readonly reason:LinkReviewReason, readonly reviewId:string){ super(`account link recorded for review: ${reason}`); this.name='LinkReviewRequired'; }
+}
+class LinkReviewSignal extends Error {
+ constructor(readonly reason:LinkReviewReason){ super(`account link needs review: ${reason}`); this.name='LinkReviewSignal'; }
+}
 
 export interface ProvisioningContext {
  /** Immutable ID from server-validated management credential; NEVER a header supplied by the browser. */
@@ -33,12 +51,16 @@ const roles=new Set(['owner','admin','manager','member','learner']);
 const apps=new Set(['field','desk','academy']);
 const memberStates=new Set<MemberState>(['active','invited','suspended','revoked']);
 const grantStates=new Set<GrantState>(['active','trialing','paused','expired','revoked']);
+/** Compact JWS shape only; the signature itself is verified by TrustedProvisioningService. */
+const assertionShape=(v:unknown):v is string=>typeof v==='string' && v.length<=4096 && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v);
 /** Role rank used only to detect demotion; higher is more privileged. */
 const ROLE_RANK: Record<MembershipRole, number> = { learner:0, member:1, manager:2, admin:3, owner:4 };
 /** Every application whose sessions must be revoked when a member's access is reduced. */
 const SESSION_APPS: readonly ApplicationId[] = ['desk','field','academy'];
 const validDate=(d:string|undefined)=>!d || (Number.isFinite(Date.parse(d)) && new Date(d).toISOString()===d);
 const isCreate=(c:ProvisioningCommand):c is CreateCommand=>c.kind==='identity'||c.kind==='organisation'||c.kind==='membership'||c.kind==='entitlement'||c.kind==='link';
+const sameUuid=(a:unknown,b:string)=>String(a).toLowerCase()===b.toLowerCase();
+const isUniqueViolation=(e:unknown)=>(e as {code?:unknown})?.code==='23505';
 function validate(c:ProvisioningCommand, context:ProvisioningContext):void {
   if(!uuid(context.requestId)||!nonempty(context.actorSubject)||!nonempty(context.authorityReference,500)) throw Error('invalid provisioning authority context');
   if (!uuid(c.id)) throw Error('invalid provisioning identifier');
@@ -47,7 +69,11 @@ function validate(c:ProvisioningCommand, context:ProvisioningContext):void {
     case 'organisation':if(!nonempty(c.logtoOrganisationId)) throw Error('invalid organisation subject');break;
     case 'membership':if(!uuid(c.identityId)||!uuid(c.organisationId)||!roles.has(c.role)) throw Error('invalid membership');break;
     case 'entitlement':if(!uuid(c.organisationId)||!apps.has(c.applicationId)||!Array.isArray(c.features)||c.features.length>100||!c.features.every(f=>nonempty(f,100))||new Set(c.features).size!==c.features.length||!validDate(c.expiresAt)) throw Error('invalid entitlement');break;
-    case 'link':if(!uuid(c.identityId)||!uuid(c.organisationId)||!apps.has(c.applicationId)||!nonempty(c.localUserId)||!nonempty(c.localAccountId)||(!nonempty(c.verifiedAt) || !validDate(c.verifiedAt))) throw Error('invalid account link');break;
+    case 'link':
+    case 'link_relink':
+      if(!uuid(c.identityId)||!uuid(c.organisationId)||!apps.has(c.applicationId)||!nonempty(c.localUserId)||!nonempty(c.localAccountId)||!assertionShape(c.assertion)
+        ||(c.kind==='link_relink'&&!revision(c.expectedRevision))) throw Error('invalid account link');
+      break;
     case 'membership_update':
       if(!uuid(c.organisationId)||!revision(c.expectedRevision)||(c.role===undefined&&c.state===undefined)||(c.role!==undefined&&!roles.has(c.role))||(c.state!==undefined&&!memberStates.has(c.state))) throw Error('invalid membership update');break;
     case 'entitlement_update':
@@ -60,8 +86,9 @@ function validate(c:ProvisioningCommand, context:ProvisioningContext):void {
 
 /** Exactly one transaction and one audit event per idempotency key.
  * Conflicts never mutate another identity's mapping. Replays return the original result.
- * Reductions of access (suspend, demote, revoke) bump the session revocation generation
+ * Reductions of access (suspend, demote, revoke, unlink, relink) bump the session revocation generation
  * in the same transaction as the row change and the audit record.
+ * Ambiguous account-link cases commit a review row and an audit row, change no link, and throw LinkReviewRequired.
  */
 export class CentralProvisioner {
  constructor(private readonly pool:SqlPool){}
@@ -81,7 +108,20 @@ export class CentralProvisioner {
     if(previous.rows.length!==1||previous.rows[0].command_kind!==command.kind||previous.rows[0].command_digest!==digest) throw Error('provisioning request ID reused with different payload');
     await conn.query('COMMIT');begun=false;return 'replayed';
    }
-   const outcome = isCreate(command) ? (await insertProvisioning(conn,command), 'created' as const) : (await applyUpdate(conn,command), 'updated' as const);
+   let outcome:'created'|'updated';
+   try {
+    outcome = isCreate(command) ? (await insertProvisioning(conn,command), 'created') : (await applyUpdate(conn,command), 'updated');
+   } catch (e) {
+    if(!(e instanceof LinkReviewSignal)) throw e;
+    // Fail closed: the link is not written. The review and the audit record commit, then the caller is told.
+    // Only link and link_relink can raise LinkReviewSignal, so the command has the link fields.
+    const link=command as LinkWrite;
+    const review=await conn.query('INSERT INTO titan.link_reviews (request_id,identity_id,organisation_id,application_id,local_account_id,reason,command_kind) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+     [context.requestId,link.identityId,link.organisationId,link.applicationId,link.localAccountId,e.reason,link.kind]);
+    await conn.query('INSERT INTO titan.provisioning_audit(request_id,actor_subject,authority_reference,command_kind,command_digest,subject_id) VALUES ($1,$2,$3,$4,$5,$6)',[context.requestId,context.actorSubject,context.authorityReference,command.kind,digest,command.id]);
+    await conn.query('COMMIT');begun=false;
+    throw new LinkReviewRequired(e.reason,String(review.rows[0]?.id??''));
+   }
    await conn.query('INSERT INTO titan.provisioning_audit(request_id,actor_subject,authority_reference,command_kind,command_digest,subject_id) VALUES ($1,$2,$3,$4,$5,$6)',[context.requestId,context.actorSubject,context.authorityReference,command.kind,digest,command.id]);
    // Activity history (issue #36): same transaction, so a refused event rolls back the lifecycle change.
    const activity=activityFor(command,context);
@@ -107,21 +147,39 @@ function activityFor(c:ProvisioningCommand,context:ProvisioningContext):Activity
   case 'link_revoke': return {...base,organisationId:c.organisationId,action:'account_link.revoke',targetType:'account_link',targetId:c.id};
  }
 }
+/** Replay digest: the assertion is replaced by its SHA-256, so no signed token is stored in the audit table. */
 /** Consistent serialized payload for replay detection; no cryptographic claims: stored audit text is not a signature. */
 function stableDigest(command:ProvisioningCommand):string {
- const sorted=Object.fromEntries(Object.entries(command).sort(([a],[b])=>a.localeCompare(b)));
+ const source:Record<string,unknown>={...command};
+ if('assertion' in command){delete source.assertion;source.assertionSha256=createHash('sha256').update(command.assertion).digest('hex');}
+ const sorted=Object.fromEntries(Object.entries(source).sort(([a],[b])=>a.localeCompare(b)));
  return JSON.stringify(sorted);
 }
 async function insertProvisioning(conn:SqlClient,c:CreateCommand):Promise<void>{
+ if(c.kind==='link'){await createLink(conn,c);return;}
  let result;
  switch(c.kind){
   case 'identity': result=await conn.query("INSERT INTO titan.identities (id,logto_subject,state) VALUES ($1,$2,'active') ON CONFLICT DO NOTHING RETURNING id",[c.id,c.logtoSubject]);break;
   case 'organisation':result=await conn.query("INSERT INTO titan.organisations (id,logto_organisation_id,state) VALUES ($1,$2,'active') ON CONFLICT DO NOTHING RETURNING id",[c.id,c.logtoOrganisationId]);break;
   case 'membership':result=await conn.query("INSERT INTO titan.memberships(id,identity_id,organisation_id,role,state) VALUES ($1,$2,$3,$4,'active') ON CONFLICT DO NOTHING RETURNING id",[c.id,c.identityId,c.organisationId,c.role]);break;
   case 'entitlement':result=await conn.query("INSERT INTO titan.entitlements(id,organisation_id,application_id,state,features,expires_at) VALUES ($1,$2,$3,'active',$4,$5) ON CONFLICT DO NOTHING RETURNING id",[c.id,c.organisationId,c.applicationId,c.features,c.expiresAt??null]);break;
-  case 'link':result=await conn.query("INSERT INTO titan.local_account_links(id,identity_id,organisation_id,application_id,local_user_id,local_account_id,state,verified_at) VALUES ($1,$2,$3,$4,$5,$6,'verified',$7) ON CONFLICT DO NOTHING RETURNING id",[c.id,c.identityId,c.organisationId,c.applicationId,c.localUserId,c.localAccountId,c.verifiedAt]);break;
  }
  if(result?.rowCount!==1) throw Error('provisioning conflict: existing record requires explicit review');
+}
+
+/** Create a verified link. Existing rows for the identity, organisation and application are never overwritten.
+ * A local account already verified for another identity or organisation is ambiguous and goes to review. */
+async function createLink(conn:SqlClient,c:LinkCommand):Promise<void>{
+ const same=await conn.query('SELECT state, local_account_id FROM titan.local_account_links WHERE identity_id=$1 AND organisation_id=$2 AND application_id=$3 FOR UPDATE',[c.identityId,c.organisationId,c.applicationId]);
+ if(same.rows.length>0){
+  if(String(same.rows[0].state)==='verified'&&String(same.rows[0].local_account_id)!==c.localAccountId) throw new LinkReviewSignal('existing_link_other_account');
+  throw Error('provisioning conflict: existing link requires explicit relink or unlink');
+ }
+ const claimed=await conn.query("SELECT id FROM titan.local_account_links WHERE application_id=$1 AND local_account_id=$2 AND state='verified' FOR UPDATE",[c.applicationId,c.localAccountId]);
+ if(claimed.rows.length>0) throw new LinkReviewSignal('account_claimed_elsewhere');
+ // ON CONFLICT DO NOTHING without a target also absorbs a concurrent insert that won the unique index race.
+ const result=await conn.query("INSERT INTO titan.local_account_links(id,identity_id,organisation_id,application_id,local_user_id,local_account_id,state,verified_at) VALUES ($1,$2,$3,$4,$5,$6,'verified',now()) ON CONFLICT DO NOTHING RETURNING id",[c.id,c.identityId,c.organisationId,c.applicationId,c.localUserId,c.localAccountId]);
+ if(result.rowCount!==1) throw new LinkReviewSignal('concurrent_conflict');
 }
 
 /** Update and revoke commands. Each row is locked with FOR UPDATE, the expected revision is
@@ -154,6 +212,30 @@ async function applyUpdate(conn:SqlClient,c:Exclude<ProvisioningCommand,CreateCo
     const members=await conn.query('SELECT i.logto_subject, m.organisation_id FROM titan.memberships m JOIN titan.identities i ON i.id=m.identity_id WHERE m.organisation_id=$1',[String(current.organisation_id)]);
     for(const row of members.rows) await bumpGeneration(conn,app,String(row.logto_subject),String(row.organisation_id));
    }
+   return;
+  }
+  case 'link_relink': {
+   // Explicit relink of an existing link (verified or revoked) to a different local account. Requires the expected revision.
+   const locked=await conn.query('SELECT l.identity_id, l.organisation_id, l.application_id, l.local_account_id, l.state, l.revision, i.logto_subject FROM titan.local_account_links l JOIN titan.identities i ON i.id=l.identity_id WHERE l.id=$1 FOR UPDATE OF l',[c.id]);
+   const current=locked.rows[0];
+   if(!current||Number(current.revision)!==c.expectedRevision) throw Error('revision conflict: account link missing or changed');
+   if(!sameUuid(current.organisation_id,c.organisationId)) throw Error('organisation mismatch: account link belongs to another organisation');
+   if(!sameUuid(current.identity_id,c.identityId)||String(current.application_id)!==c.applicationId) throw Error('account link identity or application mismatch');
+   if(String(current.state)==='verified'&&String(current.local_account_id)===c.localAccountId) throw Error('relink target is the current account');
+   const claimed=await conn.query("SELECT id FROM titan.local_account_links WHERE application_id=$1 AND local_account_id=$2 AND state='verified' AND id<>$3 FOR UPDATE",[c.applicationId,c.localAccountId,c.id]);
+   if(claimed.rows.length>0) throw new LinkReviewSignal('account_claimed_elsewhere');
+   await conn.query('SAVEPOINT link_write');
+   let updated;
+   try {
+    updated=await conn.query("UPDATE titan.local_account_links SET local_user_id=$3, local_account_id=$4, state='verified', verified_at=now(), revision=revision+1 WHERE id=$1 AND revision=$2",[c.id,c.expectedRevision,c.localUserId,c.localAccountId]);
+   } catch (e) {
+    if(!isUniqueViolation(e)) throw e;
+    await conn.query('ROLLBACK TO SAVEPOINT link_write');
+    throw new LinkReviewSignal('concurrent_conflict');
+   }
+   if(updated.rowCount!==1) throw Error('revision conflict: account link changed');
+   // The account a session was issued for has changed (or was re-established): revoke sessions for this subject and app.
+   await bumpGeneration(conn,String(current.application_id) as ApplicationId,String(current.logto_subject),String(current.organisation_id));
    return;
   }
   case 'link_revoke': {
