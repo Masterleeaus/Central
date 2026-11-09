@@ -93,3 +93,30 @@ test('unexpected login parameters fail before OIDC start',async()=>{
   await handler({method:'GET',url:'/auth/central/start?company_id='+SECOND,headers:{}},res);
   assert.equal(res.status,400);assert.equal(calls.length,0);
 });
+
+test('central callback concurrency rejects token-exchange fanout and releases cap',async()=>{
+ let signal,finish;
+ const entered=new Promise(resolve=>signal=resolve);
+ const blocked=new Promise(resolve=>finish=resolve);
+ let calls=0;
+ const handler=createCentralOidcBrowserHandler({
+  oidcLogin:{begin:async()=>({authorizationUrl:'https://issuer.example/auth'}),
+   complete:async()=>{calls++;signal();await blocked;return verified}},
+  sessions:{issue:async()=>({cookie:'__Host-titan-central='+ 'Z'.repeat(43)+'; Secure; HttpOnly; SameSite=Lax'})},
+  listEligibleCompanies:async()=>[{companyId:COMPANY,authorised:true}],
+  recheckCompany:async()=>true,
+  concurrencyLimits:{perKey:1,globalLimit:1},clientIp:()=> 'same-socket'
+ });
+ const cookie='__Host-titan-central-oidc='+'A'.repeat(43);
+ const one=makeRes();
+ const first=handler(callback(cookie),one);
+ await entered;
+ const rejected=makeRes();
+ await handler(callback(cookie),rejected);
+ assert.equal(rejected.status,429);
+ assert.equal(calls,1);
+ finish();await first;
+ const third=makeRes();await handler(callback(cookie),third);
+ assert.equal(third.status,303);
+ assert.equal(calls,2);
+});
