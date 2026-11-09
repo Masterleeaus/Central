@@ -5,6 +5,7 @@
 import {randomBytes} from 'node:crypto';
 import {isSecureEndpoint,insecureLocalhostAllowed} from './endpoint-policy.mjs';
 import {createRateLimiter} from './rate-limit.mjs';
+import {createConcurrencyLimiter} from './concurrency-limit.mjs';
 import {clearSessionCookie} from './central-session.mjs';
 const BINDING='__Host-titan-central-oidc';
 const TOKEN=/^[A-Za-z0-9_-]{43}$/;
@@ -40,14 +41,15 @@ function uniqueEligible(entries){
  */
 export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligibleCompanies,recheckCompany,selectionFlow,
   allowInsecureLocalhost=insecureLocalhostAllowed(),clientIp=req=>req.socket?.remoteAddress??'unknown',
-  logger=()=>{},rateLimits={ip:{limit:30,windowMs:60000},subject:{limit:10,windowMs:60000}}}={}){
+  logger=()=>{},concurrencyLimits={perKey:3,globalLimit:48},rateLimits={ip:{limit:30,windowMs:60000},subject:{limit:10,windowMs:60000}}}={}){
   if(typeof oidcLogin?.begin!=='function'||typeof oidcLogin?.complete!=='function'||
     typeof sessions?.issue!=='function'||typeof listEligibleCompanies!=='function'||typeof recheckCompany!=='function')
     throw new TypeError('trusted central OIDC dependencies required');
   const ipLimiter=createRateLimiter(rateLimits.ip);
   const subjectLimiter=createRateLimiter(rateLimits.subject);
+  const concurrent=createConcurrencyLimiter(concurrencyLimits);
   const audit=(event,fields={})=>{try{logger(event,fields);}catch{/* never log sensitive tokens */}};
-  return async function handleCentralOidc(req,res){
+  const execute=async function handleCentralOidc(req,res){
     let url;
     try{url=new URL(req.url??'/','http://localhost');}catch{respond(res,400,'invalid_url');return true;}
     if(url.pathname==='/auth/central/select'&&selectionFlow)return selectionFlow.handle(req,res);
@@ -102,5 +104,12 @@ export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligible
       audit('central_login_succeeded',{outcome:'allow'});
     }catch{fail(401,'login_failed');}
     return true;
+  };
+  return async(req,res)=>{
+    const guarded=req.url?.startsWith('/auth/central/');
+    const release=guarded?concurrent.acquire(clientIp(req)):()=>{};
+    if(!release){respond(res,429,'rate_limited');return true;}
+    try{return await execute(req,res);}
+    finally{release();}
   };
 }
