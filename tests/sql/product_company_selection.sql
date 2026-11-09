@@ -19,13 +19,13 @@ BEGIN
  OR has_table_privilege('titan_product_link_nonce','titan.product_company_selection_states','SELECT')
  THEN RAISE EXCEPTION 'unrelated role has product selection access'; END IF;
 END $$;
-SET LOCAL ROLE titan_product_selection;
+SET LOCAL ROLE titan_product_selection_field;
 DO $$
 DECLARE n integer;
 BEGIN
  SELECT count(*) INTO n FROM titan.product_company_selection_states
  WHERE state_digest=repeat('a',64);
- IF n<>2 THEN RAISE EXCEPTION 'application namespace test invalid'; END IF;
+ IF n<>1 THEN RAISE EXCEPTION 'foreign application selection visible'; END IF;
  DELETE FROM titan.product_company_selection_states
  WHERE application_id='field' AND state_digest=repeat('a',64)
  AND expires_at>now();
@@ -43,10 +43,18 @@ BEGIN
  IF n<>0 THEN RAISE EXCEPTION 'expired product state accepted'; END IF;
  SELECT count(*) INTO n FROM titan.product_company_selection_states
  WHERE application_id='desk' AND state_digest=repeat('a',64);
- IF n<>1 THEN RAISE EXCEPTION 'other product selection was deleted'; END IF;
+ IF n<>0 THEN RAISE EXCEPTION 'other product selection visible to field role'; END IF;
 END $$;
 RESET ROLE;
-DO $$
+SET LOCAL ROLE titan_product_selection_desk;
+DO $
+DECLARE n integer;
+BEGIN
+ SELECT count(*) INTO n FROM titan.product_company_selection_states;
+ IF n<>1 THEN RAISE EXCEPTION 'desk role could inspect other products'; END IF;
+END $;
+RESET ROLE;
+DO $
 DECLARE n integer;
 BEGIN
  SELECT count(*) INTO n FROM titan.product_company_selection_states;
