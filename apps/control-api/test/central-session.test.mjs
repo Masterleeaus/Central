@@ -83,3 +83,14 @@ test('concurrent rotation attempts cannot reuse a consumed session',async()=>{
   assert.equal(attempts.filter(x=>x.status==='rejected').length,1);
   assert.equal(await manager.resolve(req),null);
 });
+
+
+test('same-company session rotation is rejected without touching current session',async()=>{
+ const {manager,records}=setup();
+ const original=await manager.issue({identityId:'subject',companyId:COMPANY});
+ await assert.rejects(manager.rotate(request(original.cookie.split(';')[0]),
+  {identityId:'subject',companyId:COMPANY}),/must change company/);
+ assert.equal(records.size,1);
+ assert.deepEqual(await manager.resolve(request(original.cookie.split(';')[0])),
+  {identityId:'subject',companyId:COMPANY});
+});
