@@ -30,4 +30,5 @@ CONFIG_TEST_DATABASE_URL="$db" node packages/config-engine/scripts/canonical-cat
 CONFIG_TEST_DATABASE_URL="$db" TITAN_CONFIG_CANONICAL_MIGRATION_SHA256="$checksum" node packages/config-engine/scripts/canonical-receipt-e2e.mjs
 CONFIG_TEST_DATABASE_URL="$db" TITAN_CONFIG_CANONICAL_MIGRATION_SHA256="$checksum" node packages/config-engine/scripts/http-server-e2e.mjs
 CONFIG_TEST_DATABASE_URL="$db" TITAN_CONFIG_CANONICAL_MIGRATION_SHA256="$checksum" node packages/config-engine/scripts/http-server-startup-failures.mjs
+CONFIG_TEST_DATABASE_URL="$db" TITAN_CONFIG_CANONICAL_MIGRATION_SHA256="$checksum" node packages/config-engine/scripts/http-grant-revocation-e2e.mjs
 echo "pinned canonical PostgreSQL migration and signed JWT integration passed"
