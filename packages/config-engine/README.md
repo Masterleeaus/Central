@@ -30,3 +30,11 @@ tenant-scoped authenticated service read RPC, server-derived company/cohort
 context, cross-tenant integration tests, migration reconciliation, and a
 production-safe outage policy. The store accepts a trusted backend pool only;
 it must not be exposed directly to public HTTP requests.
+
+## Disposable database verification
+
+The separate Config engine GitHub Actions workflow now provisions PostgreSQL 16,
+applies the two **draft-only** migrations in a disposable CI database, and runs
+all `verify_*.sql` assertions with `ON_ERROR_STOP`. Those scripts deliberately
+rollback seeded fixtures. They **do not** constitute an approved migration
+or a proof of production-grade tenant isolation. Never run them on production.

@@ -13,6 +13,21 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: config-ci-disposable
+          POSTGRES_DB: config_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CONFIG_TEST_DATABASE_URL: postgresql://postgres:config-ci-disposable@localhost:5432/config_ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,3 +37,13 @@ jobs:
         run: node --test packages/config-engine/test/*.test.mjs
       - name: Syntax validation
         run: find packages/config-engine/src packages/config-engine/test -name '*.mjs' -print0 | xargs -0 -n 1 node --check
+
+      - name: Apply and verify draft schema on disposable PostgreSQL 16
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0001_config_engine.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0002_role_grants.sql
+          for file in packages/config-engine/sql/verify_*.sql; do
+            echo "Verifying $file"
+            psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f "$file"
+          done
