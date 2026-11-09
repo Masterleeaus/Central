@@ -6,7 +6,9 @@ import { createJsonLogger } from './structured-log.mjs';
 import { insecureLocalhostAllowed } from './endpoint-policy.mjs';
 import { createMetrics, pathnameOf, serveMetrics } from './metrics.mjs';
 import { createOperatorAdmin } from './operator-config.mjs';
-import { createConfigRoute } from './config-route.mjs';
+import { createConfigDbRuntime } from './config-db-runtime.mjs';
+import { createProductionConfigRoute } from './config-production-route.mjs';
+import { assertConfigStartup } from './config-startup-guard.mjs';
 const log = createJsonLogger();
 
 export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log, configLookup}={}) {
@@ -21,9 +23,11 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const auditLog=(event,fields)=>{try{metrics.observeLog(event,fields);}catch{/* metrics never alter a request */}logger(event,fields);};
   // Operator plane: null unless TITAN_OPERATOR_* is set, in which case /v1/admin/ is mounted. Invalid settings throw here.
   const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher});
+  assertConfigStartup(env);
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
-  const configHandler=createConfigRoute({env,pool,lookup:configLookup,fetcher,logger:auditLog});
+  const configRuntime=createConfigDbRuntime({env,Pool});
+  const configHandler=createProductionConfigRoute({env,runtime:configRuntime,fetcher,logger:auditLog});
   const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,configHandler,logger:auditLog});
   const handler=async (req,res)=>{
     res.on('finish',()=>{try{metrics.observeResponse(res.statusCode);}catch{/* ignore */}});
@@ -34,7 +38,7 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const port=Number(env.TITAN_CENTRAL_PORT||3102);
   if (!Number.isInteger(port)||port<1||port>65535) throw Error('invalid port');
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)});
-  return {server,pool,async close(){await new Promise((resolve,reject)=>server.close(err=>err?reject(err):resolve()));await pool.end();}};
+  return {server,pool,async close(){await new Promise((resolve,reject)=>server.close(err=>err?reject(err):resolve()));await pool.end();if(configRuntime)await configRuntime.close();}};
 }
 // Closes the HTTP server and the database pool on SIGTERM/SIGINT, then exits.
 // A second signal after the first is left to the default handler (hard stop).
