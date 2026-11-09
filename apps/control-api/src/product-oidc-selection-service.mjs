@@ -39,9 +39,20 @@ export function createProductMultiCompanyOidcService({
   applicationId,origin,selectionStore:store,listOrganisations,
   resolveLocalIdentity,establishSession,afterLogin
  });
+ const verifiedSelectionFlow=Object.freeze({
+  handle:(req,res)=>selectionFlow.handle(req,res),
+  async begin({issuer:verifiedIssuer,subject,browserBinding},res){
+   // Bind choice to the initial trusted Central membership snapshot. The
+   // resolver independently refreshes eligibility again at selection time.
+   let allowedCompanyIds;
+   try{allowedCompanyIds=await findOrganisationIds({issuer:verifiedIssuer,subject});}
+   catch{allowedCompanyIds=[];}
+   return selectionFlow.begin({issuer:verifiedIssuer,subject,browserBinding,allowedCompanyIds},res);
+  }
+ });
  const handler=createOidcHttpAdapter({
   applicationId,oidcLogin,resolveLocalIdentity,establishSession,
-  afterLogin,selectionFlow,...(logger?{logger}:{}),
+  afterLogin,selectionFlow:verifiedSelectionFlow,...(logger?{logger}:{}),
   ...(rateLimits?{rateLimits}:{}),
   ...(concurrencyLimits?{concurrencyLimits}:{})
  });
