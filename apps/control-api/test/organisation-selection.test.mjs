@@ -125,3 +125,21 @@ test('malformed, repeated or empty original eligibility fails closed',async()=>{
  }
  assert.equal(stored,0);
 });
+
+test('wrong browser binding burns the one-use selection before authority or session issue',async()=>{
+ const {selection,calls}=setup();
+ await selection.begin({issuer:'https://id.example/',subject:'subject-1',browserBinding:binding});
+ const req={state,organisationId:orgA,browserBinding:'x'.repeat(43)};
+ assert.deepEqual(await selection.complete(req),{status:'denied'});
+ assert.deepEqual(await selection.complete({...req,browserBinding:binding}),{status:'denied'});
+ assert.equal(calls.verify.length,0);
+ assert.equal(calls.issued.length,0);
+});
+test('selection cannot be used to widen OIDC company list after login',async()=>{
+ const {selection,calls}=setup();
+ const initial=await selection.begin({issuer:'https://id.example/',subject:'subject-1',
+  browserBinding:binding,allowedCompanyIds:[orgA]});
+ assert.deepEqual(initial.organisations.map(v=>v.id),[orgA]);
+ assert.equal((await selection.complete({state,organisationId:orgB,browserBinding:binding})).status,'denied');
+ assert.equal(calls.issued.length,0);
+});
