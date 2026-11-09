@@ -67,3 +67,12 @@ test('sign-out form and same-origin form policy appear only when logout is mount
   assert.doesNotMatch(without.body,/Sign out of Central/);
   assert.match(without.headers['content-security-policy'],/form-action 'none'/);
 });
+
+
+test('malformed launcher URL cannot throw past HTTP handler',async()=>{
+ const res=fakeRes();
+ const result=await make()({url:'http://[::1',method:'GET'},res);
+ assert.equal(result,true);
+ assert.equal(res.status,400);
+ assert.equal(res.body,'Invalid URL');
+});
