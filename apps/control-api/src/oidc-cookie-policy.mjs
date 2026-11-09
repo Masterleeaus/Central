@@ -76,3 +76,23 @@ export function isPolicySetCookie(policy, setCookie) {
     return false;
   }
 }
+
+/** Central-level logout state cookie (issue #6). Set only on the global logout response and consumed
+ * only by the post-logout landing. Same attributes as every other policy cookie; the name is fixed. */
+export function logoutStateCookiePolicy() {
+  return Object.freeze({ name: 'titan_global_logout_state', valuePattern: /^[A-Za-z0-9_-]{32,256}$/, minAge: 1, maxAge: 300 });
+}
+
+/** Reads one cookie by exact name from a Cookie header. Returns null when the header is absent or
+ * oversized, the name is missing, or the name appears more than once. Never throws. */
+export function readCookie(header, name) {
+  if (typeof header !== 'string' || header.length > 8192 || typeof name !== 'string') return null;
+  let found = null;
+  let count = 0;
+  for (const item of header.split(';')) {
+    const separator = item.indexOf('=');
+    if (separator < 1) continue;
+    if (item.slice(0, separator).trim() === name) { count++; found = item.slice(separator + 1).trim(); }
+  }
+  return count === 1 ? found : null;
+}
