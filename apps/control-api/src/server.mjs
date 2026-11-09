@@ -47,6 +47,12 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
     return centralHandler(req,res);
   };
   const server=createServer(handler);
+  // In-process connection bound. DirectAdmin proxy request/concurrency
+  // limits remain mandatory because this server binds loopback only.
+  server.maxConnections=128;
+  server.requestTimeout=15000;
+  server.headersTimeout=10000;
+  server.keepAliveTimeout=5000;
   const port=Number(env.TITAN_CENTRAL_PORT||3102);
   if (!Number.isInteger(port)||port<1||port>65535) throw Error('invalid port');
   try {
