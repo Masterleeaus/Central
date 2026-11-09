@@ -7,6 +7,8 @@
 import { createHash } from 'node:crypto';
 import type { ApplicationId, MembershipRole } from './contracts.js';
 import type { SqlPool, SqlClient, MemberState, GrantState } from './postgres.js';
+import { recordActivity } from './activity-events.js';
+import type { ActivityEventInput } from './activity-events.js';
 
 export type ProvisioningCommand =
  | { kind:'identity'; id:string; logtoSubject:string }
@@ -16,7 +18,7 @@ export type ProvisioningCommand =
  | { kind:'link'; id:string; identityId:string; organisationId:string; applicationId:ApplicationId; localUserId:string; localAccountId:string; assertion:string }
  | { kind:'link_relink'; id:string; identityId:string; organisationId:string; applicationId:ApplicationId; expectedRevision:number; localUserId:string; localAccountId:string; assertion:string }
  | { kind:'membership_update'; id:string; organisationId:string; expectedRevision:number; role?:MembershipRole; state?:MemberState }
- | { kind:'entitlement_update'; id:string; organisationId:string; expectedRevision:number; state:GrantState }
+ | { kind:'entitlement_update'; id:string; organisationId:string; expectedRevision:number; state:GrantState; features?:readonly string[]; expiresAt?:string|null }
  | { kind:'link_revoke'; id:string; organisationId:string; expectedRevision:number };
 
 type CreateCommand = Extract<ProvisioningCommand, { kind:'identity'|'organisation'|'membership'|'entitlement'|'link' }>;
@@ -56,6 +58,8 @@ const ROLE_RANK: Record<MembershipRole, number> = { learner:0, member:1, manager
 /** Every application whose sessions must be revoked when a member's access is reduced. */
 const SESSION_APPS: readonly ApplicationId[] = ['desk','field','academy'];
 const validDate=(d:string|undefined)=>!d || (Number.isFinite(Date.parse(d)) && new Date(d).toISOString()===d);
+const validFeatures=(f:unknown):f is readonly string[]=>Array.isArray(f)&&f.length<=100&&f.every(x=>nonempty(x,100))&&new Set(f).size===f.length;
+const isoOrNull=(v:unknown):string|null=>{if(v===null||v===undefined) return null;const d=new Date(v as string|Date);if(!Number.isFinite(d.valueOf())) throw Error('invalid stored expiry');return d.toISOString();};
 const isCreate=(c:ProvisioningCommand):c is CreateCommand=>c.kind==='identity'||c.kind==='organisation'||c.kind==='membership'||c.kind==='entitlement'||c.kind==='link';
 const sameUuid=(a:unknown,b:string)=>String(a).toLowerCase()===b.toLowerCase();
 const isUniqueViolation=(e:unknown)=>(e as {code?:unknown})?.code==='23505';
@@ -75,7 +79,10 @@ function validate(c:ProvisioningCommand, context:ProvisioningContext):void {
     case 'membership_update':
       if(!uuid(c.organisationId)||!revision(c.expectedRevision)||(c.role===undefined&&c.state===undefined)||(c.role!==undefined&&!roles.has(c.role))||(c.state!==undefined&&!memberStates.has(c.state))) throw Error('invalid membership update');break;
     case 'entitlement_update':
-      if(!uuid(c.organisationId)||!revision(c.expectedRevision)||!grantStates.has(c.state)) throw Error('invalid entitlement update');break;
+      if(!uuid(c.organisationId)||!revision(c.expectedRevision)||!grantStates.has(c.state)) throw Error('invalid entitlement update');
+      if(c.features!==undefined&&!validFeatures(c.features)) throw Error('invalid entitlement update');
+      if(c.expiresAt!==undefined&&c.expiresAt!==null&&!(typeof c.expiresAt==='string'&&validDate(c.expiresAt))) throw Error('invalid entitlement update');
+      break;
     case 'link_revoke':
       if(!uuid(c.organisationId)||!revision(c.expectedRevision)) throw Error('invalid link revocation');break;
     default:throw Error('unsupported provisioning command');
@@ -121,12 +128,32 @@ export class CentralProvisioner {
     throw new LinkReviewRequired(e.reason,String(review.rows[0]?.id??''));
    }
    await conn.query('INSERT INTO titan.provisioning_audit(request_id,actor_subject,authority_reference,command_kind,command_digest,subject_id) VALUES ($1,$2,$3,$4,$5,$6)',[context.requestId,context.actorSubject,context.authorityReference,command.kind,digest,command.id]);
+   // Activity history (issue #36): same transaction, so a refused event rolls back the lifecycle change.
+   const activity=activityFor(command,context);
+   if(activity) await recordActivity(conn,activity);
    await conn.query('COMMIT');begun=false;return outcome;
   }catch(e){if(begun){try{await conn.query('ROLLBACK')}catch{/* retain original exception */}}throw e;}
   finally{conn.release?.();}
  }
 }
+/** Maps a provisioning command to its activity event. Detail holds enum values and application IDs only.
+ * An identity has no organisation, and the activity table is tenant-keyed, so identity creation records no
+ * activity event. The audit row still records it. */
+function activityFor(c:ProvisioningCommand,context:ProvisioningContext):ActivityEventInput|undefined{
+ const base={actorKind:'subject' as const,actorId:context.actorSubject,sourceProduct:'central' as const,outcome:'success' as const,correlationId:context.requestId};
+ switch(c.kind){
+  case 'identity': return undefined;
+  case 'organisation': return {...base,organisationId:c.id,action:'organisation.create',targetType:'organisation',targetId:c.id};
+  case 'membership': return {...base,organisationId:c.organisationId,action:'membership.create',targetType:'membership',targetId:c.id,detail:{role:c.role}};
+  case 'entitlement': return {...base,organisationId:c.organisationId,action:'entitlement.create',targetType:'entitlement',targetId:c.id,detail:{applicationId:c.applicationId}};
+  case 'link': return {...base,organisationId:c.organisationId,action:'account_link.create',targetType:'account_link',targetId:c.id,detail:{applicationId:c.applicationId}};
+  case 'membership_update': return {...base,organisationId:c.organisationId,action:'membership.update',targetType:'membership',targetId:c.id,detail:{...(c.role!==undefined?{role:c.role}:{}),...(c.state!==undefined?{state:c.state}:{})}};
+  case 'entitlement_update': return {...base,organisationId:c.organisationId,action:'entitlement.update',targetType:'entitlement',targetId:c.id,detail:{state:c.state}};
+  case 'link_revoke': return {...base,organisationId:c.organisationId,action:'account_link.revoke',targetType:'account_link',targetId:c.id};
+ }
+}
 /** Replay digest: the assertion is replaced by its SHA-256, so no signed token is stored in the audit table. */
+/** Consistent serialized payload for replay detection; no cryptographic claims: stored audit text is not a signature. */
 function stableDigest(command:ProvisioningCommand):string {
  const source:Record<string,unknown>={...command};
  if('assertion' in command){delete source.assertion;source.assertionSha256=createHash('sha256').update(command.assertion).digest('hex');}
@@ -179,13 +206,21 @@ async function applyUpdate(conn:SqlClient,c:Exclude<ProvisioningCommand,CreateCo
    return;
   }
   case 'entitlement_update': {
-   const locked=await conn.query('SELECT organisation_id, application_id, revision FROM titan.entitlements WHERE id=$1 FOR UPDATE',[c.id]);
+   const locked=await conn.query('SELECT organisation_id, application_id, revision, features, expires_at FROM titan.entitlements WHERE id=$1 FOR UPDATE',[c.id]);
    const current=locked.rows[0];
    if(!current||Number(current.revision)!==c.expectedRevision) throw Error('revision conflict: entitlement missing or changed');
    if(String(current.organisation_id)!==c.organisationId) throw Error('organisation mismatch: entitlement belongs to another organisation');
-   const updated=await conn.query('UPDATE titan.entitlements SET state=$3, revision=revision+1 WHERE id=$1 AND revision=$2',[c.id,c.expectedRevision,c.state]);
+   const currentFeatures=Array.isArray(current.features)?current.features.map(String):[];
+   const currentExpiry=isoOrNull(current.expires_at);
+   const nextFeatures=c.features!==undefined?[...c.features]:currentFeatures;
+   const nextExpiry=c.expiresAt!==undefined?(c.expiresAt??null):currentExpiry;
+   const updated=await conn.query('UPDATE titan.entitlements SET state=$3, features=$4, expires_at=$5, revision=revision+1 WHERE id=$1 AND revision=$2',[c.id,c.expectedRevision,c.state,nextFeatures,nextExpiry]);
    if(updated.rowCount!==1) throw Error('revision conflict: entitlement changed');
-   if(c.state!=='active'&&c.state!=='trialing'){
+   // A reduction is a state move out of access, a removed feature, or an expiry that moved earlier
+   // (or became finite). Each one revokes sessions for this application in this transaction.
+   const removedFeature=currentFeatures.some(f=>!nextFeatures.includes(f));
+   const expiryReduced=nextExpiry!==null&&(currentExpiry===null||Date.parse(nextExpiry)<Date.parse(currentExpiry));
+   if(c.state!=='active'&&c.state!=='trialing'||removedFeature||expiryReduced){
     const app=String(current.application_id) as ApplicationId;
     const members=await conn.query('SELECT i.logto_subject, m.organisation_id FROM titan.memberships m JOIN titan.identities i ON i.id=m.identity_id WHERE m.organisation_id=$1',[String(current.organisation_id)]);
     for(const row of members.rows) await bumpGeneration(conn,app,String(row.logto_subject),String(row.organisation_id));

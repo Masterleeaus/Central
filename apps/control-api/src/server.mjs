@@ -5,7 +5,7 @@ import { createOidcVerifier } from './oidc.mjs';
 import { createJsonLogger } from './structured-log.mjs';
 import { insecureLocalhostAllowed } from './endpoint-policy.mjs';
 import { createMetrics, pathnameOf, serveMetrics } from './metrics.mjs';
-import { createOperatorAdmin } from './operator-config.mjs';
+import { createOperatorAdmin, loadProductRegistry } from './operator-config.mjs';
 const log = createJsonLogger();
 
 export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log}={}) {
@@ -19,7 +19,9 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const metrics=createMetrics();
   const auditLog=(event,fields)=>{try{metrics.observeLog(event,fields);}catch{/* metrics never alter a request */}logger(event,fields);};
   // Operator plane: null unless TITAN_OPERATOR_* is set, in which case /v1/admin/ is mounted. Invalid settings throw here.
-  const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher});
+  // Product registry: validated at every startup, so bad product origins stop startup even with the operator plane off.
+  const productRegistry=loadProductRegistry(env);
+  const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher,productRegistry});
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
   const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,logger:auditLog});
