@@ -1,0 +1,9 @@
+# PRODUCT vhost only: do not proxy product session cookies through Central.
+# Replace __PRODUCT_PORT__ and __SELECTION_CONCURRENT_LIMIT__.
+# mod_qos support and returned status code require host-level verification.
+RequestHeader unset X-Forwarded-For
+RequestHeader unset X-Real-IP
+RequestHeader unset Forwarded
+ProxyAddHeaders On
+ProxyPassMatch "^/auth/titan/(field|desk|academy)/select$" "http://127.0.0.1:__PRODUCT_PORT__/auth/titan/$1/select"
+QS_LocRequestLimitMatch "^/auth/titan/(field|desk|academy)/select$" __SELECTION_CONCURRENT_LIMIT__
