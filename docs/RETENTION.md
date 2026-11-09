@@ -23,9 +23,9 @@ Each provisioning write records `request_id`, `actor_subject` (the Logto subject
   erasure request can be honoured by pseudonymisation rather than deletion while the audit duty runs.
 - **TO DECIDE (owner):** whether audit rows are exported to an external store before deletion.
 
-Access decisions (allow and deny) are not stored in the database. They go to the service log only (section 3).
-This is a gap the owner should decide on: if access decisions must be audited, they need a table and a
-retention period of their own.
+Access decisions (allow and deny) are also written to `titan.activity_events` (section 6), one row each. They
+are still in the service log (section 3). Their retention period is the same **TO DECIDE** item as for audit rows
+above; no period is set for them, and the owner must decide it before they are relied on as an audit record.
 
 ## 2. Login state and session revocations
 
@@ -73,6 +73,18 @@ retention period of their own.
 ## 6. Activity history (`titan.activity_events`, migration 0011)
 
 - **CURRENT:** rows are append-only. No role has UPDATE, DELETE or TRUNCATE, and a trigger rejects them for every role. Nothing in the code deletes rows.
+- **CURRENT:** every access decision (allow and deny) from `GET /v1/access/check` is recorded here, with actor
+  `central-access-check`, action `access.check`, the requested application and action, the reason code, and the
+  role (allow only). The Logto subject, the token and raw error text are not stored. Requests that make no decision
+  (401, 400, 429, 503) are not recorded.
+- **CURRENT, recorder outage policy (fail open, fail visible):** a recording failure never changes the access
+  response. The response waits at most 2 seconds for the recorder, then goes out. Each failure writes one
+  `activity_record_failed` log line with the error class only. There is no retry and no queue, so a decision whose
+  row was not written is missing from this table; the log line is the only trace. A timed-out insert may still
+  commit, so such a decision can appear here and also in the log. Decisions for an organisation that is not in
+  `titan.organisations` cannot be recorded (foreign key), and are logged as failures.
+- **TO DECIDE (owner):** whether a missing row for a decision is acceptable, or whether access must wait for the
+  recorder (fail closed). The current choice favours availability and keeps the response shape fixed.
 - **CURRENT:** each row holds identifiers, an outcome and a detail object of at most 1,024 bytes, redacted before insert. Credentials and email addresses are refused, and personal-data keys are removed. Actor and target fields refuse address-shaped values.
 - **Proposed:** a purge run by the owner, outside the application, that removes rows older than the retention period. It must be the only path that deletes rows, must be bounded in batches, and must be recorded. It is not written.
 - **TO DECIDE (legal/owner):** the retention period. This must match section 1 unless there is a reason for a different period.
