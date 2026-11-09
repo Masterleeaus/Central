@@ -103,3 +103,42 @@ test('cross-origin POST does not consume state; wrong browser binding burns it s
 test('empty authority dependencies fail at initialization',()=>{
  assert.throws(()=>createProductMultiCompanyOidcService({applicationId:'field'}),TypeError);
 });
+
+test('initial trusted membership snapshot excludes names from a broader display resolver',async()=>{
+ const names=[{id:A,name:'A & Co'},{id:B,name:'B Co'},{id:C,name:'Unverified outsider'}];
+ const saved=new Map();
+ const service=createProductMultiCompanyOidcService({
+  applicationId:'field',issuer,audience:'field-client',origin:'https://field.example',
+  oidcLogin:{begin:async()=>({authorizationUrl:'https://id.example/auth'}),
+   complete:async()=>({issuer,subject:'user-123'})},
+  findOrganisationIds:async()=>[A,B],
+  authorise:async({organisationId})=>({allowed:true,organisationId,applicationId:'field',
+   localUserId:'user-'+organisationId,localAccountId:'account-'+organisationId}),
+  localAccountActive:async()=>true,
+  listOrganisations:async()=>names,
+  establishSession:async()=> 'field_sid='+'Z'.repeat(43)+'; Path=/; Secure; HttpOnly; SameSite=Lax',
+  selectionStore:{save:async(k,v)=>saved.set(k,v),consume:async k=>{const v=saved.get(k);saved.delete(k);return v}}
+ });
+ const out=response();await service.handler(callback,out);
+ assert.equal(out.status,200);
+ assert.match(out.body,/A &amp; Co/);
+ assert.match(out.body,/B Co/);
+ assert.doesNotMatch(out.body,/Unverified outsider/);
+ const allowed=[...saved.values()][0].organisationIds;
+ assert.deepEqual(allowed,[A,B]);
+});
+test('a failed trusted membership discovery never exposes product company names',async()=>{
+ const service=createProductMultiCompanyOidcService({
+  applicationId:'field',issuer,audience:'field-client',origin:'https://field.example',
+  oidcLogin:{begin:async()=>({authorizationUrl:'https://id.example/auth'}),
+   complete:async()=>({issuer,subject:'user-123'})},
+  findOrganisationIds:async()=>{throw Error('private service down')},
+  authorise:async()=>({allowed:true}),localAccountActive:async()=>true,
+  listOrganisations:async()=>[{id:A,name:'Confidential customer'}],
+  establishSession:async()=> 'field_sid='+'Z'.repeat(43)+'; Path=/; Secure; HttpOnly; SameSite=Lax',
+  selectionStore:{save:async()=>{},consume:async()=>null}
+ });
+ const out=response();await service.handler(callback,out);
+ assert.equal(out.status,403);
+ assert.doesNotMatch(out.body,/Confidential customer/);
+});
