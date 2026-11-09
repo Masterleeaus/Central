@@ -15,7 +15,8 @@ test('keys are limited independently',()=>{
 test('key map is bounded under a flood of distinct keys',()=>{
  const l=createRateLimiter({limit:1,windowMs:60_000,maxKeys:5,clock:()=>0});
  for(let i=0;i<1000;i++) l.take('k'+i);
- assert.equal(l.take('k0').allowed,true,'evicted oldest key starts a fresh window');
+ assert.equal(l.take('k0').allowed,false,'active window must never be evicted by an attacker flooding distinct keys');
+ assert.equal(l.take('k1001').allowed,false,'unknown keys denied when cardinality is full');
 });
 test('invalid limiter configuration is rejected',()=>{
  assert.throws(()=>createRateLimiter({limit:0,windowMs:1000}),TypeError);
@@ -40,4 +41,20 @@ test('structured logger drops credential-like fields and reduces errors to class
 test('structured logger never throws',()=>{
  const log=createJsonLogger({write:()=>{throw Error('disk full')}});
  assert.doesNotThrow(()=>log('evt',{}));
+});
+
+test('expired keys release bounded cardinality but live keys never do',()=>{
+ let now=0;
+ const limiter=createRateLimiter({limit:1,windowMs:1000,maxKeys:2,clock:()=>now});
+ assert.equal(limiter.take('a').allowed,true);
+ assert.equal(limiter.take('b').allowed,true);
+ assert.equal(limiter.take('new').allowed,false);
+ assert.equal(limiter.take('a').allowed,false);
+ now=1000;
+ assert.equal(limiter.take('new').allowed,true);
+});
+test('malformed and oversized keys are rejected without consuming memory',()=>{
+ const limiter=createRateLimiter({limit:2,windowMs:1000,maxKeys:1});
+ for(const key of [null,{},'', 'x'.repeat(257)])assert.equal(limiter.take(key).allowed,false);
+ assert.equal(limiter.take('legitimate').allowed,true);
 });
