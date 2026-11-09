@@ -12,3 +12,5 @@ export * from './logto-m2m.js';
 export * from './organisation-authority.js';
 export * from './oidc-registration.js';
 export * from './logto-applications.js';
+export * from './onboarding.js';
+export * from './onboarding-pg.js';
