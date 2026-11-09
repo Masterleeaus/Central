@@ -59,7 +59,7 @@ class RealMigrationsTests(unittest.TestCase):
         client = FakeClient()
         self.assertEqual(migrate.run(client, ROOT / 'migrations'), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
         self.assertEqual(migrate.run(client, ROOT / 'migrations'), [])
-        self.assertEqual(len(client.executed), 15)
+        self.assertEqual(len(client.executed), len(expected))
 
 
 class RunnerTests(unittest.TestCase):
