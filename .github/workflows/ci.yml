@@ -69,6 +69,9 @@ jobs:
 
       # Check mode: the example config must parse and be assessed as NOT ready (exit 1).
       # Exit 2 (unreadable) or 0 (ready) fails the job.
+      - name: Parse deployed nginx rate-limit templates with an isolated real nginx
+        run: bash deploy/proxy/nginx/syntax-smoke.sh
+
       - name: Preflight check mode
         run: |
           set +e
