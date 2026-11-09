@@ -168,8 +168,19 @@ export function main(argv=process.argv.slice(2)) {
   console.log(JSON.stringify({status:'signature_and_database_match',
     independently_human_approved:false,production_execution_permitted:false}));
   return 0;
- }catch {
-  console.error('external staging receipt operation denied or invalid');
+ }catch (error) {
+  // Only a fixed catalogue of non-sensitive error classes may be printed.
+  // Never show PostgreSQL stderr, connection URL, private paths or row data.
+  const allowed=new Set([
+    'missing or ambiguous committed approval',
+    'unverified committed approval',
+    'invalid committed approval response',
+    'read-only database receipt query failed',
+    'invalid receipt','receipt signature mismatch','untrusted receipt key',
+    'database receipt mismatch','invalid signed receipt',
+  ]);
+  const kind=allowed.has(error?.message) ? ': '+error.message : '';
+  console.error('external staging receipt operation denied or invalid'+kind);
   return 1;
  }
 }
