@@ -6,6 +6,8 @@ import { createJsonLogger } from './structured-log.mjs';
 import { insecureLocalhostAllowed } from './endpoint-policy.mjs';
 import { createMetrics, pathnameOf, serveMetrics } from './metrics.mjs';
 import { createOperatorAdmin, loadProductRegistry } from './operator-config.mjs';
+import { readServiceDecisionConfig } from './service-decision-config.mjs';
+import { createSkilledDecisionHandler } from './service-decision-handler.mjs';
 const log = createJsonLogger();
 
 export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log}={}) {
@@ -24,7 +26,9 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher,productRegistry});
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
-  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,logger:auditLog});
+  const decisionConfig=readServiceDecisionConfig(env);
+  const serviceDecisionHandler=decisionConfig?createSkilledDecisionHandler({pool,...decisionConfig,logger:auditLog}):undefined;
+  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,serviceDecisionHandler,logger:auditLog});
   const handler=async (req,res)=>{
     res.on('finish',()=>{try{metrics.observeResponse(res.statusCode);}catch{/* ignore */}});
     if (req.method==='GET' && pathnameOf(req)==='/metrics') return serveMetrics(req,res,metrics);
