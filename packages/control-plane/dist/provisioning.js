@@ -1,3 +1,4 @@
+import { recordActivity } from './activity-events.js';
 const uuid = (v) => typeof v === 'string' && /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i.test(v);
 const nonempty = (s, max = 256) => typeof s === 'string' && s.length > 0 && s.length <= max && s.trim() === s && !/[\x00-\x1f\x7f]/.test(s);
 const revision = (v) => Number.isSafeInteger(v) && v >= 1;
@@ -85,6 +86,10 @@ export class CentralProvisioner {
             }
             const outcome = isCreate(command) ? (await insertProvisioning(conn, command), 'created') : (await applyUpdate(conn, command), 'updated');
             await conn.query('INSERT INTO titan.provisioning_audit(request_id,actor_subject,authority_reference,command_kind,command_digest,subject_id) VALUES ($1,$2,$3,$4,$5,$6)', [context.requestId, context.actorSubject, context.authorityReference, command.kind, digest, command.id]);
+            // Activity history (issue #36): same transaction, so a refused event rolls back the lifecycle change.
+            const activity = activityFor(command, context);
+            if (activity)
+                await recordActivity(conn, activity);
             await conn.query('COMMIT');
             begun = false;
             return outcome;
@@ -101,6 +106,22 @@ export class CentralProvisioner {
         finally {
             conn.release?.();
         }
+    }
+}
+/** Maps a provisioning command to its activity event. Detail holds enum values and application IDs only.
+ * An identity has no organisation, and the activity table is tenant-keyed, so identity creation records no
+ * activity event. The audit row still records it. */
+function activityFor(c, context) {
+    const base = { actorKind: 'subject', actorId: context.actorSubject, sourceProduct: 'central', outcome: 'success', correlationId: context.requestId };
+    switch (c.kind) {
+        case 'identity': return undefined;
+        case 'organisation': return { ...base, organisationId: c.id, action: 'organisation.create', targetType: 'organisation', targetId: c.id };
+        case 'membership': return { ...base, organisationId: c.organisationId, action: 'membership.create', targetType: 'membership', targetId: c.id, detail: { role: c.role } };
+        case 'entitlement': return { ...base, organisationId: c.organisationId, action: 'entitlement.create', targetType: 'entitlement', targetId: c.id, detail: { applicationId: c.applicationId } };
+        case 'link': return { ...base, organisationId: c.organisationId, action: 'account_link.create', targetType: 'account_link', targetId: c.id, detail: { applicationId: c.applicationId } };
+        case 'membership_update': return { ...base, organisationId: c.organisationId, action: 'membership.update', targetType: 'membership', targetId: c.id, detail: { ...(c.role !== undefined ? { role: c.role } : {}), ...(c.state !== undefined ? { state: c.state } : {}) } };
+        case 'entitlement_update': return { ...base, organisationId: c.organisationId, action: 'entitlement.update', targetType: 'entitlement', targetId: c.id, detail: { state: c.state } };
+        case 'link_revoke': return { ...base, organisationId: c.organisationId, action: 'account_link.revoke', targetType: 'account_link', targetId: c.id };
     }
 }
 /** Consistent serialized payload for replay detection; no cryptographic claims: stored audit text is not a signature. */
