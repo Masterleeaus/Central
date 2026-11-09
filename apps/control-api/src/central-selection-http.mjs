@@ -53,8 +53,8 @@ export function createCentralSelectionHttp({selectionStore,listOrganisations,rec
     issueSession
   });
   return Object.freeze({
-    async begin({issuer,subject,browserBinding},res){
-      const result=await coordinator(async()=>false).begin({issuer,subject,browserBinding});
+    async begin({issuer,subject,browserBinding,allowedCompanyIds},res){
+      const result=await coordinator(async()=>false).begin({issuer,subject,browserBinding,allowedCompanyIds});
       if(result.status!=='selection_required'){error(res,result.status==='denied'?403:503,'Company selection unavailable');return;}
       const choices=result.organisations.map(x=>'<label><input required type="radio" name="organisation_id" value="'+escape(x.id)+'"> '+escape(x.name)+'</label>').join('');
       const html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Choose company · Titan Central</title><style>body{font:16px system-ui,sans-serif;background:#17212b;color:#f0f5f9;max-width:640px;margin:6vh auto;padding:24px}fieldset{border:1px solid #607283;border-radius:12px;padding:20px}label{display:block;padding:12px;background:#253849;margin:8px 0;border-radius:8px}button{padding:12px 22px;background:#245f89;color:#fff;border:0;border-radius:8px;cursor:pointer}</style></head><body><main><h1>Choose your company</h1><p>Select the company you want to access.</p><form method="post" action="/auth/central/select"><input type="hidden" name="state" value="'+escape(result.state)+'"><fieldset><legend>Available companies</legend>'+choices+'</fieldset><p><button type="submit">Continue</button></p></form></main></body></html>';
