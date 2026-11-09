@@ -129,7 +129,7 @@ function parse(argv) {
    throw Error('usage: capture|sign|verify|pin with named --options');
  const values={mode};
  for(let i=0;i<rest.length;i+=2) {
-  if(!/^--[a-z-]+$/.test(rest[i])||Object.hasOwn(values,rest[i].slice(2)))
+  if(!/^--[a-z][a-z0-9-]*$/.test(rest[i])||Object.hasOwn(values,rest[i].slice(2)))
    throw Error('invalid option');
   values[rest[i].slice(2)]=rest[i+1];
  }
