@@ -123,7 +123,7 @@ function saveNew(path,data) {
  const fd=openSync(path,'wx',0o600);
  try{writeFileSync(fd,canonical(data)+'\n',{encoding:'utf8'});}finally{closeSync(fd);}
 }
-function parse(argv) {
+export function parseArgs(argv) {
  const [mode,...rest]=argv;
  if(!['capture','sign','verify','pin'].includes(mode)||rest.length%2!==0)
    throw Error('usage: capture|sign|verify|pin with named --options');
@@ -138,7 +138,7 @@ function parse(argv) {
 export function main(argv=process.argv.slice(2)) {
  let stage='parse';
  try {
-  const o=parse(argv);
+  const o=parseArgs(argv);
   if(o.mode==='pin') {
    if(!o['public-key'])throw Error('public key required');
    console.log(pin(readFileSync(o['public-key'])));return 0;
