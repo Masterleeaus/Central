@@ -4,6 +4,7 @@
  * and a strict same-origin POST. It never trusts a subject supplied in HTTP.
  */
 import {createOrganisationSelection} from './organisation-selection.mjs';
+import {createConcurrencyLimiter} from './concurrency-limit.mjs';
 const BINDING='__Host-titan-central-oidc';
 const TOKEN=/^[A-Za-z0-9_-]{43}$/;
 const HEADERS={'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"};
@@ -38,13 +39,14 @@ async function readForm(req){
   return state&&organisationId?{state,organisationId}:null;
 }
 const error=(res,status,message)=>{res.writeHead(status,{...HEADERS,'content-type':'text/plain; charset=utf-8','set-cookie':clearBinding});res.end(message);};
-export function createCentralSelectionHttp({selectionStore,listOrganisations,recheckCompany,sessions,origin}={}){
+export function createCentralSelectionHttp({selectionStore,listOrganisations,recheckCompany,sessions,origin,concurrencyLimits={perKey:2,globalLimit:32},clientIp=req=>req.socket?.remoteAddress??'unknown'}={}){
   let site;
   try{site=new URL(origin);}catch{throw new TypeError('trusted selection origin required');}
   if(site.protocol!=='https:'||site.href!==site.origin+'/'||site.username||site.password||
     !selectionStore?.save||!selectionStore?.consume||typeof listOrganisations!=='function'||
     typeof recheckCompany!=='function'||typeof sessions?.issue!=='function')
     throw new TypeError('trusted company selection dependencies required');
+  const concurrent=createConcurrencyLimiter(concurrencyLimits);
   const coordinator=issueSession=>createOrganisationSelection({
     selectionStore,listOrganisations,
     verifySelection:({issuer,subject,organisationId})=>recheckCompany({issuer,subject,companyId:organisationId}),
@@ -63,6 +65,9 @@ export function createCentralSelectionHttp({selectionStore,listOrganisations,rec
       let url;
       try{url=new URL(req.url??'/','http://localhost');}catch{return false;}
       if(url.pathname!=='/auth/central/select')return false;
+      const release=concurrent.acquire(clientIp(req));
+      if(!release){res.writeHead(429,{...HEADERS,'retry-after':'1','content-type':'text/plain; charset=utf-8'});res.end('Too many concurrent selections');return true;}
+      try{
       if(req.method!=='POST'){error(res,405,'Method not allowed');return true;}
       if(url.search||req.headers?.origin!==site.origin){error(res,403,'Selection rejected');return true;}
       const browserBinding=binding(req),fields=await readForm(req);
@@ -80,6 +85,7 @@ export function createCentralSelectionHttp({selectionStore,listOrganisations,rec
       res.writeHead(303,{...HEADERS,location:'/central','set-cookie':[clearBinding,sessionCookie]});
       res.end();
       return true;
+      } finally {release();}
     }
   });
 }
