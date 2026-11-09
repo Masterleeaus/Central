@@ -26,6 +26,7 @@ const OPERATOR={
  TITAN_DESK_ORIGIN:'https://desk.example.test',
  TITAN_FIELD_ORIGIN:'https://field.example.test',
  TITAN_ACADEMY_ORIGIN:'https://academy.example.test',
+ TITAN_PRODUCT_TRUSTED_ORIGINS:'https://desk.example.test,https://field.example.test,https://academy.example.test',
 };
 
 class FakePool{ async query(){return {rows:[]};} async connect(){return {query:async()=>({rows:[]}),release(){}};} async end(){} }
