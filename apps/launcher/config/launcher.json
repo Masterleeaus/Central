@@ -1,0 +1,13 @@
+{
+  "centralOrigin": "https://central.titanzero.io",
+  "signIn": {
+    "applicationId": null
+  },
+  "organisationSwitch": null,
+  "timeoutMs": 5000,
+  "products": [
+    { "id": "sorted", "legacyApplication": "field", "displayName": "Sorted", "url": "https://sorted.titanzero.io" },
+    { "id": "supercharged", "legacyApplication": "desk", "displayName": "Supercharged", "url": "https://supercharged.titanzero.io" },
+    { "id": "lms", "legacyApplication": "academy", "displayName": "LMS", "url": "https://lms.titanzero.io" }
+  ]
+}
