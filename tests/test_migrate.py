@@ -51,15 +51,23 @@ def write_dir(files):
 class RealMigrationsTests(unittest.TestCase):
     def test_all_repository_migrations_are_one_transaction(self):
         found = migrate.discover(ROOT / 'migrations')
-        self.assertEqual([m.version for m in found], [1, 2, 3, 4, 5, 6, 7, 8, 9, 14])
+        self.assertEqual([m.version for m in found], [1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 17])
         for m in found:
             self.assertIn('COMMIT;', m.text, m.name)
 
+    def test_onboarding_migration_0017_follows_0014_and_is_one_transaction(self):
+        found = {m.version: m for m in migrate.discover(ROOT / 'migrations')}
+        self.assertIn(17, found)
+        self.assertEqual(found[17].name, 'customer_onboarding')
+        self.assertIn('CREATE TABLE IF NOT EXISTS titan.onboardings', found[17].text)
+        self.assertEqual(found[17].text.count('BEGIN;'), 1)
+        self.assertEqual(found[17].text.count('COMMIT;'), 1)
+
     def test_repository_migrations_apply_in_order_then_are_noop(self):
         client = FakeClient()
-        self.assertEqual(migrate.run(client, ROOT / 'migrations'), [1, 2, 3, 4, 5, 6, 7, 8, 9, 14])
+        self.assertEqual(migrate.run(client, ROOT / 'migrations'), [1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 17])
         self.assertEqual(migrate.run(client, ROOT / 'migrations'), [])
-        self.assertEqual(len(client.executed), 10)
+        self.assertEqual(len(client.executed), 11)
 
 
 class RunnerTests(unittest.TestCase):
