@@ -50,6 +50,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0006_grant_audit.sql
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/company_authority_fixture.sql
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0007_company_authority.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0008_service_login_roles.sql
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/e2e_config_fixture.sql
           for file in packages/config-engine/sql/verify_*.sql; do
             echo "Verifying $file"
@@ -60,6 +61,8 @@ jobs:
         run: bash packages/config-engine/scripts/concurrency.sh "$CONFIG_TEST_DATABASE_URL"
       - name: PostgreSQL real grant lifecycle
         run: bash packages/config-engine/scripts/grant-lifecycle.sh "$CONFIG_TEST_DATABASE_URL"
+      - name: Verify four independently authenticated restricted PostgreSQL logins
+        run: bash packages/config-engine/scripts/check-service-logins.sh "$CONFIG_TEST_DATABASE_URL"
       - name: End-to-end signed JWT and real PostgreSQL configuration read
         run: |
           npm ci --prefix apps/control-api --ignore-scripts --no-audit --no-fund

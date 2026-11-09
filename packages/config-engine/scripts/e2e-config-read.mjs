@@ -4,7 +4,14 @@ import assert from 'node:assert/strict';
 import {createPgAuthenticatedConfigHandler} from '../src/pg-config-composition.mjs';
 const require=createRequire(new URL('../../../apps/control-api/package.json',import.meta.url));
 const {Pool}=require('pg');
-const pool=new Pool({connectionString:process.env.CONFIG_TEST_DATABASE_URL,max:4});
+const admin=process.env.CONFIG_TEST_DATABASE_URL;
+if(!admin)throw Error('Missing disposable database');
+function openPool(user,password){
+ const uri=new URL(admin);uri.username=user;uri.password=password;
+ return new Pool({connectionString:uri.href,max:3});
+}
+const configPool=openPool('titan_config_api_login','ci-config-api-only');
+const grantPool=openPool('titan_config_grants_login','ci-config-grants-only');
 const issuer='https://issuer.integration.test/',audience='https://api.integration.test/config';
 const jwksUri='https://issuer.integration.test/oidc/jwks';
 const {privateKey,publicKey}=generateKeyPairSync('rsa',{modulusLength:2048});
@@ -19,7 +26,7 @@ function bearer(clientId,claims={}) {
  return 'Bearer '+header+'.'+body+'.'+sign('RSA-SHA256',Buffer.from(header+'.'+body),privateKey).toString('base64url');
 }
 const handler=createPgAuthenticatedConfigHandler({
- configPool:pool,grantPool:pool,issuer,audience,jwksUri,salt:'e2e-fixed-rollout-secret',
+ configPool,grantPool,issuer,audience,jwksUri,salt:'e2e-fixed-rollout-secret',
  clock,fetcher:async url=>{
   assert.equal(url,jwksUri);jwksRequests++;
   return {ok:true,json:async()=>({keys:[jwk]})};
@@ -44,4 +51,4 @@ try{
  assert.equal((await request('svc_a',{path:'/v1/config/evaluate?key=ci_flag&application=central&environment=stage&company_id=550e8400-e29b-41d4-a716-446655440003'})).status,400);
  assert.equal(jwksRequests,1);
  console.log('Real PostgreSQL + signed JWT company-isolation E2E passed');
-}finally{await pool.end()}
+}finally{await Promise.all([configPool.end(),grantPool.end()])}
