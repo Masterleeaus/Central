@@ -86,3 +86,26 @@ test('OIDC start route consumes IP rate budget before contacting issuer',async()
  assert.equal((await call(x.adapter,'/auth/titan/desk/start')).res.status,429);
  assert.equal(begins,1);
 });
+test('verified product callback delegates to one-use product company selection without establishing session',async()=>{
+ const calls=[];
+ const selectionFlow={
+  begin:async(x,res)=>{calls.push(x);res.writeHead(200,{'cache-control':'no-store'});res.end('Choose company')},
+  handle:async()=>false
+ };
+ const x=setup({selectionFlow});
+ const res=await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ assert.equal(res.res.status,200);
+ assert.equal(x.counts().establish,0);
+ assert.deepEqual(calls,[{issuer:'https://id.example',subject:'uid',browserBinding:token}]);
+});
+test('product selection POST route is delegated only to installed trusted handler',async()=>{
+ const req={url:'/auth/titan/desk/select',method:'POST',headers:{}};
+ const selectionFlow={begin:async()=>{},handle:async(_req,res)=>{res.writeHead(403,{});res.end();return true}};
+ const x=setup({selectionFlow});
+ const res=makeRes();assert.equal(await x.adapter(req,res),true);
+ assert.equal(res.status,403);
+ assert.equal((await call(setup().adapter,req.url)).handled,false);
+});
+test('untrusted product selection flow is rejected at startup',()=>{
+ assert.throws(()=>setup({selectionFlow:{begin:async()=>{}}}),TypeError);
+});
