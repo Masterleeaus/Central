@@ -13,7 +13,7 @@ function secureOrigin(value){
   if(typeof value!=='string')throw new TypeError('secure Central origin required');
   let parsed;
   try{parsed=new URL(value);}catch{throw new TypeError('invalid Central origin');}
-  if(parsed.protocol!=='https:'||parsed.href!==parsed.origin+'/'||parsed.username||parsed.password)
+  if(parsed.protocol!=='https:'||parsed.href!==parsed.origin+'/'||parsed.username||parsed.password||parsed.port)
     throw new TypeError('Central browser origin must be an HTTPS origin');
   return parsed.origin;
 }
