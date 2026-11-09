@@ -180,7 +180,9 @@ export function main(argv=process.argv.slice(2)) {
     'database receipt mismatch','invalid signed receipt',
   ]);
   const kind=allowed.has(error?.message) ? ': '+error.message : '';
-  console.error('external staging receipt operation denied or invalid'+kind);
+  const category=['TypeError','ReferenceError','SyntaxError','RangeError','Error'].includes(error?.name) ? error.name : 'Error';
+  const code=typeof error?.code==='string' && /^E[A-Z_]{2,32}$/.test(error.code) ? ' '+error.code : '';
+  console.error('external staging receipt operation denied or invalid'+kind+' ['+category+code+']');
   return 1;
  }
 }
