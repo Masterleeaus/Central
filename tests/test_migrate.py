@@ -61,7 +61,7 @@ class RealMigrationsTests(unittest.TestCase):
         expected = [m.version for m in migrate.discover(ROOT / 'migrations')]
         self.assertEqual(migrate.run(client, ROOT / 'migrations'), expected)
         self.assertEqual(migrate.run(client, ROOT / 'migrations'), [])
-        self.assertEqual(len(client.executed), 16)
+        self.assertEqual(len(client.executed), 17)
 
 
 class RunnerTests(unittest.TestCase):
