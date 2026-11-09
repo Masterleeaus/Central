@@ -59,3 +59,30 @@ test('login outcomes are logged as structured fields without tokens, codes or su
  assert.ok(!dump.includes('secret-code-999'),'error text must not be logged');
  assert.ok(!dump.includes(token),'browser binding must not be logged');
 });
+
+test('simultaneous callbacks cannot cause multiple token exchanges under concurrency cap',async()=>{
+ let begin,release;
+ const entered=new Promise(resolve=>begin=resolve);
+ const pending=new Promise(resolve=>release=resolve);
+ let exchanges=0;
+ const x=setup({concurrencyLimits:{perKey:1,globalLimit:1},
+   oidcLogin:{begin:async()=>({authorizationUrl:'https://id.example/oidc/auth?state=s'}),
+    complete:async()=>{exchanges++;begin();await pending;return {subject:'uid',issuer:'https://id.example'};}}});
+ const first=call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ await entered;
+ const denied=await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb});
+ assert.equal(denied.res.status,429);
+ assert.equal(exchanges,1);
+ release();
+ assert.equal((await first).res.status,303);
+ assert.equal((await call(x.adapter,'/auth/titan/desk/callback?state=s&code=c',{cookie:cb})).res.status,303);
+});
+test('OIDC start route consumes IP rate budget before contacting issuer',async()=>{
+ let begins=0;
+ const x=setup({rateLimits:{ip:{limit:1,windowMs:60000},subject:{limit:20,windowMs:60000}},
+   oidcLogin:{begin:async()=>{begins++;return {authorizationUrl:'https://id.example/oidc/auth?state=s'}},
+    complete:async()=>({subject:'uid',issuer:'https://id.example'})}});
+ assert.equal((await call(x.adapter,'/auth/titan/desk/start')).res.status,303);
+ assert.equal((await call(x.adapter,'/auth/titan/desk/start')).res.status,429);
+ assert.equal(begins,1);
+});
