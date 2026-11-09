@@ -10,14 +10,17 @@ export function createRateLimiter({ limit, windowMs, maxKeys = 10_000, clock = (
   const windows = new Map();
   const evict = (now) => {
     for (const [key, w] of windows) if (now - w.start >= windowMs) windows.delete(key);
-    while (windows.size >= maxKeys) windows.delete(windows.keys().next().value);
+    // Never evict an active window merely because an attacker changes keys.
+    // Under capacity pressure a new key is denied, not admitted by eviction.
   };
   return {
     take(key) {
       const now = clock();
+      if(typeof key!=='string'||key.length===0||key.length>256) return {allowed:false,remaining:0,retryAfterSeconds:1};
       let w = windows.get(key);
       if (!w || now - w.start >= windowMs) {
         if (!w && windows.size >= maxKeys) evict(now);
+        if (!w && windows.size >= maxKeys) return {allowed:false,remaining:0,retryAfterSeconds:Math.max(1,Math.ceil(windowMs/1000))};
         w = { start: now, count: 0 };
         windows.set(key, w);
       }
