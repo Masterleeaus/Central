@@ -1,8 +1,8 @@
--- Login-role path test for migrations 0001-0009.
+-- Login-role path test for migrations 0001-0010.
 -- Covers the statements run by apps/control-api (session-revocation-pg.mjs, oidc-state-pg.mjs) and by
 -- the access check (withCentralReadSnapshot), as the service login role titan_central_app.
 --
--- Run as a superuser against a database where migrations 0001-0009 are applied:
+-- Run as a superuser against a database where migrations 0001-0010 are applied:
 --   psql -X -v ON_ERROR_STOP=1 -f tests/sql/login_role_path.sql "$DATABASE_URL"
 -- or through tests/test_login_role_path.py with TITAN_TEST_DATABASE_URL set.
 --
@@ -145,7 +145,7 @@ END $$;
 SELECT pg_temp.expect_error('no role switch: cannot read session revocations',
   $s$SELECT generation FROM titan.titan_session_revocations$s$);
 SELECT pg_temp.expect_error('no role switch: cannot write session revocations',
-  $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-alice', 'org-tenant-a', 1)$s$);
+  $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-alice', '00000000-0000-4000-8000-00000000000a', 1)$s$);
 SELECT pg_temp.expect_error('no role switch: cannot read OIDC login states',
   $s$SELECT state_digest FROM titan.titan_oidc_login_states$s$);
 SELECT pg_temp.expect_error('no role switch: cannot insert OIDC login state',
@@ -156,10 +156,12 @@ SELECT pg_temp.expect_error('no role switch: cannot read memberships',
 -- ---------------------------------------------------------------- B. session revocation (readVersion, revokeAll)
 -- readVersion runs as titan_trusted_reader.
 SET LOCAL ROLE titan_trusted_reader;
+-- readVersion sets the organisation scope first (migration 0010 policy; session-revocation-pg.mjs).
+SELECT set_config('titan.organisation_id', '00000000-0000-4000-8000-00000000000a', true);
 SELECT pg_temp.expect_count('reader readVersion with no row returns generation 0 (zero rows)',
-  $s$SELECT generation FROM titan.titan_session_revocations WHERE application_id = 'desk' AND logto_subject = 'sub-alice' AND organisation_id = 'org-tenant-a'$s$, 0);
+  $s$SELECT generation FROM titan.titan_session_revocations WHERE application_id = 'desk' AND logto_subject = 'sub-alice' AND organisation_id = '00000000-0000-4000-8000-00000000000a'$s$, 0);
 SELECT pg_temp.expect_denied('reader cannot bump a revocation generation',
-  $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-alice', 'org-tenant-a', 1) ON CONFLICT (application_id, logto_subject, organisation_id) DO UPDATE SET generation = titan.titan_session_revocations.generation + 1, revoked_at = now()$s$);
+  $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-alice', '00000000-0000-4000-8000-00000000000a', 1) ON CONFLICT (application_id, logto_subject, organisation_id) DO UPDATE SET generation = titan.titan_session_revocations.generation + 1, revoked_at = now()$s$);
 SELECT pg_temp.expect_denied('reader cannot update a revocation generation',
   $s$UPDATE titan.titan_session_revocations SET generation = 99$s$);
 RESET ROLE;
@@ -167,14 +169,15 @@ RESET ROLE;
 -- revokeAll runs as titan_trusted_writer: INSERT ... ON CONFLICT DO UPDATE ... RETURNING generation.
 SET LOCAL ROLE titan_trusted_writer;
 SELECT pg_temp.expect_affected('writer revokeAll creates generation 1',
-  $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-alice', 'org-tenant-a', 1) ON CONFLICT (application_id, logto_subject, organisation_id) DO UPDATE SET generation = titan.titan_session_revocations.generation + 1, revoked_at = now() RETURNING generation$s$, 1);
+  $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-alice', '00000000-0000-4000-8000-00000000000a', 1) ON CONFLICT (application_id, logto_subject, organisation_id) DO UPDATE SET generation = titan.titan_session_revocations.generation + 1, revoked_at = now() RETURNING generation$s$, 1);
 SELECT pg_temp.expect_affected('writer revokeAll bumps the same key to generation 2',
-  $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-alice', 'org-tenant-a', 1) ON CONFLICT (application_id, logto_subject, organisation_id) DO UPDATE SET generation = titan.titan_session_revocations.generation + 1, revoked_at = now() RETURNING generation$s$, 1);
+  $s$INSERT INTO titan.titan_session_revocations (application_id, logto_subject, organisation_id, generation) VALUES ('desk', 'sub-alice', '00000000-0000-4000-8000-00000000000a', 1) ON CONFLICT (application_id, logto_subject, organisation_id) DO UPDATE SET generation = titan.titan_session_revocations.generation + 1, revoked_at = now() RETURNING generation$s$, 1);
 RESET ROLE;
 
 SET LOCAL ROLE titan_trusted_reader;
+SELECT set_config('titan.organisation_id', '00000000-0000-4000-8000-00000000000a', true);
 SELECT pg_temp.expect_count('reader readVersion sees generation 2 after the bump',
-  $s$SELECT generation FROM titan.titan_session_revocations WHERE application_id = 'desk' AND logto_subject = 'sub-alice' AND organisation_id = 'org-tenant-a' AND generation = 2$s$, 1);
+  $s$SELECT generation FROM titan.titan_session_revocations WHERE application_id = 'desk' AND logto_subject = 'sub-alice' AND organisation_id = '00000000-0000-4000-8000-00000000000a' AND generation = 2$s$, 1);
 RESET ROLE;
 
 -- ---------------------------------------------------------------- C. OIDC login state (save, consume, prune)
