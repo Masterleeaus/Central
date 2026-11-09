@@ -27,6 +27,18 @@ export function createPgConfigStore({pool,correlationId=randomUUID}={}) {
  const defSql='SELECT product,key,owner,value_type,default_value,allowed_values,description FROM titan_config.definitions WHERE product=$1 AND key=$2';
  const scopeSql='product,key,environment,kind,scope';
  return Object.freeze({
+  readSnapshot:({key,product,environment,companyId,cohorts=[]})=>tx(async c=>{
+   const definition=definitionFrom((await c.query(defSql,[product,key])).rows[0]);
+   if(!definition)return {definition:null,overrides:[]};
+   const rows=await c.query(`SELECT r.* FROM titan_config.scopes s JOIN titan_config.revisions r ON
+    r.product=s.product AND r.key=s.key AND r.environment=s.environment
+    AND r.kind=s.kind AND r.scope=s.scope AND r.revision=s.revision
+    WHERE s.product=$1 AND s.key=$2 AND s.environment=$3
+    AND (s.kind='environment' OR (s.kind='company' AND s.scope=$4)
+    OR (s.kind='cohort' AND s.scope=ANY($5::text[])))`,
+    [product,key,environment,companyId,cohorts]);
+   return {definition,overrides:rows.rows.map(overrideFrom)};
+  },true),
   getDefinition:(key,product)=>tx(async c=>definitionFrom((await c.query(defSql,[product,key])).rows[0]),true),
   getOverrides:(key,product,environment)=>tx(async c=>(await c.query(
    `SELECT r.* FROM titan_config.scopes s JOIN titan_config.revisions r ON
