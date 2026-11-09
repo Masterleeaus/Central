@@ -45,7 +45,7 @@ test('stores only digest and individually AEAD-bound sensitive fields',async()=>
  assert.ok(query[1][4].includes('|subject)'));
  assert.ok(!query[0].includes('verified-subject'));
  assert.deepEqual(x.calls.map(x=>x[0]).slice(0,4),
-  ['BEGIN','SET LOCAL ROLE titan_product_selection',"SET LOCAL statement_timeout = '5000ms'",
+  ['BEGIN','SET LOCAL ROLE titan_product_selection_field',"SET LOCAL statement_timeout = '5000ms'",
    query[0]]);
 });
 test('app-specific namespace prevents cross-product state consumption',async()=>{
