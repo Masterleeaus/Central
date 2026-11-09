@@ -41,8 +41,9 @@ test('stores only digest and individually AEAD-bound sensitive fields',async()=>
  assert.equal(query[1][0],'field');
  assert.match(query[1][1],/^[a-f0-9]{64}$/);
  assert.ok(!JSON.stringify(x.calls).includes(token));
- assert.ok(!JSON.stringify(x.calls).includes('verified-subject","'));
+ assert.ok(query[1][4].startsWith('sealed('));
  assert.ok(query[1][4].includes('|subject)'));
+ assert.ok(!query[0].includes('verified-subject'));
  assert.deepEqual(x.calls.map(x=>x[0]).slice(0,4),
   ['BEGIN','SET LOCAL ROLE titan_product_selection',"SET LOCAL statement_timeout = '5000ms'",
    query[0]]);
