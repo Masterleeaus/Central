@@ -451,3 +451,58 @@ tamper-evident checkpoint/receipt store are still missing. Existing
 function owners and the privileged audit reader must be restricted
 to appropriate staging contexts. No real production backfill is
 authorised or executed by this mechanism.
+
+## Pass 21 — Off-database Ed25519 staging execution receipts
+
+`tools/staging_external_receipt.mjs` (Node.js 22, built-in crypto only)
+captures a **previously committed** staging approval and audit pair,
+signs it with an **external Ed25519 private key**, and later verifies it
+against a **separately pinned public key** and a fresh read-only
+PostgreSQL query. It is not a replacement for independent human
+authorization to execute the migration. The signing key must remain
+outside PostgreSQL and must never be committed to Git or logged.
+
+The tool offers four commands:
+
+- `capture --database-url URL --approval-id UUID --output receipt.json`
+  requires a one-to-one approval/audit pair with equal company and
+  identity IDs, consumed approval, committed audit result, and stored
+  SHA-256 fingerprints that still match the current database rows.
+  Only the stage-allowlisted database names are accepted.
+- `sign --receipt receipt.json --private-key signer.pem --output signed.json`
+  signs the exact canonical JSON receipt with a domain-separated
+  Ed25519 signature. Outputs are created with restrictive file modes;
+  existing files are **never overwritten**.
+- `pin --public-key signer-public.pem` returns the SHA-256 fingerprint
+  of the Ed25519 SubjectPublicKeyInfo DER bytes.
+- `verify --signed signed.json --public-key signer-public.pem
+  --trusted-key-sha256 PIN --database-url URL` first checks the
+  independently supplied pinned key and signature, then compares
+  all receipt database/approval/event/fingerprint fields with a
+  new read-only database snapshot. The signature and database hashes
+  must both match.
+
+The external receipt contains an approval/event UUID pair, its
+approval and audit SHA-256 fingerprints, a staged database class and
+capture time. Treat it as **confidential** (the UUIDs permit
+correlation). Store the signed receipt and its public-key pin in
+independently administered, retention-protected storage **outside**
+the database and its administrator's access. Merely writing the
+receipt to the same host is **not** an independent audit store.
+An independent storage retention policy, witness identity, revocation
+policy and key rotation are required before operational reliance.
+
+CI generates throwaway Ed25519 keys only in runner temporary space,
+captures an actual disposable PostgreSQL staging commit, signs it,
+checks verification with the known pin, and confirms that a wrong
+public-key pin fails. It separately tests altered receipts, event
+IDs, timestamps, digest values, unknown fields, invalid signatures
+and output overwrite protection.
+
+**Explicit limitation:** This is *after-the-fact cryptographic
+attestation of a staging commit*. It does **not** prove that a named
+human approved the action beforehand, nor does it stop a malicious
+operator from making a valid-looking commit before receipt capture.
+The signing key identity is only as trustworthy as the independently
+maintained public-key pin and custody procedure. There is no new
+production database write path or production cutover authorization.
