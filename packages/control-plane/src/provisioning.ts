@@ -18,7 +18,7 @@ export type ProvisioningCommand =
  | { kind:'link'; id:string; identityId:string; organisationId:string; applicationId:ApplicationId; localUserId:string; localAccountId:string; assertion:string }
  | { kind:'link_relink'; id:string; identityId:string; organisationId:string; applicationId:ApplicationId; expectedRevision:number; localUserId:string; localAccountId:string; assertion:string }
  | { kind:'membership_update'; id:string; organisationId:string; expectedRevision:number; role?:MembershipRole; state?:MemberState }
- | { kind:'entitlement_update'; id:string; organisationId:string; expectedRevision:number; state:GrantState }
+ | { kind:'entitlement_update'; id:string; organisationId:string; expectedRevision:number; state:GrantState; features?:readonly string[]; expiresAt?:string|null }
  | { kind:'link_revoke'; id:string; organisationId:string; expectedRevision:number };
 
 type CreateCommand = Extract<ProvisioningCommand, { kind:'identity'|'organisation'|'membership'|'entitlement'|'link' }>;
@@ -58,6 +58,8 @@ const ROLE_RANK: Record<MembershipRole, number> = { learner:0, member:1, manager
 /** Every application whose sessions must be revoked when a member's access is reduced. */
 const SESSION_APPS: readonly ApplicationId[] = ['desk','field','academy'];
 const validDate=(d:string|undefined)=>!d || (Number.isFinite(Date.parse(d)) && new Date(d).toISOString()===d);
+const validFeatures=(f:unknown):f is readonly string[]=>Array.isArray(f)&&f.length<=100&&f.every(x=>nonempty(x,100))&&new Set(f).size===f.length;
+const isoOrNull=(v:unknown):string|null=>{if(v===null||v===undefined) return null;const d=new Date(v as string|Date);if(!Number.isFinite(d.valueOf())) throw Error('invalid stored expiry');return d.toISOString();};
 const isCreate=(c:ProvisioningCommand):c is CreateCommand=>c.kind==='identity'||c.kind==='organisation'||c.kind==='membership'||c.kind==='entitlement'||c.kind==='link';
 const sameUuid=(a:unknown,b:string)=>String(a).toLowerCase()===b.toLowerCase();
 const isUniqueViolation=(e:unknown)=>(e as {code?:unknown})?.code==='23505';
@@ -77,7 +79,10 @@ function validate(c:ProvisioningCommand, context:ProvisioningContext):void {
     case 'membership_update':
       if(!uuid(c.organisationId)||!revision(c.expectedRevision)||(c.role===undefined&&c.state===undefined)||(c.role!==undefined&&!roles.has(c.role))||(c.state!==undefined&&!memberStates.has(c.state))) throw Error('invalid membership update');break;
     case 'entitlement_update':
-      if(!uuid(c.organisationId)||!revision(c.expectedRevision)||!grantStates.has(c.state)) throw Error('invalid entitlement update');break;
+      if(!uuid(c.organisationId)||!revision(c.expectedRevision)||!grantStates.has(c.state)) throw Error('invalid entitlement update');
+      if(c.features!==undefined&&!validFeatures(c.features)) throw Error('invalid entitlement update');
+      if(c.expiresAt!==undefined&&c.expiresAt!==null&&!(typeof c.expiresAt==='string'&&validDate(c.expiresAt))) throw Error('invalid entitlement update');
+      break;
     case 'link_revoke':
       if(!uuid(c.organisationId)||!revision(c.expectedRevision)) throw Error('invalid link revocation');break;
     default:throw Error('unsupported provisioning command');
@@ -201,13 +206,21 @@ async function applyUpdate(conn:SqlClient,c:Exclude<ProvisioningCommand,CreateCo
    return;
   }
   case 'entitlement_update': {
-   const locked=await conn.query('SELECT organisation_id, application_id, revision FROM titan.entitlements WHERE id=$1 FOR UPDATE',[c.id]);
+   const locked=await conn.query('SELECT organisation_id, application_id, revision, features, expires_at FROM titan.entitlements WHERE id=$1 FOR UPDATE',[c.id]);
    const current=locked.rows[0];
    if(!current||Number(current.revision)!==c.expectedRevision) throw Error('revision conflict: entitlement missing or changed');
    if(String(current.organisation_id)!==c.organisationId) throw Error('organisation mismatch: entitlement belongs to another organisation');
-   const updated=await conn.query('UPDATE titan.entitlements SET state=$3, revision=revision+1 WHERE id=$1 AND revision=$2',[c.id,c.expectedRevision,c.state]);
+   const currentFeatures=Array.isArray(current.features)?current.features.map(String):[];
+   const currentExpiry=isoOrNull(current.expires_at);
+   const nextFeatures=c.features!==undefined?[...c.features]:currentFeatures;
+   const nextExpiry=c.expiresAt!==undefined?(c.expiresAt??null):currentExpiry;
+   const updated=await conn.query('UPDATE titan.entitlements SET state=$3, features=$4, expires_at=$5, revision=revision+1 WHERE id=$1 AND revision=$2',[c.id,c.expectedRevision,c.state,nextFeatures,nextExpiry]);
    if(updated.rowCount!==1) throw Error('revision conflict: entitlement changed');
-   if(c.state!=='active'&&c.state!=='trialing'){
+   // A reduction is a state move out of access, a removed feature, or an expiry that moved earlier
+   // (or became finite). Each one revokes sessions for this application in this transaction.
+   const removedFeature=currentFeatures.some(f=>!nextFeatures.includes(f));
+   const expiryReduced=nextExpiry!==null&&(currentExpiry===null||Date.parse(nextExpiry)<Date.parse(currentExpiry));
+   if(c.state!=='active'&&c.state!=='trialing'||removedFeature||expiryReduced){
     const app=String(current.application_id) as ApplicationId;
     const members=await conn.query('SELECT i.logto_subject, m.organisation_id FROM titan.memberships m JOIN titan.identities i ON i.id=m.identity_id WHERE m.organisation_id=$1',[String(current.organisation_id)]);
     for(const row of members.rows) await bumpGeneration(conn,app,String(row.logto_subject),String(row.organisation_id));

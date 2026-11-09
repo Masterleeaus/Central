@@ -63,6 +63,7 @@ The RLS test seeds two tenants and runs inside a transaction that is rolled back
 | 0007 | Provisioning audit types for update and revoke commands; session-revocation and OIDC-state grants. |
 | 0008 | Trusted reader scoped to the organisation set for the transaction; `titan_trusted_writer` may read session revocations (needed by the revocation bump). |
 | 0009 | Login-role grants for the control-api stores: `titan_trusted_writer` may SELECT the OIDC login-state columns that consume and prune read. Nothing is granted to the login role itself. |
+| 0015 | Subscription lifecycle ledger (issue #35): `titan.billing_subscriptions` (last applied position per provider subscription) and `titan.billing_events` (one row per verified provider event, with its disposition). Written only by `titan_trusted_writer`. Numbers 0010-0014 are unused. See `docs/SUBSCRIPTIONS.md`. |
 | 0012 | Transactional outbox: `titan.outbox_events` (versioned, tenant-keyed, idempotency-keyed, bounded payload, pending/published/dead), `titan.outbox_event_audit`, and `titan.outbox_processed_events` for consumer dedupe. Tenant-scoped RLS. Versions 0010 and 0011 are reserved by other work. See `docs/EVENTS.md`. |
 | 0010 | Row-level security on `titan.titan_session_revocations`, keyed by `organisation_id`. The reader sees one organisation (the one set for its transaction); the writer keeps cross-tenant bumps. |
 
