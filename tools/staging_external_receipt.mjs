@@ -136,6 +136,7 @@ function parse(argv) {
  return values;
 }
 export function main(argv=process.argv.slice(2)) {
+ let stage='parse';
  try {
   const o=parse(argv);
   if(o.mode==='pin') {
@@ -159,8 +160,10 @@ export function main(argv=process.argv.slice(2)) {
   }
   if(!o.signed||!o['public-key']||!o['trusted-key-sha256']||!o['database-url'])
    throw Error('missing verification arguments');
+  stage='signature-verification';
   const receipt=validateSigned(safeRead(o.signed),
     readFileSync(o['public-key']),o['trusted-key-sha256']);
+  stage='database-verification';
   const record=readCommitted(o['database-url'],receipt.approval_id);
   for(const k of ['database','approval_id','event_id','approval_sha256','audit_sha256']) {
    if(record[k]!==receipt[k])throw Error('database receipt mismatch');
@@ -182,7 +185,7 @@ export function main(argv=process.argv.slice(2)) {
   const kind=allowed.has(error?.message) ? ': '+error.message : '';
   const category=['TypeError','ReferenceError','SyntaxError','RangeError','Error'].includes(error?.name) ? error.name : 'Error';
   const code=typeof error?.code==='string' && /^E[A-Z_]{2,32}$/.test(error.code) ? ' '+error.code : '';
-  console.error('external staging receipt operation denied or invalid'+kind+' ['+category+code+']');
+  console.error('external staging receipt operation denied or invalid'+kind+' ['+category+code+'] at '+stage);
   return 1;
  }
 }
