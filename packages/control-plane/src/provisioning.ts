@@ -7,6 +7,8 @@
 import { createHash } from 'node:crypto';
 import type { ApplicationId, MembershipRole } from './contracts.js';
 import type { SqlPool, SqlClient, MemberState, GrantState } from './postgres.js';
+import { recordActivity } from './activity-events.js';
+import type { ActivityEventInput } from './activity-events.js';
 
 export type ProvisioningCommand =
  | { kind:'identity'; id:string; logtoSubject:string }
@@ -121,12 +123,32 @@ export class CentralProvisioner {
     throw new LinkReviewRequired(e.reason,String(review.rows[0]?.id??''));
    }
    await conn.query('INSERT INTO titan.provisioning_audit(request_id,actor_subject,authority_reference,command_kind,command_digest,subject_id) VALUES ($1,$2,$3,$4,$5,$6)',[context.requestId,context.actorSubject,context.authorityReference,command.kind,digest,command.id]);
+   // Activity history (issue #36): same transaction, so a refused event rolls back the lifecycle change.
+   const activity=activityFor(command,context);
+   if(activity) await recordActivity(conn,activity);
    await conn.query('COMMIT');begun=false;return outcome;
   }catch(e){if(begun){try{await conn.query('ROLLBACK')}catch{/* retain original exception */}}throw e;}
   finally{conn.release?.();}
  }
 }
+/** Maps a provisioning command to its activity event. Detail holds enum values and application IDs only.
+ * An identity has no organisation, and the activity table is tenant-keyed, so identity creation records no
+ * activity event. The audit row still records it. */
+function activityFor(c:ProvisioningCommand,context:ProvisioningContext):ActivityEventInput|undefined{
+ const base={actorKind:'subject' as const,actorId:context.actorSubject,sourceProduct:'central' as const,outcome:'success' as const,correlationId:context.requestId};
+ switch(c.kind){
+  case 'identity': return undefined;
+  case 'organisation': return {...base,organisationId:c.id,action:'organisation.create',targetType:'organisation',targetId:c.id};
+  case 'membership': return {...base,organisationId:c.organisationId,action:'membership.create',targetType:'membership',targetId:c.id,detail:{role:c.role}};
+  case 'entitlement': return {...base,organisationId:c.organisationId,action:'entitlement.create',targetType:'entitlement',targetId:c.id,detail:{applicationId:c.applicationId}};
+  case 'link': return {...base,organisationId:c.organisationId,action:'account_link.create',targetType:'account_link',targetId:c.id,detail:{applicationId:c.applicationId}};
+  case 'membership_update': return {...base,organisationId:c.organisationId,action:'membership.update',targetType:'membership',targetId:c.id,detail:{...(c.role!==undefined?{role:c.role}:{}),...(c.state!==undefined?{state:c.state}:{})}};
+  case 'entitlement_update': return {...base,organisationId:c.organisationId,action:'entitlement.update',targetType:'entitlement',targetId:c.id,detail:{state:c.state}};
+  case 'link_revoke': return {...base,organisationId:c.organisationId,action:'account_link.revoke',targetType:'account_link',targetId:c.id};
+ }
+}
 /** Replay digest: the assertion is replaced by its SHA-256, so no signed token is stored in the audit table. */
+/** Consistent serialized payload for replay detection; no cryptographic claims: stored audit text is not a signature. */
 function stableDigest(command:ProvisioningCommand):string {
  const source:Record<string,unknown>={...command};
  if('assertion' in command){delete source.assertion;source.assertionSha256=createHash('sha256').update(command.assertion).digest('hex');}
