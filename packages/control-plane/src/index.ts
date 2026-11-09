@@ -26,3 +26,5 @@ export * from './feature-flags.js';
 export * from './outbox.js';
 export * from './outbox-publisher.js';
 export * from './outbox-consumer.js';
+export * from './outbox-keys.js';
+export * from './outbox-http-transport.js';

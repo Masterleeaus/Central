@@ -4,7 +4,7 @@ import type { SqlClient, SqlPool, SqlQueryResult } from './postgres.js';
  * as the state change. Nothing here opens a transaction on the caller's behalf. */
 export declare const OUTBOX_MAX_PAYLOAD_BYTES = 4096;
 export declare const OUTBOX_MAX_ERROR_CHARS = 512;
-export type OutboxErrorCode = 'missing_tenant' | 'invalid_tenant' | 'unknown_event_type' | 'source_not_allowed' | 'invalid_field' | 'invalid_payload' | 'payload_too_large' | 'idempotency_conflict' | 'bad_signature' | 'tenant_mismatch' | 'invalid_envelope' | 'not_dead' | 'not_pending' | 'route_mismatch';
+export type OutboxErrorCode = 'missing_tenant' | 'invalid_tenant' | 'unknown_event_type' | 'source_not_allowed' | 'invalid_field' | 'invalid_payload' | 'payload_too_large' | 'idempotency_conflict' | 'bad_signature' | 'tenant_mismatch' | 'invalid_envelope' | 'not_dead' | 'not_pending' | 'route_mismatch' | 'no_active_key' | 'insecure_endpoint' | 'transport_failed';
 export declare class OutboxError extends Error {
     readonly code: OutboxErrorCode;
     constructor(code: OutboxErrorCode, message: string);

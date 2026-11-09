@@ -1,22 +1,26 @@
 import type { OutboxTx } from './outbox.js';
 import { OutboxError, assertTenantId } from './outbox.js';
-import { verifyEnvelopeSignature, type OutboxEnvelope } from './outbox-publisher.js';
+import { verifyEnvelopeWithKeys, type OutboxEnvelope } from './outbox-publisher.js';
+import { resolveRouteKeys, type RouteKey } from './outbox-keys.js';
 
 /** Consumer side of the outbox. Delivery is at-least-once, so a handler must be idempotent.
  * handleInbound records the idempotency key and runs the effect in the caller's transaction. A duplicate
  * key returns 'duplicate' and the effect does not run again. If the effect throws, the transaction rolls back
- * and the key is not recorded, so a later delivery can retry. */
+ * and the key is not recorded, so a later delivery can retry.
+ *
+ * Ordering: handleInbound does not reorder or buffer. It processes envelopes in the order they arrive. The
+ * publisher sends each tenant's events in order, but a consumer that needs order must check it itself. A late
+ * duplicate of an event that was already processed is returned as 'duplicate' and has no effect. */
 
-export interface ConsumerIdentity {
+/** Either one open-ended secret or a rotation key list (see outbox-keys.ts). `now` is injectable for tests. */
+export type ConsumerIdentity = {
   readonly consumer: string;
   readonly organisationId: string;
   readonly eventTypes: readonly string[];
-  readonly secret: string;
-}
+  readonly now?: () => number;
+} & ({ readonly secret: string; readonly keys?: undefined } | { readonly keys: readonly RouteKey[]; readonly secret?: undefined });
 
 export type InboundOutcome = 'processed' | 'duplicate';
-
-const HEX64 = /^[0-9a-f]{64}$/;
 
 function parseEnvelope(value: unknown): OutboxEnvelope {
   const e = value as Partial<OutboxEnvelope> | null;
@@ -38,7 +42,12 @@ export async function handleInbound(
   effect: (tx: OutboxTx, envelope: OutboxEnvelope) => Promise<void>,
 ): Promise<InboundOutcome> {
   const envelope = parseEnvelope(rawEnvelope);
-  if (!verifyEnvelopeSignature(envelope, consumer.secret)) throw new OutboxError('bad_signature', 'envelope signature does not verify');
+  const keys = resolveRouteKeys({ consumer: consumer.consumer, secret: consumer.secret, keys: consumer.keys });
+  const now = consumer.now ?? (() => Date.now());
+  // Any key valid at this moment may verify. An expired or not-yet-valid key does not.
+  if (!verifyEnvelopeWithKeys(envelope, keys, now())) {
+    throw new OutboxError('bad_signature', 'envelope signature does not verify with a key valid now');
+  }
   if (assertTenantId(envelope.organisationId) !== assertTenantId(consumer.organisationId)) {
     throw new OutboxError('tenant_mismatch', 'event belongs to another tenant');
   }

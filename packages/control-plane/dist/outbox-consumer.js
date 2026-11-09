@@ -1,6 +1,6 @@
 import { OutboxError, assertTenantId } from './outbox.js';
-import { verifyEnvelopeSignature } from './outbox-publisher.js';
-const HEX64 = /^[0-9a-f]{64}$/;
+import { verifyEnvelopeWithKeys } from './outbox-publisher.js';
+import { resolveRouteKeys } from './outbox-keys.js';
 function parseEnvelope(value) {
     const e = value;
     if (!e || typeof e !== 'object')
@@ -19,8 +19,12 @@ function parseEnvelope(value) {
 /** Verifies authenticity and tenant binding, then runs effect once per (consumer, idempotency key). */
 export async function handleInbound(tx, consumer, rawEnvelope, effect) {
     const envelope = parseEnvelope(rawEnvelope);
-    if (!verifyEnvelopeSignature(envelope, consumer.secret))
-        throw new OutboxError('bad_signature', 'envelope signature does not verify');
+    const keys = resolveRouteKeys({ consumer: consumer.consumer, secret: consumer.secret, keys: consumer.keys });
+    const now = consumer.now ?? (() => Date.now());
+    // Any key valid at this moment may verify. An expired or not-yet-valid key does not.
+    if (!verifyEnvelopeWithKeys(envelope, keys, now())) {
+        throw new OutboxError('bad_signature', 'envelope signature does not verify with a key valid now');
+    }
     if (assertTenantId(envelope.organisationId) !== assertTenantId(consumer.organisationId)) {
         throw new OutboxError('tenant_mismatch', 'event belongs to another tenant');
     }

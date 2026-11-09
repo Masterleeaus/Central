@@ -1,19 +1,24 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { OutboxError, canonicalJson, redactError, runInTransaction, assertTenantId } from './outbox.js';
+import { resolveRouteKeys, signingKeyAt, verifySignatureWithKeys } from './outbox-keys.js';
 /** Publisher worker. Claims due pending rows with FOR UPDATE SKIP LOCKED, sends each one through an injected
  * transport, then marks it published, schedules a retry with exponential backoff, or moves it to dead
- * once the attempt limit is reached. Delivery is at-least-once; consumers dedupe with consumer.ts.
+ * once the attempt limit is reached. Delivery is at-least-once; consumers dedupe with outbox-consumer.ts.
  *
  * Tenant routing: a row is only ever sent to the route whose organisationId equals the row's organisation_id,
  * and only to a route that lists the event type. The transport receives the consumer name and tenant, never
- * another tenant's row. */
+ * another tenant's row.
+ *
+ * Ordering (per tenant): the claim takes a tenant's events in outbox order (created_at, id) and never claims an
+ * event while an earlier event of the same tenant is still pending. So one event per tenant is in flight, and a
+ * retried event is not overtaken by a later one. A dead event does not block: it is skipped, and its later events
+ * go out. Replaying it later delivers it out of order. Tenants do not order against each other. See docs/EVENTS.md. */
 export const DEFAULT_MAX_ATTEMPTS = 8;
 export const MAX_ATTEMPTS_LIMIT = 50;
-const MIN_SECRET_LENGTH = 32;
 function signEnvelope(unsigned, secret) {
     return createHmac('sha256', secret).update(canonicalJson(unsigned), 'utf8').digest('hex');
 }
-/** Constant-time check of an envelope signature. Used by consumers. */
+/** Constant-time check of an envelope signature against one secret. */
 export function verifyEnvelopeSignature(envelope, secret) {
     const { signature, ...unsigned } = envelope;
     if (typeof signature !== 'string' || !/^[0-9a-f]{64}$/.test(signature))
@@ -21,6 +26,11 @@ export function verifyEnvelopeSignature(envelope, secret) {
     const expected = Buffer.from(signEnvelope(unsigned, secret), 'hex');
     const given = Buffer.from(signature, 'hex');
     return expected.length === given.length && timingSafeEqual(expected, given);
+}
+/** Verifies against a route's keys. Accepts when any key valid at nowMs verifies. Expired and not-yet-valid keys never do. */
+export function verifyEnvelopeWithKeys(envelope, keys, nowMs) {
+    const { signature, ...unsigned } = envelope;
+    return verifySignatureWithKeys(unsigned, signature, keys, nowMs);
 }
 /** Defence in depth: refuses to deliver a row to a route of another tenant. */
 export function assertSameTenant(rowOrganisationId, route) {
@@ -40,6 +50,7 @@ export function createPublisher(options) {
     const lease = options.leaseSeconds ?? 60;
     const batchSize = options.batchSize ?? 20;
     const actor = options.actor ?? 'outbox-publisher';
+    const now = options.now ?? (() => Date.now());
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > MAX_ATTEMPTS_LIMIT)
         throw new OutboxError('invalid_field', 'maxAttempts out of range');
     if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 500)
@@ -47,10 +58,11 @@ export function createPublisher(options) {
     if (!(base > 0) || !(cap >= base) || !(lease > 0))
         throw new OutboxError('invalid_field', 'backoff or lease out of range');
     const seen = new Set();
+    const routes = [];
     for (const route of options.routes) {
         assertTenantId(route.organisationId);
-        if (route.secret.length < MIN_SECRET_LENGTH)
-            throw new OutboxError('invalid_field', `secret for ${route.consumer} is too short`);
+        // Validates the secret or the rotation keys; throws before any row is claimed.
+        routes.push({ route, keys: resolveRouteKeys(route) });
         for (const type of route.eventTypes) {
             const key = `${route.organisationId.toLowerCase()}|${type}`;
             if (seen.has(key))
@@ -59,7 +71,7 @@ export function createPublisher(options) {
         }
     }
     function routeFor(row) {
-        return options.routes.find((r) => r.organisationId.toLowerCase() === row.organisationId && r.eventTypes.includes(row.eventType));
+        return routes.find((r) => r.route.organisationId.toLowerCase() === row.organisationId && r.route.eventTypes.includes(row.eventType));
     }
     async function claim(conn) {
         // Rows whose lease expired after the last permitted attempt go to dead rather than being claimed again.
@@ -73,10 +85,17 @@ export function createPublisher(options) {
         for (const row of expired.rows) {
             await conn.query(`INSERT INTO titan.outbox_event_audit (event_id, organisation_id, action, actor, detail) VALUES ($1, $2, 'dead', $3, $4)`, [row['id'], row['organisation_id'], actor, 'lease expired after final attempt']);
         }
+        // A row is due only if no earlier pending row of the same tenant exists (per-tenant order, head of line).
+        // Dead rows are not pending, so they never block. The predicate is checked by the PostgreSQL 16 harness in docs/EVENTS.md.
         const result = await conn.query(`WITH due AS (
-         SELECT id FROM titan.outbox_events
-          WHERE status = 'pending' AND next_attempt_at <= now() AND attempts < $1
-          ORDER BY next_attempt_at, created_at
+         SELECT e.id FROM titan.outbox_events e
+          WHERE e.status = 'pending' AND e.next_attempt_at <= now() AND e.attempts < $1
+            AND NOT EXISTS (
+              SELECT 1 FROM titan.outbox_events earlier
+               WHERE earlier.organisation_id = e.organisation_id
+                 AND earlier.status = 'pending'
+                 AND (earlier.created_at, earlier.id) < (e.created_at, e.id))
+          ORDER BY e.next_attempt_at, e.created_at
           LIMIT $2
           FOR UPDATE SKIP LOCKED)
        UPDATE titan.outbox_events e
@@ -130,10 +149,15 @@ export function createPublisher(options) {
         });
     }
     async function deliver(row) {
-        const route = routeFor(row);
-        if (!route)
+        const entry = routeFor(row);
+        if (!entry)
             throw new OutboxError('route_mismatch', 'no consumer route for this tenant and event type');
+        const { route, keys } = entry;
         assertSameTenant(row.organisationId, route);
+        // Signs with the current key. Fails (and is retried with backoff) when no key is valid at this moment.
+        const signingKey = signingKeyAt(keys, now());
+        if (!signingKey)
+            throw new OutboxError('no_active_key', `no signing key is valid now for consumer ${route.consumer}`);
         const unsigned = {
             eventId: row.id,
             organisationId: row.organisationId,
@@ -145,7 +169,7 @@ export function createPublisher(options) {
             occurredAt: row.createdAt,
             payload: row.payload,
         };
-        const envelope = { ...unsigned, signature: signEnvelope(unsigned, route.secret) };
+        const envelope = { ...unsigned, signature: signEnvelope(unsigned, signingKey.secret) };
         await options.transport.send(envelope, { consumer: route.consumer, organisationId: route.organisationId });
     }
     return {

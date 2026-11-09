@@ -15,7 +15,8 @@ const EVENT_TYPE_RE = /^[a-z][a-z0-9_]{0,63}$/;
 export type OutboxErrorCode =
   | 'missing_tenant' | 'invalid_tenant' | 'unknown_event_type' | 'source_not_allowed'
   | 'invalid_field' | 'invalid_payload' | 'payload_too_large' | 'idempotency_conflict'
-  | 'bad_signature' | 'tenant_mismatch' | 'invalid_envelope' | 'not_dead' | 'not_pending' | 'route_mismatch';
+  | 'bad_signature' | 'tenant_mismatch' | 'invalid_envelope' | 'not_dead' | 'not_pending' | 'route_mismatch'
+  | 'no_active_key' | 'insecure_endpoint' | 'transport_failed';
 
 export class OutboxError extends Error {
   constructor(readonly code: OutboxErrorCode, message: string) {
@@ -153,8 +154,8 @@ export function createOutboxWriter(registry: EventRegistry): OutboxWriter {
       const event = prepareEvent(registry, input);
       const inserted = await tx.query(
         `INSERT INTO titan.outbox_events
-           (organisation_id, source_product, event_type, schema_version, correlation_id, idempotency_key, payload, payload_digest)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+           (organisation_id, source_product, event_type, schema_version, correlation_id, idempotency_key, payload, payload_digest, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, clock_timestamp())
          ON CONFLICT (idempotency_key) DO NOTHING
          RETURNING id`,
         [event.organisationId, event.sourceProduct, event.eventType, event.schemaVersion, event.correlationId,

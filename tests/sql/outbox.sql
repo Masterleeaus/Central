@@ -46,15 +46,21 @@ EXCEPTION WHEN OTHERS THEN
   RAISE NOTICE 'ok (refused): % [%]', label, SQLERRM;
 END $$;
 
--- Claim a batch exactly as the publisher does: due pending rows, FOR UPDATE SKIP LOCKED, attempts + 1, lease.
+-- Claim statement of the publisher (outbox-publisher.ts claim): due pending rows, per-tenant head of line,
+-- FOR UPDATE SKIP LOCKED, attempts + 1, lease. The expired-lease step that runs before it is in the TypeScript publisher.
 CREATE FUNCTION pg_temp.claim_batch(batch integer, lease double precision, max_attempts integer) RETURNS bigint
 LANGUAGE plpgsql AS $$
 DECLARE n bigint;
 BEGIN
   WITH due AS (
-    SELECT id FROM titan.outbox_events
-     WHERE status = 'pending' AND next_attempt_at <= now() AND attempts < max_attempts
-     ORDER BY next_attempt_at, created_at
+    SELECT e.id FROM titan.outbox_events e
+     WHERE e.status = 'pending' AND e.next_attempt_at <= now() AND e.attempts < max_attempts
+       AND NOT EXISTS (
+         SELECT 1 FROM titan.outbox_events earlier
+          WHERE earlier.organisation_id = e.organisation_id
+            AND earlier.status = 'pending'
+            AND (earlier.created_at, earlier.id) < (e.created_at, e.id))
+     ORDER BY e.next_attempt_at, e.created_at
      LIMIT batch
      FOR UPDATE SKIP LOCKED)
   UPDATE titan.outbox_events e
@@ -146,6 +152,38 @@ BEGIN
   IF n <> 0 THEN RAISE EXCEPTION 'FAIL limit: row at the attempt limit was claimed (% rows)', n; END IF;
   RAISE NOTICE 'ok: row at the attempt limit is not claimed';
 END $$;
+
+-- ---------------------------------------------------------------- 4b. per-tenant order (head of line)
+-- A tenant's later event is never claimed while an earlier pending event of the same tenant exists. A backed-off or
+-- leased head holds its tenant back. A dead head does not (dead is not pending); its later events go out.
+-- Seeded with explicit created_at values, so the order does not depend on transaction start times.
+INSERT INTO titan.organisations (id, logto_organisation_id, state) VALUES ('00000000-0000-4000-8000-0000000000d1', 'outbox-test-org-d', 'active');
+INSERT INTO titan.outbox_events (organisation_id, source_product, event_type, schema_version, correlation_id, idempotency_key, payload, payload_digest, created_at, next_attempt_at)
+  VALUES ('00000000-0000-4000-8000-0000000000d1', 'desk', 'example', 1, 'ord', 'order-1', '{"n":1}', repeat('9',64), timestamptz '2030-01-01 00:00:01+00', now() - interval '1 second'),
+         ('00000000-0000-4000-8000-0000000000d1', 'desk', 'example', 1, 'ord', 'order-2', '{"n":2}', repeat('b',64), timestamptz '2030-01-01 00:00:02+00', now() - interval '1 second'),
+         ('00000000-0000-4000-8000-0000000000d1', 'desk', 'example', 1, 'ord', 'order-3', '{"n":3}', repeat('c',64), timestamptz '2030-01-01 00:00:03+00', now() - interval '1 second');
+
+DO $$ BEGIN SET LOCAL ROLE titan_trusted_writer; PERFORM pg_temp.claim_batch(50, 60, 8); END $$;
+SELECT pg_temp.expect_count('order: the head event of the tenant is claimed', $q$SELECT 1 FROM titan.outbox_events WHERE idempotency_key = 'order-1' AND attempts = 1$q$, 1);
+SELECT pg_temp.expect_count('order: later events wait behind the leased head', $q$SELECT 1 FROM titan.outbox_events WHERE idempotency_key IN ('order-2', 'order-3') AND attempts = 0$q$, 2);
+
+UPDATE titan.outbox_events SET next_attempt_at = now() + interval '300 seconds' WHERE idempotency_key = 'order-1';
+DO $$ BEGIN PERFORM pg_temp.claim_batch(50, 60, 8); END $$;
+SELECT pg_temp.expect_count('order: a backed-off head holds back the whole tenant', $q$SELECT 1 FROM titan.outbox_events WHERE idempotency_key IN ('order-2', 'order-3') AND attempts = 0$q$, 2);
+
+UPDATE titan.outbox_events SET next_attempt_at = now() - interval '1 second' WHERE idempotency_key = 'order-1';
+DO $$ BEGIN PERFORM pg_temp.claim_batch(50, 60, 8); END $$;
+SELECT pg_temp.expect_count('order: the head is retried before anything after it', $q$SELECT 1 FROM titan.outbox_events WHERE idempotency_key = 'order-1' AND attempts = 2$q$, 1);
+SELECT pg_temp.expect_count('order: retry of the head does not release later events', $q$SELECT 1 FROM titan.outbox_events WHERE idempotency_key IN ('order-2', 'order-3') AND attempts = 0$q$, 2);
+
+UPDATE titan.outbox_events SET status = 'published', published_at = now() WHERE idempotency_key = 'order-1';
+DO $$ BEGIN PERFORM pg_temp.claim_batch(50, 60, 8); END $$;
+SELECT pg_temp.expect_count('order: after the head is published the next event is claimed', $q$SELECT 1 FROM titan.outbox_events WHERE idempotency_key = 'order-2' AND attempts = 1$q$, 1);
+SELECT pg_temp.expect_count('order: the event after it still waits', $q$SELECT 1 FROM titan.outbox_events WHERE idempotency_key = 'order-3' AND attempts = 0$q$, 1);
+
+UPDATE titan.outbox_events SET status = 'dead', last_error = 'test: dead letter' WHERE idempotency_key = 'order-2';
+DO $$ BEGIN PERFORM pg_temp.claim_batch(50, 60, 8); END $$;
+SELECT pg_temp.expect_count('order: a dead head does not block the tenant', $q$SELECT 1 FROM titan.outbox_events WHERE idempotency_key = 'order-3' AND attempts = 1$q$, 1);
 
 -- ---------------------------------------------------------------- 5. tenant isolation under RLS
 -- Tenant role, scope A: sees and writes only organisation A.

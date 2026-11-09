@@ -1,26 +1,33 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SqlClient, SqlPool } from './postgres.js';
 import { OutboxError, canonicalJson, redactError, runInTransaction, assertTenantId } from './outbox.js';
+import { resolveRouteKeys, signingKeyAt, verifySignatureWithKeys, type ResolvedKey, type RouteKey } from './outbox-keys.js';
 
 /** Publisher worker. Claims due pending rows with FOR UPDATE SKIP LOCKED, sends each one through an injected
  * transport, then marks it published, schedules a retry with exponential backoff, or moves it to dead
- * once the attempt limit is reached. Delivery is at-least-once; consumers dedupe with consumer.ts.
+ * once the attempt limit is reached. Delivery is at-least-once; consumers dedupe with outbox-consumer.ts.
  *
  * Tenant routing: a row is only ever sent to the route whose organisationId equals the row's organisation_id,
  * and only to a route that lists the event type. The transport receives the consumer name and tenant, never
- * another tenant's row. */
+ * another tenant's row.
+ *
+ * Ordering (per tenant): the claim takes a tenant's events in outbox order (created_at, id) and never claims an
+ * event while an earlier event of the same tenant is still pending. So one event per tenant is in flight, and a
+ * retried event is not overtaken by a later one. A dead event does not block: it is skipped, and its later events
+ * go out. Replaying it later delivers it out of order. Tenants do not order against each other. See docs/EVENTS.md. */
 
 export const DEFAULT_MAX_ATTEMPTS = 8;
 export const MAX_ATTEMPTS_LIMIT = 50;
-const MIN_SECRET_LENGTH = 32;
 
-export interface ConsumerRoute {
+/** A route either carries one open-ended secret or a list of rotation keys (see outbox-keys.ts). */
+export type ConsumerRoute = {
   readonly consumer: string;
   readonly organisationId: string;
   readonly eventTypes: readonly string[];
-  /** HMAC key shared with the consumer. Supplied at runtime from the secret store, never committed. */
-  readonly secret: string;
-}
+} & (
+  | { readonly secret: string; readonly keys?: undefined }
+  | { readonly keys: readonly RouteKey[]; readonly secret?: undefined }
+);
 
 export interface OutboxEnvelope {
   eventId: string;
@@ -55,6 +62,8 @@ export interface PublisherOptions {
   leaseSeconds?: number;
   batchSize?: number;
   actor?: string;
+  /** Clock in epoch milliseconds, used to choose the signing key. Injected for tests. */
+  now?: () => number;
 }
 
 export interface PublishReport {
@@ -81,13 +90,19 @@ function signEnvelope(unsigned: Omit<OutboxEnvelope, 'signature'>, secret: strin
   return createHmac('sha256', secret).update(canonicalJson(unsigned), 'utf8').digest('hex');
 }
 
-/** Constant-time check of an envelope signature. Used by consumers. */
+/** Constant-time check of an envelope signature against one secret. */
 export function verifyEnvelopeSignature(envelope: OutboxEnvelope, secret: string): boolean {
   const { signature, ...unsigned } = envelope;
   if (typeof signature !== 'string' || !/^[0-9a-f]{64}$/.test(signature)) return false;
   const expected = Buffer.from(signEnvelope(unsigned, secret), 'hex');
   const given = Buffer.from(signature, 'hex');
   return expected.length === given.length && timingSafeEqual(expected, given);
+}
+
+/** Verifies against a route's keys. Accepts when any key valid at nowMs verifies. Expired and not-yet-valid keys never do. */
+export function verifyEnvelopeWithKeys(envelope: OutboxEnvelope, keys: readonly ResolvedKey[], nowMs: number): boolean {
+  const { signature, ...unsigned } = envelope;
+  return verifySignatureWithKeys(unsigned, signature, keys, nowMs);
 }
 
 /** Defence in depth: refuses to deliver a row to a route of another tenant. */
@@ -110,14 +125,17 @@ export function createPublisher(options: PublisherOptions) {
   const lease = options.leaseSeconds ?? 60;
   const batchSize = options.batchSize ?? 20;
   const actor = options.actor ?? 'outbox-publisher';
+  const now = options.now ?? (() => Date.now());
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > MAX_ATTEMPTS_LIMIT) throw new OutboxError('invalid_field', 'maxAttempts out of range');
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 500) throw new OutboxError('invalid_field', 'batchSize out of range');
   if (!(base > 0) || !(cap >= base) || !(lease > 0)) throw new OutboxError('invalid_field', 'backoff or lease out of range');
 
   const seen = new Set<string>();
+  const routes: { route: ConsumerRoute; keys: ResolvedKey[] }[] = [];
   for (const route of options.routes) {
     assertTenantId(route.organisationId);
-    if (route.secret.length < MIN_SECRET_LENGTH) throw new OutboxError('invalid_field', `secret for ${route.consumer} is too short`);
+    // Validates the secret or the rotation keys; throws before any row is claimed.
+    routes.push({ route, keys: resolveRouteKeys(route) });
     for (const type of route.eventTypes) {
       const key = `${route.organisationId.toLowerCase()}|${type}`;
       if (seen.has(key)) throw new OutboxError('invalid_field', `more than one consumer for ${type} in one tenant`);
@@ -125,8 +143,8 @@ export function createPublisher(options: PublisherOptions) {
     }
   }
 
-  function routeFor(row: ClaimedRow): ConsumerRoute | undefined {
-    return options.routes.find((r) => r.organisationId.toLowerCase() === row.organisationId && r.eventTypes.includes(row.eventType));
+  function routeFor(row: ClaimedRow): { route: ConsumerRoute; keys: ResolvedKey[] } | undefined {
+    return routes.find((r) => r.route.organisationId.toLowerCase() === row.organisationId && r.route.eventTypes.includes(row.eventType));
   }
 
   async function claim(conn: SqlClient): Promise<ClaimedRow[]> {
@@ -147,11 +165,18 @@ export function createPublisher(options: PublisherOptions) {
         [row['id'], row['organisation_id'], actor, 'lease expired after final attempt'],
       );
     }
+    // A row is due only if no earlier pending row of the same tenant exists (per-tenant order, head of line).
+    // Dead rows are not pending, so they never block. The predicate is checked by the PostgreSQL 16 harness in docs/EVENTS.md.
     const result = await conn.query(
       `WITH due AS (
-         SELECT id FROM titan.outbox_events
-          WHERE status = 'pending' AND next_attempt_at <= now() AND attempts < $1
-          ORDER BY next_attempt_at, created_at
+         SELECT e.id FROM titan.outbox_events e
+          WHERE e.status = 'pending' AND e.next_attempt_at <= now() AND e.attempts < $1
+            AND NOT EXISTS (
+              SELECT 1 FROM titan.outbox_events earlier
+               WHERE earlier.organisation_id = e.organisation_id
+                 AND earlier.status = 'pending'
+                 AND (earlier.created_at, earlier.id) < (e.created_at, e.id))
+          ORDER BY e.next_attempt_at, e.created_at
           LIMIT $2
           FOR UPDATE SKIP LOCKED)
        UPDATE titan.outbox_events e
@@ -226,9 +251,13 @@ export function createPublisher(options: PublisherOptions) {
   }
 
   async function deliver(row: ClaimedRow): Promise<void> {
-    const route = routeFor(row);
-    if (!route) throw new OutboxError('route_mismatch', 'no consumer route for this tenant and event type');
+    const entry = routeFor(row);
+    if (!entry) throw new OutboxError('route_mismatch', 'no consumer route for this tenant and event type');
+    const { route, keys } = entry;
     assertSameTenant(row.organisationId, route);
+    // Signs with the current key. Fails (and is retried with backoff) when no key is valid at this moment.
+    const signingKey = signingKeyAt(keys, now());
+    if (!signingKey) throw new OutboxError('no_active_key', `no signing key is valid now for consumer ${route.consumer}`);
     const unsigned = {
       eventId: row.id,
       organisationId: row.organisationId,
@@ -240,7 +269,7 @@ export function createPublisher(options: PublisherOptions) {
       occurredAt: row.createdAt,
       payload: row.payload,
     };
-    const envelope: OutboxEnvelope = { ...unsigned, signature: signEnvelope(unsigned, route.secret) };
+    const envelope: OutboxEnvelope = { ...unsigned, signature: signEnvelope(unsigned, signingKey.secret) };
     await options.transport.send(envelope, { consumer: route.consumer, organisationId: route.organisationId });
   }
 
