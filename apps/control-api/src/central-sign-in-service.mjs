@@ -21,7 +21,7 @@ export function createCentralSignInService({pool,sessions,issuer,clientId,client
   let redirect;
   try{redirect=new URL(redirectUri);}catch{throw new TypeError('invalid Central callback URL');}
   if(redirect.pathname!=='/auth/central/callback'||redirect.search||redirect.hash||
-    redirect.username||redirect.password||
+    redirect.username||redirect.password||redirect.port||
     !(redirect.protocol==='https:'||(allowInsecureLocalhost&&redirect.protocol==='http:'&&redirect.hostname==='localhost')))
     throw new TypeError('Central redirect URI must match exact callback path');
   const store=stateStore??createCentralOidcStateStore({pool,...(sealer?{sealer}:{}),...(clock?{clock}:{})});
