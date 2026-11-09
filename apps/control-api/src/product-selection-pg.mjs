@@ -24,7 +24,7 @@ async function transaction(pool,task){
  const client=await pool.connect();let started=false;
  try{
   await client.query('BEGIN');started=true;
-  await client.query('SET LOCAL ROLE titan_product_selection');
+  await client.query('SET LOCAL ROLE titan_product_selection_'+applicationId);
   await client.query("SET LOCAL statement_timeout = '5000ms'");
   const result=await task(client);
   await client.query('COMMIT');started=false;
