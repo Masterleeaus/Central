@@ -1,5 +1,6 @@
 import {createConfigReadTransport} from './transport.mjs';
 import {ConfigError} from './errors.mjs';
+import {validateConfigQuery} from './config-request-schema.mjs';
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store, private',
  'x-content-type-options':'nosniff','referrer-policy':'no-referrer'};
 function send(res,status,data){res.writeHead(status,headers);res.end(JSON.stringify(data));}
@@ -15,8 +16,8 @@ export function createConfigHttpReadHandler(config){
    send(res,400,{error:'invalid_parameters'});return true;
   }
   try{
-   const result=await read({authorization:req.headers?.authorization,key:url.searchParams.get('key'),
-    application:url.searchParams.get('application'),environment:url.searchParams.get('environment')});
+   const query=validateConfigQuery(Object.fromEntries(url.searchParams));
+   const result=await read({authorization:req.headers?.authorization,...query});
    send(res,200,result);
   }catch(e){
    send(res,e instanceof ConfigError?403:503,{error:e instanceof ConfigError?'request_denied':'config_unavailable'});

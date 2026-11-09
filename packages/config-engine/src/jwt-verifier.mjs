@@ -4,6 +4,7 @@ import {jwtParts} from './jwt-parts.mjs';
 import {issuerPolicy,assertClaims} from './issuer-policy.mjs';
 import {createJwksProvider} from './jwks-provider.mjs';
 import {fail} from './errors.mjs';
+import {assertServiceClientClaims} from './service-token-policy.mjs';
 export function createServiceJwtVerifier({issuer,audience,jwksUri,fetcher,clock=Date.now}={}) {
  const policy=issuerPolicy({issuer,audience});
  const keyFor=createJwksProvider({issuer,jwksUri,fetcher,clock});
@@ -17,8 +18,7 @@ export function createServiceJwtVerifier({issuer,audience,jwksUri,fetcher,clock=
   assertClaims(claims,policy,Math.floor(clock()/1000));
   // A signed token proves the client identity, NOT company membership.
   // Registry lookup determines products and authorised company independently.
-  const clientId=claims.client_id??claims.azp;
-  if(typeof clientId!=='string'||!(/^[a-zA-Z0-9:_-]{1,256}$/).test(clientId))fail('unauthorised');
+  const clientId=assertServiceClientClaims(claims);
   return Object.freeze({authenticated:true,kind:'service',clientId,subject:claims.sub});
  };
 }
