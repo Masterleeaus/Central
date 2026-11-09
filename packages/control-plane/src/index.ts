@@ -6,6 +6,8 @@ export * from './links.js';
 
 export * from './postgres.js';
 export * from './provisioning.js';
+export * from './activity-redaction.js';
+export * from './activity-events.js';
 export * from './logto-management.js';
 export * from './trusted-provisioning.js';
 export * from './logto-m2m.js';
@@ -13,3 +15,6 @@ export * from './organisation-authority.js';
 export * from './oidc-registration.js';
 export * from './logto-applications.js';
 export * from './feature-flags.js';
+export * from './outbox.js';
+export * from './outbox-publisher.js';
+export * from './outbox-consumer.js';

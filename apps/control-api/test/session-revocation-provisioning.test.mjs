@@ -9,15 +9,17 @@ const ORG='33333333-3333-4333-8333-333333333333',IDENT='44444444-4444-4444-8444-
 const reqId=(n)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 /** One shared store per "database". Every pool or connection built from it sees the same rows. */
 function makeDatabase({memberRevision=1,role='manager'}={}){
- const db={generations:new Map(),audit:[],membership:{id:IDENT,organisation_id:ORG,role,state:'active',revision:memberRevision,logto_subject:'usr_1'},applied:0};
+ const db={generations:new Map(),audit:[],activity:[],membership:{id:IDENT,organisation_id:ORG,role,state:'active',revision:memberRevision,logto_subject:'usr_1'},applied:0};
  const key=(a,s,o)=>[a,s,o].join('|');
  const handle=(q,p)=>{
   if(/^(BEGIN|COMMIT|ROLLBACK|SET LOCAL)/.test(q)||q.startsWith('SELECT pg_advisory'))return {rows:[],rowCount:0};
+  if(q.startsWith("SELECT set_config('titan.organisation_id'"))return {rows:[{set_config:p[0]}],rowCount:1};
   if(q.startsWith('SELECT command_kind'))return {rows:db.audit.filter(a=>a.request_id===p[0]).map(a=>({command_kind:a.command_kind,command_digest:a.command_digest}))};
   if(q.includes('FOR UPDATE OF m'))return {rows:[{...db.membership}]};
   if(q.startsWith('UPDATE titan.memberships')){ if(db.membership.revision!==p[1])return {rowCount:0,rows:[]}; db.membership.role=p[2];db.membership.state=p[3];db.membership.revision++;return {rowCount:1,rows:[]}; }
   if(q.startsWith('INSERT INTO titan.titan_session_revocations')){const k=key(p[0],p[1],p[2]);const g=(db.generations.get(k)??0)+1;db.generations.set(k,g);return {rows:[{generation:g}],rowCount:1}; }
   if(q.startsWith('INSERT INTO titan.provisioning_audit')){db.audit.push({request_id:p[0],command_kind:p[3],command_digest:p[4]});return {rowCount:1,rows:[]}}
+  if(q.startsWith('INSERT INTO titan.activity_events')){db.activity.push({organisation_id:p[2],action:p[5],correlation_id:p[10]});return {rowCount:1,rows:[]}}
   if(q.startsWith('SELECT generation FROM titan.titan_session_revocations')){const g=db.generations.get(key(p[0],p[1],p[2]));return {rows:g===undefined?[]:[{generation:g}]}}
   throw Error('unhandled SQL in fixture: '+q.slice(0,60));
  };
