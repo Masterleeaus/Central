@@ -6,6 +6,7 @@
 import { randomBytes } from 'node:crypto';
 import { insecureLocalhostAllowed, isSecureEndpoint } from './endpoint-policy.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
+import { createConcurrencyLimiter } from './concurrency-limit.mjs';
 
 const allowedApps = new Set(['desk', 'field', 'academy']);
 const token = () => randomBytes(32).toString('base64url');
@@ -43,10 +44,11 @@ const errorClass = error => (typeof error?.name==='string' ? error.name : 'unkno
  * logger(event, fields) receives structured outcome fields only: never tokens, subjects or codes.
  */
 export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdentity,establishSession,afterLogin='/',logger=()=>{},
-  allowInsecureLocalhost=insecureLocalhostAllowed(),rateLimits=DEFAULT_RATE_LIMITS,clientIp=(req)=>req.socket?.remoteAddress??'unknown'}={}) {
+  allowInsecureLocalhost=insecureLocalhostAllowed(),rateLimits=DEFAULT_RATE_LIMITS,concurrencyLimits={perKey:3,globalLimit:48},clientIp=(req)=>req.socket?.remoteAddress??'unknown'}={}) {
   if(!allowedApps.has(applicationId)||!oidcLogin?.begin||!oidcLogin?.complete||typeof resolveLocalIdentity!=='function'||typeof establishSession!=='function'||typeof afterLogin!=='string'||!afterLogin.startsWith('/')||afterLogin.startsWith('//')||/[\r\n]/.test(afterLogin))throw new TypeError('invalid OIDC route adapter configuration');
   const ipLimiter=createRateLimiter(rateLimits.ip);
   const subjectLimiter=createRateLimiter(rateLimits.subject);
+  const concurrent=createConcurrencyLimiter(concurrencyLimits);
   const audit=(event,fields={})=>{try{logger(event,{application:applicationId,...fields});}catch{/* logging never alters the outcome */}};
   const bindingCookie=`titan_${applicationId}_oidc_binding`;
 
@@ -58,6 +60,8 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
     if(url.pathname!==expectedStart&&url.pathname!==expectedCallback)return false;
     if(req.method!=='GET'){reply(res,405,{error:'method_not_allowed'});return true;}
     if(url.pathname===expectedStart){
+      const startLimit=ipLimiter.take(clientIp(req));
+      if(!startLimit.allowed){audit('login_rate_limited',{scope:'ip'});reply(res,429,{error:'rate_limited'},{'retry-after':String(startLimit.retryAfterSeconds)});return true;}
       if(url.search){reply(res,400,{error:'unexpected_login_parameters'});return true;}
       try {
         const binding=token();
@@ -97,12 +101,15 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
   }
 
   return async function oidcHttpHandler(req,res) {
+    const guarded=req.url?.startsWith('/auth/titan/'+applicationId+'/');
+    const release=guarded?concurrent.acquire(clientIp(req)):()=>{};
+    if(!release){audit('login_rate_limited',{scope:'concurrent'});reply(res,429,{error:'rate_limited'},{'retry-after':'1'});return true;}
     try {return await handle(req,res);}
     catch(error){
       audit('oidc_route_failed',{error_class:errorClass(error)});
       if(!res.headersSent) reply(res,500,{error:'internal_error'});
       else try {res.end();} catch { /* socket already closed */ }
       return true;
-    }
+    } finally {release();}
   };
 }
