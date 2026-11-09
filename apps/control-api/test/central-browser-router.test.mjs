@@ -118,3 +118,11 @@ test('browser launcher caps OIDC starts and releases capacity after the outstand
  assert.equal(next.status,303);
  assert.equal(saves,2);
 });
+
+test('Central browser origin with non-default port is rejected before registration',()=>{
+ assert.throws(()=>createCentralBrowserRouter({
+  env:{...env,TITAN_CENTRAL_BROWSER_ORIGIN:'https://central.example:8443/',
+   TITAN_CENTRAL_BROWSER_REDIRECT_URI:'https://central.example:8443/auth/central/callback'},
+  pool:{connect:async()=>{}},getCompanyName:async()=> 'Company'
+ }),/HTTPS origin/);
+});
