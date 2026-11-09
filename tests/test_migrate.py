@@ -51,15 +51,15 @@ def write_dir(files):
 class RealMigrationsTests(unittest.TestCase):
     def test_all_repository_migrations_are_one_transaction(self):
         found = migrate.discover(ROOT / 'migrations')
-        self.assertEqual([m.version for m in found], [1, 2, 3, 4, 5, 6, 7, 8, 9])
+        self.assertEqual([m.version for m in found], [1, 2, 3, 4, 5, 6, 7, 8, 9, 14])
         for m in found:
             self.assertIn('COMMIT;', m.text, m.name)
 
     def test_repository_migrations_apply_in_order_then_are_noop(self):
         client = FakeClient()
-        self.assertEqual(migrate.run(client, ROOT / 'migrations'), [1, 2, 3, 4, 5, 6, 7, 8, 9])
+        self.assertEqual(migrate.run(client, ROOT / 'migrations'), [1, 2, 3, 4, 5, 6, 7, 8, 9, 14])
         self.assertEqual(migrate.run(client, ROOT / 'migrations'), [])
-        self.assertEqual(len(client.executed), 9)
+        self.assertEqual(len(client.executed), 10)
 
 
 class RunnerTests(unittest.TestCase):
