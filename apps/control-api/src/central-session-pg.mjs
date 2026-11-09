@@ -38,7 +38,7 @@ export function createPostgresCentralSessionStore({pool}={}){
         const result=await client.query(
           'SELECT titan.central_issue_browser_session($1,$2,$3,$4::timestamptz) AS token_digest',
           [digest,identityId,companyId,when]);
-        if(result.rows?.length!==1)throw new Error('session insert not confirmed');
+        if(result.rows?.length!==1||result.rows[0]?.token_digest!==digest)throw new Error('session insert not confirmed');
       });
     },
     async find(digest){
@@ -49,7 +49,12 @@ export function createPostgresCentralSessionStore({pool}={}){
           [digest]);
         if(result.rows.length>1)throw new Error('ambiguous session');
         const row=result.rows[0];
-        return row?{identityId:row.logto_subject,companyId:row.organisation_id,expiresAt:new Date(row.expires_at).getTime()}:null;
+        if(!row)return null;
+        const expiresAt=new Date(row.expires_at).getTime();
+        if(typeof row.logto_subject!=='string'||!SUBJECT.test(row.logto_subject)||
+          typeof row.organisation_id!=='string'||!UUID.test(row.organisation_id)||
+          !Number.isFinite(expiresAt))return null;
+        return {identityId:row.logto_subject,companyId:row.organisation_id,expiresAt};
       });
     },
     /** Returns true only if this caller atomically revoked an existing session.
