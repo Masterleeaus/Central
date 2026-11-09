@@ -26,3 +26,37 @@ test('login handoff forwards verified business binding into session rotation',as
 test('logout requires an Origin header',async()=>{let revoked=false;const h=createAppLogoutHandler({applicationId:'desk',appOrigin:'https://desk.example/',sessionCookieName:'desk_sid',authenticateSession:async()=>({id:'sess_1',userId:'user_1'}),revokeSession:async()=>{revoked=true;return true}});const r=res();await h({method:'POST',url:'/auth/titan/desk/logout',headers:{'sec-fetch-site':'same-origin'}},r);assert.equal(r.code,403);assert.equal(revoked,false);});
 test('logout rejects a request with no Sec-Fetch-Site header',async()=>{let revoked=false;const h=createAppLogoutHandler({applicationId:'desk',appOrigin:'https://desk.example/',sessionCookieName:'desk_sid',authenticateSession:async()=>({id:'sess_1',userId:'user_1'}),revokeSession:async()=>{revoked=true;return true}});const r=res();await h({method:'POST',url:'/auth/titan/desk/logout',headers:{origin:'https://desk.example'}},r);assert.equal(r.code,403);assert.equal(revoked,false);assert.equal(r.headers['set-cookie'],undefined);});
 test('logout rejects cross-site Sec-Fetch-Site',async()=>{const h=createAppLogoutHandler({applicationId:'desk',appOrigin:'https://desk.example/',sessionCookieName:'desk_sid',authenticateSession:async()=>({id:'sess_1',userId:'user_1'}),revokeSession:async()=>true});const r=res();await h({method:'POST',url:'/auth/titan/desk/logout',headers:{origin:'https://desk.example','sec-fetch-site':'cross-site'}},r);assert.equal(r.code,403);});
+
+test('explicit selected company rechecks only that company even when several are eligible',async()=>{
+ const calls=[];
+ const resolver=createVerifiedIdentityResolver({...base,
+  findOrganisationIds:async()=>['org_1','org_2'],
+  authorise:async request=>{calls.push(request.organisationId);return {...await base.authorise(request),organisationId:request.organisationId}}
+ });
+ const result=await resolver({...identity,organisationId:'org_2'});
+ assert.equal(result.authorised,true);
+ assert.equal(result.organisationId,'org_2');
+ assert.deepEqual(calls,['org_2']);
+});
+test('selected company not in current trusted discovery is rejected before grant lookup',async()=>{
+ let called=0;
+ const resolver=createVerifiedIdentityResolver({...base,
+  findOrganisationIds:async()=>['org_1','org_2'],
+  authorise:async()=>{called++;return {allowed:true}}
+ });
+ assert.deepEqual(await resolver({...identity,organisationId:'org_3'}),{authorised:false});
+ assert.equal(called,0);
+});
+test('selected company is denied when its local account is inactive or grant revoked',async()=>{
+ const revoked=createVerifiedIdentityResolver({...base,
+  findOrganisationIds:async()=>['org_1','org_2'],
+  authorise:async args=>({...(await base.authorise(args)),allowed:args.organisationId!=='org_2',organisationId:args.organisationId})
+ });
+ assert.equal((await revoked({...identity,organisationId:'org_2'})).authorised,false);
+ const inactive=createVerifiedIdentityResolver({...base,
+  findOrganisationIds:async()=>['org_1','org_2'],
+  authorise:async args=>({...await base.authorise(args),organisationId:args.organisationId}),
+  localAccountActive:async()=>false
+ });
+ assert.equal((await inactive({...identity,organisationId:'org_2'})).authorised,false);
+});
