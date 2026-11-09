@@ -89,3 +89,39 @@ test('session credentials are not returned by the selection coordinator',async()
   await selection.begin({issuer:'https://id.example/',subject:'subject-1',browserBinding:binding});
   assert.deepEqual(await selection.complete({state,organisationId:orgA,browserBinding:binding}),{status:'unavailable'});
 });
+
+
+test('verified initial eligibility binds later selection even if name resolver adds companies',async()=>{
+ const first='00000000-0000-4000-8000-000000000001';
+ const second='00000000-0000-4000-8000-000000000002';
+ const third='00000000-0000-4000-8000-000000000003';
+ const store=new Map(),calls=[];
+ const selection=createOrganisationSelection({
+  selectionStore:{save:async(k,v)=>store.set(k,v),consume:async k=>{const x=store.get(k);store.delete(k);return x}},
+  listOrganisations:async()=>[{id:first,name:'First'},{id:second,name:'Second'},{id:third,name:'Unverified'}],
+  verifySelection:async x=>{calls.push(x);return true},
+  issueSession:async()=>true
+ });
+ const begun=await selection.begin({issuer:'https://issuer.example',subject:'verified-subject',
+   browserBinding:'B'.repeat(43),allowedCompanyIds:[first,second]});
+ assert.equal(begun.status,'selection_required');
+ assert.deepEqual(begun.organisations.map(x=>x.id),[first,second]);
+ const denied=await selection.complete({state:begun.state,organisationId:third,browserBinding:'B'.repeat(43)});
+ assert.equal(denied.status,'denied');
+ assert.deepEqual(calls,[]);
+});
+test('malformed, repeated or empty original eligibility fails closed',async()=>{
+ const first='00000000-0000-4000-8000-000000000001';
+ let stored=0;
+ const selection=createOrganisationSelection({
+  selectionStore:{save:async()=>{stored++},consume:async()=>null},
+  listOrganisations:async()=>[{id:first,name:'First'}],
+  verifySelection:async()=>true,issueSession:async()=>true
+ });
+ for(const allowedCompanyIds of [[],[first,first],['bad'],[first,'bad'],Array(129).fill(first)]){
+  const result=await selection.begin({issuer:'https://issuer.example',subject:'s',
+    browserBinding:'B'.repeat(43),allowedCompanyIds});
+  assert.equal(result.status,'denied');
+ }
+ assert.equal(stored,0);
+});
