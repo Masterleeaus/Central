@@ -16,7 +16,7 @@ NGINX_LOCATIONS = PROXY / 'nginx' / 'locations.conf'
 APACHE_VHOST = PROXY / 'apache' / 'titan-central-vhost.conf'
 
 ACCESS_PROBES = ['/v1/access/check']
-CALLBACK_PROBES = ['/auth/titan/field/callback', '/auth/titan/desk/callback', '/auth/titan/academy/callback']
+CALLBACK_PROBES = ['/auth/titan/field/callback', '/auth/titan/desk/callback', '/auth/titan/academy/callback', '/auth/titan/field/start', '/auth/titan/desk/start', '/auth/titan/academy/start', '/auth/central/start', '/auth/central/callback', '/auth/central/select']
 ADMIN_PROBES = ['/v1/admin', '/v1/admin/', '/v1/admin/provision', '/v1/admin/oidc/plans']
 
 
