@@ -11,7 +11,7 @@ export function createConfigReadTransport({authenticate,resolveCompany,store,sal
   if(principal?.kind!=='service'||principal.authenticated!==true)fail('unauthorised');
   const trusted=await resolveCompany(principal,application,environment);
   if(trusted?.product!==application||trusted?.environment!==environment)fail('untrusted_context');
-  const context=verifiedContext({principal,product:application,environment,
+  const context=verifiedContext({principal:{...principal,products:[application]},product:application,environment,
     companyId:trusted.companyId,cohorts:trusted.cohorts??[]});
   return readTenantFlag({store,key,context,salt,now:clock()});
  };

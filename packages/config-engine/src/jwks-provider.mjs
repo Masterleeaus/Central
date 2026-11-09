@@ -1,7 +1,8 @@
 import {fail} from './errors.mjs';
-export function createJwksProvider({issuer,fetcher=fetch,clock=Date.now,ttlMs=300000}={}) {
+export function createJwksProvider({issuer,jwksUri,fetcher=fetch,clock=Date.now,ttlMs=300000}={}) {
  if(typeof issuer!=='string'||!issuer.startsWith('https://')||typeof fetcher!=='function'||!Number.isInteger(ttlMs)||ttlMs<1000||ttlMs>3600000)fail('invalid_jwks');
- const uri=new URL('jwks',issuer.endsWith('/')?issuer:issuer+'/').href;
+ let uri;
+ try { const endpoint=new URL(jwksUri);const source=new URL(issuer);if(endpoint.protocol!=='https:'||endpoint.username||endpoint.password||endpoint.search||endpoint.hash||endpoint.origin!==source.origin)fail('invalid_jwks_uri');uri=endpoint.href; }catch{fail('invalid_jwks_uri');}
  let cache=null,expiry=0,pending=null;
  async function refresh(){
   const response=await fetcher(uri,{method:'GET',redirect:'error',headers:{accept:'application/json'},signal:AbortSignal.timeout(4000)});

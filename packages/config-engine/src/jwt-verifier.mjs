@@ -4,9 +4,9 @@ import {jwtParts} from './jwt-parts.mjs';
 import {issuerPolicy,assertClaims} from './issuer-policy.mjs';
 import {createJwksProvider} from './jwks-provider.mjs';
 import {fail} from './errors.mjs';
-export function createServiceJwtVerifier({issuer,audience,fetcher,clock=Date.now}={}) {
+export function createServiceJwtVerifier({issuer,audience,jwksUri,fetcher,clock=Date.now}={}) {
  const policy=issuerPolicy({issuer,audience});
- const keyFor=createJwksProvider({issuer,fetcher,clock});
+ const keyFor=createJwksProvider({issuer,jwksUri,fetcher,clock});
  return async function authenticate(authorization){
   const token=readBearer(authorization),{header,claims,signature,signingInput}=jwtParts(token);
   if(header.alg!=='RS256'||header.typ && header.typ!=='JWT'||typeof header.kid!=='string'||header.jku||header.jwk||header.x5u)fail('unauthorised');
