@@ -352,3 +352,19 @@ provided through the production CLI entrypoint; live Logto browser
 registration, production DB role memberships, canonical company
 schema (#43 / PR #46), and end-to-end product sign-in testing remain.
 The flag must remain off until these steps are completed and verified.
+
+## Access and authentication concurrency safety
+
+The Central browser routes use a bounded per-socket and global in-process
+concurrency guard before entering OIDC token exchange, company selection or
+launcher database work. Inflight slots release in `finally` even when an
+operation fails. Denial returns HTTP 429 and does not perform token
+verification or consume one-use company selection state. Concurrent requests
+from new keys cannot evict active concurrency keys. Rates are limited
+separately; starting an OIDC flow now consumes an IP quota as well as callbacks.
+
+This is a **second line of defence**, not distributed protection. Because
+Central listens on loopback behind a proxy, the per-socket application key
+will normally be the proxy address. The public nginx/Apache proxy must
+enforce the per-client limits documented in `deploy/proxy/README.md`.
+Do not trust HTTP forwarding headers supplied by clients.
