@@ -39,13 +39,14 @@ export class TrustedProvisioningService {
                 await this.logto.assertOrganisation(org);
                 break;
             }
-            case 'link': {
+            case 'link':
+            case 'link_relink': {
                 const user = await this.resolve('identity', command.identityId);
                 const org = await this.resolve('organisation', command.organisationId);
                 if (!user || !org)
                     throw Error('unverified canonical identity or organisation');
                 await this.logto.assertMembership(user, org);
-                if (await this.verifyLocalLink(command) !== true)
+                if (await this.verifyLocalLink({ command, logtoSubject: user, logtoOrganisationId: org }) !== true)
                     throw Error('unverified application account control');
                 break;
             }

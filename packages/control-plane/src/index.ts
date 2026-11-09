@@ -2,7 +2,7 @@ export * from './contracts.js';
 export * from './applications.js';
 export * from './product-registry.js';
 export * from './access.js';
-export * from './links.js';
+export * from './link-assertion.js';
 
 export * from './postgres.js';
 export * from './provisioning.js';
