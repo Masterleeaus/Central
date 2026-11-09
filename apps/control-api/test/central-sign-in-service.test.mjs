@@ -150,3 +150,37 @@ test('multi-company OIDC callback hands off to one-use selection and issues sess
   assert.equal(replay.status,403);
   assert.equal(trace.filter(x=>x[0]==='issue').length,1);
 });
+
+
+test('multi-company handshake propagates original OIDC company eligibility to one-use state',async()=>{
+ const state=new Map(),choices=new Map();
+ let nonce;let issued=0;
+ const allowed='00000000-0000-4000-8000-000000000001';
+ const second='00000000-0000-4000-8000-000000000002';
+ const extra='00000000-0000-4000-8000-000000000003';
+ const service=createCentralSignInService({
+  pool:{connect:async()=>{throw Error('stores injected')}},
+  sessions:{issue:async()=>{issued++;return {cookie:'__Host-titan-central='+'A'.repeat(43)}}},
+  issuer:'https://issuer.example',clientId:'client',clientSecret:'secret',
+  redirectUri:'https://central.example/auth/central/callback',
+  enableCompanySelection:true,
+  verifyIdToken:async()=>({sub:'subject',nonce,iss:'https://issuer.example',aud:'client',exp:Math.floor(NOW/1000)+120}),
+  listEligibleCompanies:async()=>[{companyId:allowed,authorised:true},{companyId:second,authorised:true}],
+  listOrganisations:async()=>[{id:allowed,name:'Allowed'},{id:second,name:'Second'},{id:extra,name:'Injected'}],
+  recheckCompany:async()=>true,
+  stateStore:{save:async(k,v)=>{state.set(k,v);nonce=v.nonce},consume:async k=>{const v=state.get(k);state.delete(k);return v}},
+  selectionStore:{save:async(k,v)=>choices.set(k,v),consume:async k=>{const v=choices.get(k);choices.delete(k);return v}},
+  fetcher:async()=>({ok:true,json:async()=>({id_token:'test',access_token:'test',token_type:'Bearer'})}),
+  clock:()=>NOW
+ });
+ const start=response();await service.handler({method:'GET',url:'/auth/central/start',headers:{}},start);
+ const cookie=start.headers['set-cookie'].split(';')[0];
+ const oidcState=new URL(start.headers.location).searchParams.get('state');
+ const result=response();await service.handler({method:'GET',
+  url:'/auth/central/callback?state='+oidcState+'&code=code',headers:{cookie}},result);
+ assert.equal(result.status,200);
+ assert.doesNotMatch(result.body,/Injected/);
+ assert.ok(choices.size===1);
+ assert.deepEqual([...choices.values()][0].organisationIds,[allowed,second]);
+ assert.equal(issued,0);
+});
