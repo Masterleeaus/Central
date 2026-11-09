@@ -44,8 +44,9 @@ const errorClass = error => (typeof error?.name==='string' ? error.name : 'unkno
  * logger(event, fields) receives structured outcome fields only: never tokens, subjects or codes.
  */
 export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdentity,establishSession,afterLogin='/',logger=()=>{},
-  allowInsecureLocalhost=insecureLocalhostAllowed(),rateLimits=DEFAULT_RATE_LIMITS,concurrencyLimits={perKey:3,globalLimit:48},clientIp=(req)=>req.socket?.remoteAddress??'unknown'}={}) {
+  selectionFlow,allowInsecureLocalhost=insecureLocalhostAllowed(),rateLimits=DEFAULT_RATE_LIMITS,concurrencyLimits={perKey:3,globalLimit:48},clientIp=(req)=>req.socket?.remoteAddress??'unknown'}={}) {
   if(!allowedApps.has(applicationId)||!oidcLogin?.begin||!oidcLogin?.complete||typeof resolveLocalIdentity!=='function'||typeof establishSession!=='function'||typeof afterLogin!=='string'||!afterLogin.startsWith('/')||afterLogin.startsWith('//')||/[\r\n]/.test(afterLogin))throw new TypeError('invalid OIDC route adapter configuration');
+  if(selectionFlow!==undefined&&(typeof selectionFlow?.begin!=='function'||typeof selectionFlow?.handle!=='function'))throw new TypeError('trusted product selection flow required');
   const ipLimiter=createRateLimiter(rateLimits.ip);
   const subjectLimiter=createRateLimiter(rateLimits.subject);
   const concurrent=createConcurrencyLimiter(concurrencyLimits);
@@ -57,7 +58,10 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
     try {url=new URL(req.url??'/', 'http://localhost');}catch{reply(res,400,{error:'invalid_url'});return true;}
     const expectedStart=`/auth/titan/${applicationId}/start`;
     const expectedCallback=`/auth/titan/${applicationId}/callback`;
-    if(url.pathname!==expectedStart&&url.pathname!==expectedCallback)return false;
+    if(url.pathname!==expectedStart&&url.pathname!==expectedCallback){
+      if(selectionFlow)return selectionFlow.handle(req,res);
+      return false;
+    }
     if(req.method!=='GET'){reply(res,405,{error:'method_not_allowed'});return true;}
     if(url.pathname===expectedStart){
       const startLimit=ipLimiter.take(clientIp(req));
@@ -86,6 +90,13 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
       // Per-subject limit once the verified subject is known. The subject is used only as an in-memory key.
       const subjectDecision=subjectLimiter.take(verified.subject);
       if(!subjectDecision.allowed){audit('login_rate_limited',{scope:'subject'});fail(429,'rate_limited',{'retry-after':String(subjectDecision.retryAfterSeconds)});return true;}
+      // A product may require explicit company choice. The previously
+      // verified OIDC browser binding persists until a one-use selection
+      // POST; it is never resolved from an arbitrary callback query ID.
+      if(selectionFlow){
+        await selectionFlow.begin({issuer:verified.issuer,subject:verified.subject,browserBinding:binding},res);
+        return true;
+      }
       // MUST recheck current account/membership/entitlement in the application adapter.
       const local=await resolveLocalIdentity({issuer:verified.issuer,subject:verified.subject,applicationId});
       if(!local || !local.authorised || typeof local.localUserId!=='string'||!local.localUserId||typeof local.localAccountId!=='string'||!local.localAccountId||typeof local.organisationId!=='string'||!local.organisationId) {audit('login_denied',{reason:'account_not_authorised'});fail(403,'account_not_authorised');return true;}
