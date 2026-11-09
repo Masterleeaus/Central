@@ -12,3 +12,7 @@ the root-owned environment file, never source control or log output.
 The migration approval flag is a manual gate: a passing disposable CI test
 does not establish authoritative migrations or security approval. No live
 deployment is performed in this change.
+
+PostgreSQL transport must use verified TLS, not merely a URI that says
+verify-full. The isolated canonical CI test now checks active pg_stat_ssl
+and rejects a missing trust root. Production still requires CA provisioning.

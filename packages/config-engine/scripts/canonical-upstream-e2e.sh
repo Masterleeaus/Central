@@ -23,6 +23,7 @@ for check in packages/config-engine/sql/canonical_verify_*.sql; do
  psql -X -v ON_ERROR_STOP=1 "$db" -f "$check" >/dev/null
 done
 bash packages/config-engine/scripts/check-service-logins.sh "$db"
+CONFIG_TEST_DATABASE_URL="$db" node packages/config-engine/scripts/tls-postgres-e2e.mjs
 npm ci --prefix apps/control-api --ignore-scripts --no-audit --no-fund
 CONFIG_TEST_DATABASE_URL="$db" node packages/config-engine/scripts/e2e-config-read.mjs
 CONFIG_TEST_DATABASE_URL="$db" node packages/config-engine/scripts/canonical-catalog-e2e.mjs

@@ -106,6 +106,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Enable real PostgreSQL TLS on disposable canonical database
+        working-directory: config-branch
+        run: bash packages/config-engine/scripts/enable-postgres-tls-ci.sh
       - name: Test pinned schema and live Central HTTP socket with restricted PostgreSQL
         working-directory: config-branch
         run: bash packages/config-engine/scripts/canonical-upstream-e2e.sh ../canonical-upstream

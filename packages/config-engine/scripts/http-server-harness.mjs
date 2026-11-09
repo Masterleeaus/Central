@@ -24,7 +24,8 @@ export function buildCiPoolAdapter({onPool=()=>{},grantOverride}={}){
  const base=new URL(admin);
  const dbUrl=(role,pass)=>{
   const u=new URL(base.href);u.username=role;u.password=pass;
-  u.searchParams.set('sslmode','verify-full');u.searchParams.set('sslrootcert','/ci/mock-ca-not-used');
+  const ca=process.env.CONFIG_TLS_CA_FILE;if(!ca)throw Error('real PostgreSQL TLS root required');
+  u.searchParams.set('sslmode','verify-full');u.searchParams.set('sslrootcert',ca);
   return u.href;
  };
  class CiPgPool{
@@ -34,7 +35,7 @@ export function buildCiPoolAdapter({onPool=()=>{},grantOverride}={}){
    else{
     const uri=new URL(input);this.role=uri.username;
     assert.equal(uri.hostname,'localhost');assert.equal(uri.searchParams.get('sslmode'),'verify-full');
-    uri.search='';
+    assert.equal(uri.searchParams.get('sslrootcert'),process.env.CONFIG_TLS_CA_FILE);
     if(grantOverride&&this.role==='titan_config_grants_login')uri.username=grantOverride;
     this._pool=new PgPool({...options,connectionString:uri.href});
    }
