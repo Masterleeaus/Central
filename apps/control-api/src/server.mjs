@@ -11,6 +11,7 @@ import { FLAG_DECLARATIONS } from './config-declarations.mjs';
 import { FLAG_PRODUCTS, createFlagRegistry, createPostgresFlagStore } from '../../../packages/control-plane/dist/index.js';
 import { readServiceDecisionConfig } from './service-decision-config.mjs';
 import { createSkilledDecisionHandler } from './service-decision-handler.mjs';
+import { readLinkKeySets } from './link-key-config.mjs';
 const log = createJsonLogger();
 
 /** TITAN_CONFIG_READ_PRODUCTS: comma-separated products allowed to read flags. Unset means the read endpoint is not served. */
@@ -32,7 +33,8 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   // Decision and failure events feed the metrics counters and then the structured log, unchanged.
   const metrics=createMetrics();
   const auditLog=(event,fields)=>{try{metrics.observeLog(event,fields);}catch{/* metrics never alter a request */}logger(event,fields);};
-  // Operator plane: null unless TITAN_OPERATOR_* is set, in which case /v1/admin/ is mounted. Invalid settings throw here.
+  // Link assertion keys are validated here, whether or not the operator plane is on: a malformed key fails startup.
+  const linkKeySets=readLinkKeySets(env);
   // Product registry: validated at every startup, so bad product origins stop startup even with the operator plane off.
   const productRegistry=loadProductRegistry(env);
   const {Pool}=await loadPg();
@@ -40,7 +42,10 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   // Feature flags (issue #38): declarations in code, PostgreSQL store on the trusted reader and writer roles.
   const flagRegistry=createFlagRegistry(FLAG_DECLARATIONS);
   const flagStore=createPostgresFlagStore(pool);
-  const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher,flags:{registry:flagRegistry,store:flagStore},productRegistry});
+  // Operator plane: null unless TITAN_OPERATOR_* is set, in which case /v1/admin/ is mounted. Invalid settings throw here.
+  let adminHandler;
+  try { adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher,flags:{registry:flagRegistry,store:flagStore},productRegistry,pool,linkKeySets}); }
+  catch (e) { await pool.end().catch(()=>{}); throw e; }
   // Service read endpoint: one verifier per product audience, each accepting only urn:titan-central:product:<product>.
   const readProducts=readConfigProducts(env);
   const configHandler=readProducts.length ? createConfigReadHandler({
