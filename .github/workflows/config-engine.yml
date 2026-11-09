@@ -3,10 +3,14 @@ on:
   push:
     paths:
       - 'packages/config-engine/**'
+      - 'apps/control-api/src/**'
+      - 'apps/control-api/test/**'
       - '.github/workflows/config-engine.yml'
   pull_request:
     paths:
       - 'packages/config-engine/**'
+      - 'apps/control-api/src/**'
+      - 'apps/control-api/test/**'
       - '.github/workflows/config-engine.yml'
 permissions:
   contents: read
