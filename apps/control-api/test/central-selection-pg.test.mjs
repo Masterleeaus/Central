@@ -65,3 +65,24 @@ test('bounded pruning uses SKIP LOCKED and a parameterised batch size',async()=>
   assert.ok(ctx.calls.some(c=>c.sql.includes('SKIP LOCKED')&&c.args[0]===25));
   await assert.rejects(ctx.store.prune({limit:5001}),TypeError);
 });
+
+
+test('persisted selection refuses untrusted OIDC issuer and invalid subject before SQL',async()=>{
+ const ctx=fixture();
+ for(const issuer of ['http://issuer.example','https://issuer.example/?query=1','https://attacker@issuer.example/']){
+  await assert.rejects(ctx.store.save(STATE,{...value,issuer}),TypeError);
+ }
+ for(const subject of ['bad\nsubject','','x'.repeat(257)]){
+  await assert.rejects(ctx.store.save(STATE,{...value,subject}),TypeError);
+ }
+ assert.equal(ctx.calls.length,0);
+});
+test('decrypted selection does not trust invalid issuer or subject even with otherwise valid ciphertext',async()=>{
+ const saved=fixture();await saved.store.save(STATE,value);
+ const [,bindingHash,,sealedSubject,sealedIds]=saved.records[0];
+ const hash=(await import('node:crypto')).createHash('sha256').update(STATE).digest('hex');
+ const wrongIssuer='seal:central_company_selection|'+hash+'|issuer:http://attacker.example/';
+ const ctx=fixture([{binding_hash:bindingHash,sealed_issuer:wrongIssuer,
+  sealed_subject:sealedSubject,sealed_company_ids:sealedIds,expires_at:new Date(value.expiresAt)}]);
+ assert.equal(await ctx.store.consume(STATE),null);
+});
