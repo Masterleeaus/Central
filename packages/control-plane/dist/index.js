@@ -13,6 +13,7 @@ export * from './logto-m2m.js';
 export * from './organisation-authority.js';
 export * from './oidc-registration.js';
 export * from './logto-applications.js';
+export * from './product-probe.js';
 export * from './plan-catalogue.js';
 export * from './subscription-model.js';
 export * from './webhook-verifier.js';

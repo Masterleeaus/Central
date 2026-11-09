@@ -1,6 +1,7 @@
 /** Titan Central opt-in operator API. No privileged route exists without injected live authorisation. */
 import { createTitanOidcRegistrationPlans } from '../../../packages/control-plane/dist/oidc-registration.js';
 import { LogtoAuthorityError } from '../../../packages/control-plane/dist/logto-management.js';
+import { planLookup } from '../../../packages/control-plane/dist/product-registry.js';
 
 const logtoId = v => typeof v==='string' && /^[A-Za-z0-9_-]{1,256}$/.test(v);
 /**
@@ -62,10 +63,19 @@ async function readJson(req, maxBytes=8192) {
  * Provisioning must be an already constructed TrustedProvisioningService; it repeats its own checks.
  * This handler is never installed by default in the server.
  */
-export function createAdminHandler({verifyToken,authoriseOperator,provision,origins,logger=()=>{}}={}) {
+export function createAdminHandler({verifyToken,authoriseOperator,provision,origins,productRegistry,logger=()=>{}}={}) {
  if(typeof verifyToken!=='function'||typeof authoriseOperator!=='function'||!origins)throw new Error('operator verification and fixed app origins required');
  // Eager check, not user-controlled request origins.
  const plans=createTitanOidcRegistrationPlans(origins);
+ // Canonical product id shown beside the legacy id. Origins still come from the validated plans, which the
+ // operator builds from the registry. The product lookup adds labels only.
+ const lookup=productRegistry?planLookup(productRegistry):undefined;
+ const planWithProduct=plan=>{
+  if(!lookup) return plan;
+  const entry=lookup[plan.app];
+  if(!entry||entry.serviceOrigin!==plan.origin) throw Error('plan origin differs from validated registry');
+  return {...plan,productId:entry.productId,legacyId:entry.legacyId,displayName:entry.displayName};
+ };
  return async (req,res)=>{
   let path;
   try{path=new URL(req.url??'/', 'http://localhost').pathname;}catch{send(res,400,{error:'invalid_url'});return true;}
@@ -82,7 +92,7 @@ export function createAdminHandler({verifyToken,authoriseOperator,provision,orig
   catch{send(res,503,{error:'authority_unavailable'});return true;}
   if(!operatorAuthorised){send(res,403,{error:'forbidden'});return true;}
   if(req.url.includes('?')){send(res,400,{error:'unexpected_query'});return true;}
-  if(path.endsWith('/plans')){send(res,200,{applications:plans,registrationStatus:'not_registered',note:'Operator-reviewed plans; no Logto registrations performed'});return true;}
+  if(path.endsWith('/plans')){send(res,200,{applications:plans.map(planWithProduct),registrationStatus:'not_registered',note:'Operator-reviewed plans; no Logto registrations performed'});return true;}
   if(typeof provision!=='function'){send(res,503,{error:'provisioning_disabled'});return true;}
   // Avoid an unaudited client performing platform-level identity or organisation creation.
   let body;

@@ -51,7 +51,7 @@ export interface ProductOperatorConfig {
     trustedOrigins: readonly string[];
 }
 export declare const PRODUCT_DEFINITIONS: readonly ProductDefinition[];
-export type RegistryErrorCode = 'unknown_product' | 'missing_product' | 'unknown_legacy_id' | 'legacy_mapping_mismatch' | 'duplicate_id' | 'duplicate_legacy_id' | 'duplicate_audience' | 'duplicate_repository' | 'duplicate_origin' | 'invalid_contract_version' | 'missing_required_capability' | 'invalid_tenant_key' | 'untrusted_origin';
+export type RegistryErrorCode = 'unknown_product' | 'missing_product' | 'unknown_legacy_id' | 'legacy_mapping_mismatch' | 'duplicate_id' | 'duplicate_legacy_id' | 'duplicate_audience' | 'duplicate_repository' | 'duplicate_origin' | 'invalid_contract_version' | 'missing_required_capability' | 'invalid_tenant_key' | 'untrusted_origin' | 'missing_origin';
 export declare class ProductRegistryError extends Error {
     readonly code: RegistryErrorCode;
     constructor(code: RegistryErrorCode, message: string);
@@ -116,3 +116,18 @@ export interface ContractInspection {
 }
 /** Pure inspection of configured contract version and capabilities. No network calls. */
 export declare function inspectProductContract(product: ProductDefinition, configured: ContractConfig): ContractInspection;
+/**
+ * Runtime plan lookup for the admin plans view (issue #29).
+ * Keyed by legacy id, because access checks and OIDC plans still use legacy ids. Each entry shows the canonical
+ * product id next to the legacy id. The origin comes only from the validated registry.
+ */
+export interface ProductPlanLookupEntry {
+    productId: ProductId;
+    legacyId: ApplicationId;
+    displayName: string;
+    serviceOrigin: string;
+}
+/** Throws missing_origin when any canonical product has no validated origin. */
+export declare function planLookup(registry: readonly RegisteredProduct[]): Readonly<Record<ApplicationId, ProductPlanLookupEntry>>;
+/** Legacy-keyed origins for the OIDC plan builder. Every value comes from the validated registry. */
+export declare function originsForLegacyIds(registry: readonly RegisteredProduct[]): Readonly<Record<ApplicationId, string>>;
