@@ -8,23 +8,7 @@ BEGIN
 END $$;
 CREATE TABLE titan_config.service_company_grants (
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
- client_id text NOT NULL CHECK(length(client_id) BETWEEN 1 AND 256 AND client_id ~ '^[A-Za-z0-9:_-]+,
- product text NOT NULL CHECK(product IN ('central','sorted','supercharged','lms')),
- environment text NOT NULL CHECK(environment ~ '^[a-z][a-z0-9_-]{0,63}$'),
- company_id uuid NOT NULL,
- cohorts text[] NOT NULL DEFAULT '{}'::text[] CHECK(cardinality(cohorts)<=32),
- state text NOT NULL CHECK(state IN ('active','suspended','revoked')),
- expires_at timestamptz,
- revision bigint NOT NULL DEFAULT 1 CHECK(revision>0),
- created_at timestamptz NOT NULL DEFAULT now(),
- UNIQUE(client_id,product,environment,company_id)
-);
-CREATE INDEX config_grant_lookup_idx ON titan_config.service_company_grants(client_id,product,environment,state,expires_at);
-REVOKE ALL ON titan_config.service_company_grants FROM PUBLIC;
-GRANT USAGE ON SCHEMA titan_config TO titan_config_grant_reader;
-GRANT SELECT ON titan_config.service_company_grants TO titan_config_grant_reader;
-COMMIT;
-),
+ client_id text NOT NULL CHECK(length(client_id) BETWEEN 1 AND 256 AND client_id SIMILAR TO '[A-Za-z0-9:_-]+'),
  product text NOT NULL CHECK(product IN ('central','sorted','supercharged','lms')),
  environment text NOT NULL CHECK(environment ~ '^[a-z][a-z0-9_-]{0,63}$'),
  company_id uuid NOT NULL,
