@@ -110,8 +110,8 @@ export function createOutboxWriter(registry) {
         async enqueue(tx, input) {
             const event = prepareEvent(registry, input);
             const inserted = await tx.query(`INSERT INTO titan.outbox_events
-           (organisation_id, source_product, event_type, schema_version, correlation_id, idempotency_key, payload, payload_digest)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+           (organisation_id, source_product, event_type, schema_version, correlation_id, idempotency_key, payload, payload_digest, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, clock_timestamp())
          ON CONFLICT (idempotency_key) DO NOTHING
          RETURNING id`, [event.organisationId, event.sourceProduct, event.eventType, event.schemaVersion, event.correlationId,
                 event.idempotencyKey, event.payloadCanonical, event.payloadDigest]);
