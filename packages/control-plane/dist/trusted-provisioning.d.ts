@@ -23,6 +23,10 @@ export interface LinkCheckInput {
 }
 export type VerifyLocalLink = (input: LinkCheckInput) => Promise<boolean>;
 export type GetCanonicalLogtoId = (type: 'identity' | 'organisation', uuid: string) => Promise<string | undefined>;
+/** Thrown when the authorisation policy refuses a command. Carries no detail beyond the refusal. */
+export declare class ProvisioningForbiddenError extends Error {
+    constructor();
+}
 export declare class TrustedProvisioningService {
     private readonly provisioner;
     private readonly logto;

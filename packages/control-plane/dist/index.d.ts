@@ -7,6 +7,7 @@ export * from './postgres.js';
 export * from './provisioning.js';
 export * from './activity-redaction.js';
 export * from './activity-events.js';
+export * from './administration.js';
 export * from './logto-management.js';
 export * from './trusted-provisioning.js';
 export * from './logto-m2m.js';

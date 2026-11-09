@@ -1,3 +1,7 @@
+/** Thrown when the authorisation policy refuses a command. Carries no detail beyond the refusal. */
+export class ProvisioningForbiddenError extends Error {
+    constructor() { super('provisioning forbidden'); this.name = 'ProvisioningForbiddenError'; }
+}
 export class TrustedProvisioningService {
     provisioner;
     logto;
@@ -16,7 +20,7 @@ export class TrustedProvisioningService {
             throw Error('unverified provisioning actor');
         // Authorize before querying management services or writing SQL. Fail closed by default.
         if (await this.authorize(actor, command) !== true)
-            throw Error('provisioning forbidden');
+            throw new ProvisioningForbiddenError();
         switch (command.kind) {
             case 'identity':
                 await this.logto.assertIdentity(command.logtoSubject);
