@@ -22,9 +22,9 @@ psql -X -v ON_ERROR_STOP=1 "$db" -f packages/config-engine/sql/fixtures/real_can
 for check in packages/config-engine/sql/canonical_verify_*.sql; do
  psql -X -v ON_ERROR_STOP=1 "$db" -f "$check" >/dev/null
 done
+npm ci --prefix apps/control-api --ignore-scripts --no-audit --no-fund
 bash packages/config-engine/scripts/check-service-logins.sh "$db"
 CONFIG_TEST_DATABASE_URL="$db" node packages/config-engine/scripts/tls-postgres-e2e.mjs
-npm ci --prefix apps/control-api --ignore-scripts --no-audit --no-fund
 CONFIG_TEST_DATABASE_URL="$db" node packages/config-engine/scripts/e2e-config-read.mjs
 CONFIG_TEST_DATABASE_URL="$db" node packages/config-engine/scripts/canonical-catalog-e2e.mjs
 CONFIG_TEST_DATABASE_URL="$db" TITAN_CONFIG_CANONICAL_MIGRATION_SHA256="$checksum" node packages/config-engine/scripts/canonical-receipt-e2e.mjs
