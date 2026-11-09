@@ -9,7 +9,7 @@ const TOKEN=/^[A-Za-z0-9_-]{43}$/;
 const HASH=/^[0-9a-f]{64}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const digest=value=>createHash('sha256').update(value).digest('hex');
-const SUBJECT=/^[^\\s\\x00-\\x1f\\x7f]{1,256}$/u;
+const SUBJECT=/^[^\s\x00-\x1f\x7f]{1,256}$/u;
 const validIssuer=value=>{try{const x=new URL(value);return x.protocol==='https:'&&!x.username&&!x.password&&!x.search&&!x.hash&&(x.href===value||(x.pathname==='/'&&x.origin===value));}catch{return false;}};
 const aad=(stateDigest,field)=>'central_company_selection|'+stateDigest+'|'+field;
 async function transaction(pool,task){
