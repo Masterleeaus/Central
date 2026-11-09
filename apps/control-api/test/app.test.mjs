@@ -76,3 +76,30 @@ test('decision logs record allow and deny without tokens or subjects',async()=>{
  assert.ok(!everything.includes('user1'),'subject must not be logged');
  assert.ok(!everything.includes('abc.def.ghi'),'token must not be logged');
 });
+
+test('concurrent expensive access checks reject extra requests before token verification and free capacity',async()=>{
+ let enter,releaseVerification;
+ const started=new Promise(resolve=>enter=resolve);
+ const pending=new Promise(resolve=>releaseVerification=resolve);
+ let checks=0;
+ const handler=makeHandler({verify:async()=>{checks++;enter();await pending;return principal;},
+  concurrencyLimits:{perKey:1,globalLimit:1}});
+ await withServer(handler,async base=>{
+  const request=()=>fetch(base+ACCESS,{headers:{authorization:'Bearer abc.def.ghi'}});
+  const first=request();
+  await started;
+  const rejected=await request();
+  assert.equal(rejected.status,429);
+  assert.equal(rejected.headers.get('retry-after'),'1');
+  assert.equal(checks,1,'rejected request must not perform token verification');
+  releaseVerification();
+  const completed=await first;
+  assert.equal(completed.status,403);
+  const after=await request();
+  assert.equal(after.status,403);
+  assert.equal(checks,2);
+ });
+});
+test('invalid concurrent capacity is rejected before server binds',()=>{
+ assert.throws(()=>makeHandler({concurrencyLimits:{perKey:0,globalLimit:2}}),TypeError);
+});
