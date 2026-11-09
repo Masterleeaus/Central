@@ -9,8 +9,9 @@ import { createOperatorAdmin } from './operator-config.mjs';
 import { createConfigDbRuntime } from './config-db-runtime.mjs';
 import { createProductionConfigRoute } from './config-production-route.mjs';
 import { assertConfigStartup } from './config-startup-guard.mjs';
-import { verifyCanonicalDbAtStartup } from '../../../packages/config-engine/src/pg-canonical-startup.mjs';
-import {verifyCanonicalMigrationReceipt} from '../../../packages/config-engine/src/pg-migration-receipt.mjs';
+import {verifyConfigRuntimeReadiness} from './config-runtime-readiness.mjs';
+import {closeFailedStartup} from './config-runtime-cleanup.mjs';
+import {centralListenPort} from './config-listen-policy.mjs';
 const log = createJsonLogger();
 
 export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log, configLookup}={}) {
@@ -28,18 +29,16 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   assertConfigStartup(env);
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
-  const configRuntime=createConfigDbRuntime({env,Pool});
-  if(configRuntime){
-    try{
-      await verifyCanonicalDbAtStartup(configRuntime.configPool);
-      await verifyCanonicalMigrationReceipt(configRuntime.configPool,{
-        expectedId:env.TITAN_CONFIG_CANONICAL_MIGRATION_ID,
-        expectedHash:env.TITAN_CONFIG_CANONICAL_MIGRATION_SHA256
-      });
-    }
-    catch(error){await configRuntime.close();await pool.end();throw Error('canonical config database schema unverified',{cause:error})}
+  let configRuntime,configHandler,port;
+  try{
+    port=centralListenPort(env);
+    configRuntime=createConfigDbRuntime({env,Pool});
+    if(configRuntime)await verifyConfigRuntimeReadiness({runtime:configRuntime,env});
+    configHandler=createProductionConfigRoute({env,runtime:configRuntime,fetcher,logger:auditLog});
+  }catch(error){
+    await closeFailedStartup({pool,runtime:configRuntime});
+    throw Error('configuration startup failed',{cause:error});
   }
-  const configHandler=createProductionConfigRoute({env,runtime:configRuntime,fetcher,logger:auditLog});
   const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,configHandler,logger:auditLog});
   const handler=async (req,res)=>{
     res.on('finish',()=>{try{metrics.observeResponse(res.statusCode);}catch{/* ignore */}});
@@ -47,9 +46,8 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
     return centralHandler(req,res);
   };
   const server=createServer(handler);
-  const port=Number(env.TITAN_CENTRAL_PORT||3102);
-  if (!Number.isInteger(port)||port<1||port>65535) throw Error('invalid port');
-  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)});
+  try{await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)})}
+  catch(error){await closeFailedStartup({pool,runtime:configRuntime});throw Error('central HTTP listen failed',{cause:error})}
   return {server,pool,async close(){await new Promise((resolve,reject)=>server.close(err=>err?reject(err):resolve()));await pool.end();if(configRuntime)await configRuntime.close();}};
 }
 // Closes the HTTP server and the database pool on SIGTERM/SIGINT, then exits.
