@@ -11,6 +11,8 @@
  *   the callback answers 200 with the candidate list and a selection token, and POST /auth/titan/{app}/select-organisation
  *   completes the sign-in. The store must be durable, shared and atomic: consume(bindingHash) returns and deletes
  *   the pending record in one step (see the contract in test/oidc-organisation-selection.test.mjs).
+ *   Production uses createPostgresOrganisationSelectionStore (organisation-selection-pg.mjs, migration 0016).
+ *   The saved record also carries stateDigest, the SHA-256 (base64url) of the one-use OIDC state.
  *   Without it, several organisations still fail closed with 403.
  */
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
@@ -108,13 +110,13 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
   }
 
   /** Records the pending choice, bound to the browser binding and the one-use state. Returns null when selection is not possible. */
-  async function startSelection(binding, verified, organisationIds) {
+  async function startSelection(binding, verified, organisationIds, stateDigest) {
     if (!organisationSelection) return null;
     if (!Array.isArray(organisationIds) || organisationIds.length<2 || organisationIds.length>128 || organisationIds.some(id=>typeof id!=='string'||!ID.test(id))) return null;
     const selectionToken=token();
     const selectionHash=sha(selectionToken);
     const sealedIdToken=idTokenVault?idTokenVault.seal({idToken:requireIdToken(verified),sessionId:selectionHash,subject:verified.subject}):null;
-    await organisationSelection.store.save({bindingHash:sha(binding),selectionHash,issuer:verified.issuer,subject:verified.subject,organisationIds:[...organisationIds],sealedIdToken,expiresAt:clock()+SELECTION_TTL_MS});
+    await organisationSelection.store.save({bindingHash:sha(binding),stateDigest,selectionHash,issuer:verified.issuer,subject:verified.subject,organisationIds:[...organisationIds],sealedIdToken,expiresAt:clock()+SELECTION_TTL_MS});
     return {organisations:[...organisationIds],selectionToken};
   }
 
@@ -192,7 +194,7 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
       // MUST recheck current account/membership/entitlement in the application adapter.
       const local=await resolveLocalIdentity({issuer:verified.issuer,subject:verified.subject,applicationId});
       if (local?.selectionRequired) {
-        const started=await startSelection(binding,verified,local.organisationIds);
+        const started=await startSelection(binding,verified,local.organisationIds,sha(url.searchParams.get('state')));
         if(!started){audit('login_denied',{reason:'selection_unavailable'});fail(403,'account_not_authorised');return true;}
         audit('login_selection_required',{count:started.organisations.length});
         reply(res,200,{status:'select_organisation',organisations:started.organisations,selection_token:started.selectionToken});
