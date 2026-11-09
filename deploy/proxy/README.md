@@ -112,3 +112,23 @@ configuration, then testing short bursts on all routes, including
 `/auth/central/select`, through the public endpoint. Never claim this
 issue fully deployed from template-only tests. If Apache lacks mod_qos
 or fails to return 429 as expected, use tested nginx limits.
+
+## Product-host company-choice endpoints
+
+The Central vhost intentionally does **not** forward local product
+sessions. The separate reference templates
+`nginx/product-selection.conf.template` and
+`apache/product-selection.conf.template` are for each destination
+product vhost only. They cap requests and concurrent sessions on
+`/auth/titan/(field|desk|academy)/select`, enforce a 4-KiB POST
+body limit under nginx, replace untrusted forwarding headers, and
+proxy only to that product's loopback port.
+
+The included `validate_product_selection.py` rejects accidental
+loss of limits, missing product routes, wildcard Apache proxying,
+header spoofing and non-loopback product targets. CI additionally
+renders the nginx product include into an isolated container and runs
+`nginx -t`. These are *template* checks, not proof that a customer
+product host is configured correctly. Before launch, verify
+mod_qos or nginx rate/concurrency behaviour and perform local-only
+saturation and account-isolation tests against each real product.
