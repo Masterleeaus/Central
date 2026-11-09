@@ -63,3 +63,21 @@ test('prune uses bounded parameterised, locked batch and returns count',async()=
   const sql=ctx.calls.find(x=>x.sql.includes('SKIP LOCKED'));
   assert.ok(sql); assert.deepEqual(sql.values,[25]);
 });
+
+
+test('session creation verifies returned digest before reporting success',async()=>{
+ const ctx=setup({rows:[{token_digest:'a'.repeat(64)}]});
+ await assert.rejects(ctx.store.insert({digest:DIGEST,identityId:'issuer|sub',
+  companyId:ID,expiresAt:Date.now()+60000}),/not confirmed/);
+ assert.ok(ctx.calls.some(x=>x.sql==='ROLLBACK'));
+});
+test('malformed session rows fail closed even when PostgreSQL returns them',async()=>{
+ for(const row of [
+  {logto_subject:'invalid\nsubject',organisation_id:ID,expires_at:new Date('2027-01-01')},
+  {logto_subject:'subject',organisation_id:'foreign',expires_at:new Date('2027-01-01')},
+  {logto_subject:'subject',organisation_id:ID,expires_at:'not-date'}
+ ]){
+  const ctx=setup({rows:[row]});
+  assert.equal(await ctx.store.find(DIGEST),null);
+ }
+});
