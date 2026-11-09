@@ -92,3 +92,23 @@ class ApacheRejections(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class ExtendedIngressSecurity(unittest.TestCase):
+    def test_central_login_callback_and_selection_have_proxy_caps(self):
+        for path in ('/auth/central/start','/auth/central/callback','/auth/central/select'):
+            self.assertIn(path.split('/')[-1], LOCS)
+        self.assertIn('titan_company_select',ZONES)
+        self.assertEqual(check_nginx(ZONES,LOCS),[])
+
+    def test_missing_first_party_selection_rate_limit_fails_validation(self):
+        weakened=LOCS.replace('limit_req zone=titan_company_select burst=8 nodelay;', '')
+        self.assertTrue(any('/auth/central/select' in x for x in check_nginx(ZONES,weakened)))
+
+    def test_missing_product_start_limit_fails_validation(self):
+        weakened=LOCS.replace('limit_req zone=titan_oidc_start burst=12 nodelay;', '')
+        self.assertTrue(any('/auth/titan/field/start' in x for x in check_nginx(ZONES,weakened)))
+
+    def test_missing_apache_browser_concurrency_is_detected(self):
+        weakened='\n'.join(line for line in VHOST.splitlines()
+          if 'QS_LocRequestLimitMatch "^/auth/central/' not in line)
+        self.assertTrue(any('/auth/central/callback' in x for x in check_apache(weakened)))
