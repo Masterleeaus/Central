@@ -106,6 +106,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Test pinned canonical schema with real SQL roles and signed JWT
+      - name: Test pinned schema and live Central HTTP socket with restricted PostgreSQL
         working-directory: config-branch
         run: bash packages/config-engine/scripts/canonical-upstream-e2e.sh ../canonical-upstream

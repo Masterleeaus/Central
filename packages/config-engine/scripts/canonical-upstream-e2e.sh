@@ -27,4 +27,6 @@ npm ci --prefix apps/control-api --ignore-scripts --no-audit --no-fund
 CONFIG_TEST_DATABASE_URL="$db" node packages/config-engine/scripts/e2e-config-read.mjs
 CONFIG_TEST_DATABASE_URL="$db" node packages/config-engine/scripts/canonical-catalog-e2e.mjs
 CONFIG_TEST_DATABASE_URL="$db" TITAN_CONFIG_CANONICAL_MIGRATION_SHA256="$checksum" node packages/config-engine/scripts/canonical-receipt-e2e.mjs
+CONFIG_TEST_DATABASE_URL="$db" TITAN_CONFIG_CANONICAL_MIGRATION_SHA256="$checksum" node packages/config-engine/scripts/http-server-e2e.mjs
+CONFIG_TEST_DATABASE_URL="$db" TITAN_CONFIG_CANONICAL_MIGRATION_SHA256="$checksum" node packages/config-engine/scripts/http-server-startup-failures.mjs
 echo "pinned canonical PostgreSQL migration and signed JWT integration passed"
