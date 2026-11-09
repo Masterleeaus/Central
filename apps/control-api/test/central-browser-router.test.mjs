@@ -19,7 +19,7 @@ const env={
 };
 const res=()=>({status:0,headers:{},body:'',writeHead(status,headers){this.status=status;this.headers=headers},end(body=''){this.body=body}});
 const req=(url,method='GET',headers={})=>({url,method,headers});
-function setup(){
+function setup({concurrencyLimits,delaySave}={}){
   const sessions=new Map(),loginState=new Map(),selectionState=new Map(),calls=[];
   let nonce;
   const store={
@@ -41,7 +41,8 @@ function setup(){
   }}};
   const router=createCentralBrowserRouter({
     env,pool:db,getCompanyName:async()=> 'Verified & Co',launcherStore:store,
-    stateStore:{async save(key,value){loginState.set(key,value);nonce=value.nonce},async consume(key){const found=loginState.get(key);loginState.delete(key);return found??null}},
+    ...(concurrencyLimits?{concurrencyLimits}:{}),
+    stateStore:{async save(key,value){if(delaySave)await delaySave();loginState.set(key,value);nonce=value.nonce},async consume(key){const found=loginState.get(key);loginState.delete(key);return found??null}},
     selectionStore:{async save(key,value){selectionState.set(key,value)},async consume(key){const found=selectionState.get(key);selectionState.delete(key);return found??null}},
     verifyIdToken:async()=>({iss:env.TITAN_OIDC_ISSUER,aud:env.TITAN_CENTRAL_BROWSER_CLIENT_ID,sub:'subject-1',nonce,exp:Math.floor(Date.now()/1000)+300,iat:Math.floor(Date.now()/1000)}),
     fetcher:async()=>({ok:true,json:async()=>({id_token:'signed-token-mocked',access_token:'access-token',token_type:'Bearer'})})
@@ -94,4 +95,26 @@ test('browser startup validates 256-bit state key from its provided environment'
     pool:{connect:async()=>{}},
     getCompanyName:async()=> 'Trusted Company'
   }),/base64 encoding of 32 bytes/);
+});
+
+test('browser launcher caps OIDC starts and releases capacity after the outstanding request finishes',async()=>{
+ let entered,release;
+ const started=new Promise(resolve=>entered=resolve);
+ const blocked=new Promise(resolve=>release=resolve);
+ let saves=0;
+ const f=setup({concurrencyLimits:{perKey:1,globalLimit:1},
+  delaySave:async()=>{saves++;entered();await blocked}});
+ const firstRes=res();
+ const first=f.router.handler(req('/auth/central/start'),firstRes);
+ await started;
+ const denied=res();
+ await f.router.handler(req('/auth/central/start'),denied);
+ assert.equal(denied.status,429);
+ assert.equal(saves,1);
+ release();await first;
+ assert.equal(firstRes.status,303);
+ const next=res();
+ await f.router.handler(req('/auth/central/start'),next);
+ assert.equal(next.status,303);
+ assert.equal(saves,2);
 });
