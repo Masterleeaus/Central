@@ -20,7 +20,7 @@ function validIssuer(issuer){
    (u.href===issuer||(u.pathname==='/'&&u.origin===issuer));
  }catch{return false;}
 }
-async function transaction(pool,task){
+async function transaction(pool,applicationId,task){
  const client=await pool.connect();let started=false;
  try{
   await client.query('BEGIN');started=true;
@@ -57,7 +57,7 @@ export function createPostgresProductSelectionStore({pool,applicationId,
     sealer.seal(record.subject,aad(applicationId,id,'subject')),
     sealer.seal(JSON.stringify(record.organisationIds),aad(applicationId,id,'companies')),
     record.expiresAt];
-   return transaction(pool,async client=>{
+   return transaction(pool,applicationId,async client=>{
     const result=await client.query(
      'INSERT INTO titan.product_company_selection_states(application_id,state_digest,binding_hash,sealed_issuer,sealed_subject,sealed_company_ids,expires_at) VALUES($1,$2,$3,$4,$5,$6,to_timestamp($7::double precision / 1000)) RETURNING state_digest',values);
     if(result.rows?.length!==1)throw Error('product selection state not recorded');
@@ -66,7 +66,7 @@ export function createPostgresProductSelectionStore({pool,applicationId,
   async consume(state){
    if(!TOKEN.test(state??''))return null;
    const id=digest(applicationId,state);
-   return transaction(pool,async client=>{
+   return transaction(pool,applicationId,async client=>{
     const result=await client.query(
      'DELETE FROM titan.product_company_selection_states WHERE application_id=$1 AND state_digest=$2 AND expires_at>to_timestamp($3::double precision / 1000) RETURNING binding_hash,sealed_issuer,sealed_subject,sealed_company_ids,expires_at',
      [applicationId,id,clock()]);
@@ -89,7 +89,7 @@ export function createPostgresProductSelectionStore({pool,applicationId,
   async prune({limit=500}={}){
    if(!Number.isSafeInteger(limit)||limit<1||limit>5000)
     throw TypeError('invalid product selection prune limit');
-   return transaction(pool,async client=>{
+   return transaction(pool,applicationId,async client=>{
     const result=await client.query(
      'DELETE FROM titan.product_company_selection_states WHERE(application_id,state_digest) IN (SELECT application_id,state_digest FROM titan.product_company_selection_states WHERE application_id=$1 AND expires_at<=now() ORDER BY expires_at LIMIT $2 FOR UPDATE SKIP LOCKED) RETURNING state_digest',
      [applicationId,limit]);
