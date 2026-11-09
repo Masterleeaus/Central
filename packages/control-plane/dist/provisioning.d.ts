@@ -60,7 +60,34 @@ export type ProvisioningCommand = {
     id: string;
     organisationId: string;
     expectedRevision: number;
-};
+} | LinkReviewResolveCommand;
+/** Operator resolution of a link_reviews row (issue #37). `id` is the review ID. Identity, organisation and
+ * application are cross-checked against the review row, never trusted from the command alone.
+ * approved: creates the link, or relinks the existing row for the identity, organisation and application
+ * (expectedRevision required for a relink). The review's local account must be the one supplied.
+ * rejected: records the decision only; no link is written. Both need a reason. */
+export type LinkReviewResolveCommand = {
+    kind: 'link_review_resolve';
+    id: string;
+    identityId: string;
+    organisationId: string;
+    applicationId: ApplicationId;
+    reason: string;
+} & ({
+    decision: 'approved';
+    expectedRevision?: number;
+    localUserId: string;
+    localAccountId: string;
+    assertion: string;
+} | {
+    decision: 'rejected';
+});
+/** Commands whose link assertion must be verified before they reach CentralProvisioner. */
+export type LinkAssertionCommand = Extract<ProvisioningCommand, {
+    kind: 'link' | 'link_relink';
+}> | Extract<LinkReviewResolveCommand, {
+    decision: 'approved';
+}>;
 /** Why an account link was not written and was recorded for review instead. Fail closed; nothing is auto-resolved. */
 export type LinkReviewReason = 'existing_link_other_account' | 'account_claimed_elsewhere' | 'concurrent_conflict';
 /** Thrown after the review row and its audit row have committed. The link itself was NOT written. */
@@ -86,4 +113,8 @@ export declare class CentralProvisioner {
     private readonly pool;
     constructor(pool: SqlPool);
     apply(context: ProvisioningContext, command: ProvisioningCommand): Promise<'created' | 'updated' | 'replayed'>;
+    /** True only when this exact request (same ID and same digest) was already applied. Reads the audit row and
+    * writes nothing. TrustedProvisioningService calls it before assertion verification, so an identical retry of an
+    * applied resolution is answered 'replayed' without spending a second nonce. A reused ID with another payload throws. */
+    wasApplied(context: ProvisioningContext, command: ProvisioningCommand): Promise<boolean>;
 }
