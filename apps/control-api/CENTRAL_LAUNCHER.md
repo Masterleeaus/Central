@@ -404,3 +404,42 @@ handoff and account-switching are exercised with real integrations and
 isolation; #37 stays OPEN until end-to-end product link/relink/unlink
 and revocation controls are integrated. Source/tests alone are not
 proof of deployed Logto or application connectivity.
+
+## Product-owned account control and operator-reviewed linking
+
+Account-linking proof components are now available as **server-side building
+blocks**, not browser-accessible endpoints:
+
+- `product-link-proof-issuer.mjs` lives in the destination product's
+  trusted backend. It signs an exact, 60-second Ed25519 claim **only after**
+  product-local session/account control is independently rechecked.
+- `product-link-proof.mjs` checks the operator-pinned, product-specific
+  Ed25519 public key, exact Central identity and company UUID, legacy
+  product ID, local user/account IDs, action, issue/expiry, and a unique
+  random nonce. Unknown claims and relabelled products fail closed.
+- `product-link-nonce-pg.mjs` consumes the proof nonce through a single-use,
+  restricted PostgreSQL function after signature verification. It records
+  only a SHA-256 digest of the product-scoped nonce, not raw proof data.
+  Database migration `0016_product_link_proof_nonces.sql` creates the
+  durable replay ledger and role-isolated function.
+- `product-link-workflow.mjs` separately requires a server-authenticated
+  Central operator, explicit link/unlink policy approval, an exact
+  existing-link collision/revision lookup, and the trusted provisioner.
+  Creating a link never silently overwrites a matching UUID; unlinking
+  requires exact tenant and expected revision. The canonical provisioner
+  owns its transactional audit and session generation changes.
+
+**Remaining:** Actual Sorted, Supercharged and LMS product-level proof
+issuance adapters are not connected; live operator approval UI, local
+account ownership checks, receipt/key custody and cross-product
+session invalidation must be verified. These components do not close
+issue #37 and must never be mounted as public endpoints with default
+in-memory test fixtures. Proof nonce consumption happens before the
+provisioning transaction; failed provisioning requires a freshly
+product-signed proof rather than reuse of an already consumed nonce.
+Neither email nor display name is account-control evidence.
+
+Multicompany Central browser selection already has one-use browser-bound
+state, a trusted company list and a membership recheck. The separate
+product OIDC adapter still lacks complete multi-company selection and
+product-local account binding; issue #32 remains open.
