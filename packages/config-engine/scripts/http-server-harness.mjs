@@ -4,7 +4,6 @@ import {createServer as createNetServer} from 'node:net';
 import assert from 'node:assert/strict';
 import {startCentralService} from '../../../apps/control-api/src/server.mjs';
 const require=createRequire(new URL('../../../apps/control-api/package.json',import.meta.url));
-const {Pool:PgPool}=require('pg');
 const issuer='https://issuer.integration.test/',audience='https://api.integration.test/config',jwksUri='https://issuer.integration.test/oidc/jwks';
 const {privateKey,publicKey}=generateKeyPairSync('rsa',{modulusLength:2048});
 const jwk={...publicKey.export({format:'jwk'}),kid:'http-integration',alg:'RS256',use:'sig'};
@@ -21,6 +20,7 @@ export async function freePort(){
 }
 export function buildCiPoolAdapter({onPool=()=>{},grantOverride}={}){
  const admin=process.env.CONFIG_TEST_DATABASE_URL;if(!admin)throw Error('requires disposable CI database');
+ const {Pool:PgPool}=require('pg');
  const base=new URL(admin);
  const dbUrl=(role,pass)=>{
   const u=new URL(base.href);u.username=role;u.password=pass;
