@@ -32,15 +32,25 @@ export function createOrganisationSelection({selectionStore,listOrganisations,ve
     throw new TypeError('invalid organisation selection dependencies');
 
   return {
-    async begin({issuer,subject,browserBinding}={}){
+    async begin({issuer,subject,browserBinding,allowedCompanyIds}={}){
       if(!validIssuer(issuer)||!text(subject)||!TOKEN.test(browserBinding??''))return {status:'denied'};
       let raw;
       try{raw=await listOrganisations({issuer,subject});}catch{return {status:'unavailable'};}
       if(!Array.isArray(raw)||raw.length>128)return {status:'unavailable'};
+      // Bind this selection to the exact company list returned by the original
+      // verified OIDC callback, not an expanded later naming/discovery result.
+      let permitted=null;
+      if(allowedCompanyIds!==undefined){
+        if(!Array.isArray(allowedCompanyIds)||allowedCompanyIds.length===0||allowedCompanyIds.length>128||
+          !allowedCompanyIds.every(id=>typeof id==='string'&&UUID.test(id))||
+          new Set(allowedCompanyIds).size!==allowedCompanyIds.length)return {status:'denied'};
+        permitted=new Set(allowedCompanyIds);
+      }
       const seen=new Set(),organisations=[];
       for(const item of raw){
         if(!item||!UUID.test(item.id??'')||typeof item.name!=='string'||!item.name.trim()||item.name.length>160||/[\x00-\x1f\x7f]/.test(item.name)||seen.has(item.id))return {status:'unavailable'};
         seen.add(item.id);
+        if(permitted&&!permitted.has(item.id))continue;
         organisations.push({id:item.id,name:item.name.trim()});
       }
       if(organisations.length===0)return {status:'denied'};
