@@ -47,14 +47,14 @@ BEGIN
 END $$;
 RESET ROLE;
 SET LOCAL ROLE titan_product_selection_desk;
-DO $
+DO $$
 DECLARE n integer;
 BEGIN
  SELECT count(*) INTO n FROM titan.product_company_selection_states;
  IF n<>1 THEN RAISE EXCEPTION 'desk role could inspect other products'; END IF;
-END $;
+END $$;
 RESET ROLE;
-DO $
+DO $$
 DECLARE n integer;
 BEGIN
  SELECT count(*) INTO n FROM titan.product_company_selection_states;
