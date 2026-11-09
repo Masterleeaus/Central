@@ -10,7 +10,7 @@ export function createConfigHttpReadHandler(config){
   if(url.pathname!=='/v1/config/evaluate')return false;
   if(req.method!=='GET'){send(res,405,{error:'method_not_allowed'});return true;}
   const names=[...url.searchParams.keys()];
-  if(req.headers?.cookie||names.length!==3||new Set(names).size!==3||
+  if(req.headers?.cookie||req.headers?.['x-company-id']||req.headers?.['x-forwarded-user']||names.length!==3||new Set(names).size!==3||
      ['key','application','environment'].some(k=>url.searchParams.getAll(k).length!==1)){
    send(res,400,{error:'invalid_parameters'});return true;
   }

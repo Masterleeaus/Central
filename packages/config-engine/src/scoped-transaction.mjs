@@ -11,6 +11,7 @@ export async function runScopedTransaction(pool,{companyId:id,cohorts=[]},fn){
  try {
   await c.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');active=true;
   await c.query('SET LOCAL ROLE titan_config_reader');
+  await c.query("SET LOCAL lock_timeout = '2000ms'");
   await c.query("SET LOCAL statement_timeout = '5000ms'");
   await c.query('SELECT set_config($1,$2,true)', ['titan_config.company_id',canonical]);
   await c.query('SELECT set_config($1,$2,true)', ['titan_config.cohorts',[...new Set(cohorts)].join(',')]);

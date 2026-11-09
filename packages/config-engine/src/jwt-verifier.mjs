@@ -9,7 +9,7 @@ export function createServiceJwtVerifier({issuer,audience,jwksUri,fetcher,clock=
  const keyFor=createJwksProvider({issuer,jwksUri,fetcher,clock});
  return async function authenticate(authorization){
   const token=readBearer(authorization),{header,claims,signature,signingInput}=jwtParts(token);
-  if(header.alg!=='RS256'||header.typ && header.typ!=='JWT'||typeof header.kid!=='string'||header.jku||header.jwk||header.x5u)fail('unauthorised');
+  if(header.alg!=='RS256'||header.typ && header.typ!=='JWT'||typeof header.kid!=='string'||header.jku||header.jwk||header.x5u||header.crit||header.b64===false)fail('unauthorised');
   const jwk=await keyFor(header.kid);
   let valid=false;
   try{valid=verifySig('RSA-SHA256',Buffer.from(signingInput),createPublicKey({key:jwk,format:'jwk'}),Buffer.from(signature,'base64url'))}catch{}

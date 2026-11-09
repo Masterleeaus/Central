@@ -6,9 +6,10 @@ import { createJsonLogger } from './structured-log.mjs';
 import { insecureLocalhostAllowed } from './endpoint-policy.mjs';
 import { createMetrics, pathnameOf, serveMetrics } from './metrics.mjs';
 import { createOperatorAdmin } from './operator-config.mjs';
+import { createConfigRoute } from './config-route.mjs';
 const log = createJsonLogger();
 
-export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log}={}) {
+export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log, configLookup}={}) {
   const {TITAN_CENTRAL_DATABASE_URL, TITAN_OIDC_ISSUER, TITAN_OIDC_JWKS_URI, TITAN_FIELD_AUDIENCE, TITAN_DESK_AUDIENCE, TITAN_ACADEMY_AUDIENCE}=env;
   if (![TITAN_CENTRAL_DATABASE_URL,TITAN_OIDC_ISSUER,TITAN_OIDC_JWKS_URI,TITAN_FIELD_AUDIENCE,TITAN_DESK_AUDIENCE,TITAN_ACADEMY_AUDIENCE].every(Boolean)) throw Error('missing Central service configuration');
   const audiences={field:TITAN_FIELD_AUDIENCE,desk:TITAN_DESK_AUDIENCE,academy:TITAN_ACADEMY_AUDIENCE};
@@ -22,7 +23,8 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher});
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
-  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,logger:auditLog});
+  const configHandler=createConfigRoute({env,pool,lookup:configLookup,fetcher,logger:auditLog});
+  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,configHandler,logger:auditLog});
   const handler=async (req,res)=>{
     res.on('finish',()=>{try{metrics.observeResponse(res.statusCode);}catch{/* ignore */}});
     if (req.method==='GET' && pathnameOf(req)==='/metrics') return serveMetrics(req,res,metrics);
