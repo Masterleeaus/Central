@@ -9,6 +9,7 @@ import { createOperatorAdmin } from './operator-config.mjs';
 import { createConfigDbRuntime } from './config-db-runtime.mjs';
 import { createProductionConfigRoute } from './config-production-route.mjs';
 import { assertConfigStartup } from './config-startup-guard.mjs';
+import { verifyCanonicalDbAtStartup } from '../../../packages/config-engine/src/pg-canonical-startup.mjs';
 const log = createJsonLogger();
 
 export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log, configLookup}={}) {
@@ -27,6 +28,10 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
   const configRuntime=createConfigDbRuntime({env,Pool});
+  if(configRuntime){
+    try{await verifyCanonicalDbAtStartup(configRuntime.configPool)}
+    catch(error){await configRuntime.close();await pool.end();throw Error('canonical config database schema unverified',{cause:error})}
+  }
   const configHandler=createProductionConfigRoute({env,runtime:configRuntime,fetcher,logger:auditLog});
   const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,configHandler,logger:auditLog});
   const handler=async (req,res)=>{
