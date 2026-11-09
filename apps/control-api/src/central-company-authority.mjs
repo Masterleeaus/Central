@@ -30,12 +30,12 @@ export function createCentralCompanyAuthority({pool,issuer,getCompanyName}={}){
       const result=await client.query(
         'SELECT organisation_id, logto_organisation_id FROM titan.central_eligible_companies($1)',[subject]);
       if(!Array.isArray(result.rows)||result.rows.length>128)throw Error('ambiguous membership discovery');
-      const seen=new Set(),companies=[];
+      const seen=new Set(),seenLogto=new Set(),companies=[];
       for(const row of result.rows){
         if(typeof row.organisation_id!=='string'||!UUID.test(row.organisation_id)||
           typeof row.logto_organisation_id!=='string'||!row.logto_organisation_id||
-          seen.has(row.organisation_id))throw Error('invalid membership discovery result');
-        seen.add(row.organisation_id);
+          seen.has(row.organisation_id.toLowerCase())||seenLogto.has(row.logto_organisation_id))throw Error('invalid membership discovery result');
+        seen.add(row.organisation_id.toLowerCase());seenLogto.add(row.logto_organisation_id);
         companies.push({companyId:row.organisation_id,logtoOrganisationId:row.logto_organisation_id});
       }
       await client.query('COMMIT');begun=false;
