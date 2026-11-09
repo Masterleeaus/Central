@@ -102,3 +102,20 @@ test('selection refuses concurrent POSTs before consuming one-use state and rest
  assert.equal(firstRes.status,303);
  assert.equal((await (async()=>{const res=response();await flow.handle(req('state='+state+'&organisation_id='+company),res);return res.status})()),403);
 });
+
+test('selection HTML never offers a newly discovered company absent from OIDC eligibility',async()=>{
+ const first='00000000-0000-4000-8000-000000000001';
+ const second='00000000-0000-4000-8000-000000000002';
+ const f=fixture();
+ const res=response();
+ await f.flow.begin({issuer:'https://issuer.example',subject:'user_1',
+  browserBinding:binding,allowedCompanyIds:[first]},res);
+ assert.equal(res.status,200);
+ assert.match(res.body,/&lt;Script&gt;/);
+ assert.doesNotMatch(res.body,new RegExp('value="'+second+'"'));
+ const state=/name="state" value="([^"]+)"/.exec(res.body)?.[1];
+ const denied=response();
+ await f.flow.handle(req('state='+state+'&organisation_id='+second),denied);
+ assert.equal(denied.status,403);
+ assert.equal(f.issued.length,0);
+});
