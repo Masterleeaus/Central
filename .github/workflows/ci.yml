@@ -288,3 +288,45 @@ jobs:
           python3 tools/verify_staging_approval_integrity.py \
             --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" > "$RUNNER_TEMP/approval-integrity.json"
           python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["status"]=="integrity_verified_within_database" and r["approvals_checked"]>=5 and r["audits_checked"]>=4 and r["human_signature_verified"] is False and r["db_superuser_tamper_resistant"] is False and "logto_subject" not in r' "$RUNNER_TEMP/approval-integrity.json"
+
+      - name: Ed25519 external receipt unit tests
+        run: node --test tests/test_staging_external_receipt.mjs
+
+      - name: Capture, sign and independently verify committed staging receipt
+        run: |
+          node --input-type=module - <<'NODE'
+          import {generateKeyPairSync} from 'node:crypto';
+          import {writeFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+          const dir=process.env.RUNNER_TEMP;
+          writeFileSync(join(dir,'receipt-private.pem'),
+            privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600});
+          writeFileSync(join(dir,'receipt-public.pem'),
+            publicKey.export({type:'spki',format:'pem'}),{mode:0o600});
+          NODE
+          node tools/staging_external_receipt.mjs capture \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --approval-id "00000000-0000-4000-8000-000000000705" \
+            --output "$RUNNER_TEMP/staging-receipt.json"
+          node tools/staging_external_receipt.mjs sign \
+            --receipt "$RUNNER_TEMP/staging-receipt.json" \
+            --private-key "$RUNNER_TEMP/receipt-private.pem" \
+            --output "$RUNNER_TEMP/staging-signed-receipt.json"
+          PIN=$(node tools/staging_external_receipt.mjs pin \
+            --public-key "$RUNNER_TEMP/receipt-public.pem")
+          node tools/staging_external_receipt.mjs verify \
+            --signed "$RUNNER_TEMP/staging-signed-receipt.json" \
+            --public-key "$RUNNER_TEMP/receipt-public.pem" \
+            --trusted-key-sha256 "$PIN" \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+          # A receipt signature made by a different key must not verify
+          # against the independently pinned trusted public key.
+          if node tools/staging_external_receipt.mjs verify \
+            --signed "$RUNNER_TEMP/staging-signed-receipt.json" \
+            --public-key "$RUNNER_TEMP/receipt-public.pem" \
+            --trusted-key-sha256 "0000000000000000000000000000000000000000000000000000000000000000" \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"; then
+            echo "SECURITY FAILURE: untrusted key was accepted"
+            exit 1
+          fi
