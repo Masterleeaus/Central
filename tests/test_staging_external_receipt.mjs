@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {dirname,resolve} from 'node:path';
-import {canonical,pin,signedReceipt,validateSigned,validateReceipt,main}
+import {canonical,pin,signedReceipt,validateSigned,validateReceipt,parseArgs,main}
  from '../tools/staging_external_receipt.mjs';
 
 const {privateKey,publicKey}=generateKeyPairSync('ed25519');
@@ -79,4 +79,12 @@ test('production database URL cannot be used to capture an unverified commitment
   assert.equal(r.status,1);
   assert.doesNotMatch(r.stderr,/password|subject|postgresql:\/\//);
  }finally{rmSync(folder,{recursive:true,force:true});}
+});
+
+test('CLI accepts trusted-key-sha256 without relaxing unknown or duplicate options',()=>{
+ const parsed=parseArgs(['verify','--signed','x.json','--public-key','public.pem',
+   '--trusted-key-sha256','a'.repeat(64),'--database-url','postgresql://localhost/titan_shared_ci']);
+ assert.equal(parsed['trusted-key-sha256'],'a'.repeat(64));
+ assert.throws(()=>parseArgs(['verify','--invalid_key','x']));
+ assert.throws(()=>parseArgs(['verify','--signed','x','--signed','y']));
 });
