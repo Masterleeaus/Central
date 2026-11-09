@@ -12,6 +12,8 @@ import { assertConfigStartup } from './config-startup-guard.mjs';
 import {verifyConfigRuntimeReadiness} from './config-runtime-readiness.mjs';
 import {closeFailedStartup} from './config-runtime-cleanup.mjs';
 import {centralListenPort} from './config-listen-policy.mjs';
+import {createServiceLifecycle} from './service-lifecycle.mjs';
+import {listenCentral} from './service-startup-listener.mjs';
 const log = createJsonLogger();
 
 export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log, configLookup}={}) {
@@ -46,9 +48,10 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
     return centralHandler(req,res);
   };
   const server=createServer(handler);
-  try{await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)})}
+  try{await listenCentral(server,port)}
   catch(error){await closeFailedStartup({pool,runtime:configRuntime});throw Error('central HTTP listen failed',{cause:error})}
-  return {server,pool,async close(){await new Promise((resolve,reject)=>server.close(err=>err?reject(err):resolve()));await pool.end();if(configRuntime)await configRuntime.close();}};
+  const lifecycle=createServiceLifecycle({server,pool,runtime:configRuntime});
+  return {server,pool,close:lifecycle.close};
 }
 // Closes the HTTP server and the database pool on SIGTERM/SIGINT, then exits.
 // A second signal after the first is left to the default handler (hard stop).
