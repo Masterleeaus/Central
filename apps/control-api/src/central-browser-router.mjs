@@ -7,6 +7,7 @@ import {createCentralLauncherService} from './central-launcher-service.mjs';
 import {createCentralSignInService} from './central-sign-in-service.mjs';
 import {createIdTokenVerifier} from './oidc-id-token.mjs';
 import {createStateSealer,parseStateKey} from './oidc-state-crypto.mjs';
+import {createConcurrencyLimiter} from './concurrency-limit.mjs';
 
 function secureOrigin(value){
   if(typeof value!=='string')throw new TypeError('secure Central origin required');
@@ -35,7 +36,7 @@ function config(env){
   return {origin,redirectUri,destinations};
 }
 export function createCentralBrowserRouter({env=process.env,pool,getCompanyName,fetcher,
-  verifyIdToken,launcherStore,stateStore,selectionStore,logger}={}){
+  verifyIdToken,launcherStore,stateStore,selectionStore,logger,concurrencyLimits={perKey:5,globalLimit:72},clientIp=req=>req.socket?.remoteAddress??'unknown'}={}){
   const settings=config(env);
   if(!settings)return null;
   if(!pool?.connect||typeof getCompanyName!=='function')
@@ -58,10 +59,16 @@ export function createCentralBrowserRouter({env=process.env,pool,getCompanyName,
     ...(fetcher?{fetcher}:{}),...(stateStore?{stateStore}:{}),
     ...(selectionStore?{selectionStore}:{}),...(logger?{logger}:{})
   });
+  const concurrent=createConcurrencyLimiter(concurrencyLimits);
   return Object.freeze({
     async handler(req,res){
-      if(await signIn.handler(req,res))return true;
-      return launcher.handler(req,res);
+      const guarded=req.url?.startsWith('/auth/central/')||req.url?.startsWith('/central');
+      const release=guarded?concurrent.acquire(clientIp(req)):()=>{};
+      if(!release){res.writeHead(429,{'cache-control':'no-store','retry-after':'1'});res.end();return true;}
+      try{
+        if(await signIn.handler(req,res))return true;
+        return launcher.handler(req,res);
+      }finally{release();}
     },
     sessions:launcher.sessions
   });
