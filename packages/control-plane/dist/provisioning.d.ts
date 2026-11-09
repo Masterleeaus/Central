@@ -47,6 +47,8 @@ export type ProvisioningCommand = {
     organisationId: string;
     expectedRevision: number;
     state: GrantState;
+    features?: readonly string[];
+    expiresAt?: string | null;
 } | {
     kind: 'link_revoke';
     id: string;
