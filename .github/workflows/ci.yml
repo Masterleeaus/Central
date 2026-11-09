@@ -93,6 +93,9 @@ jobs:
           out=$(python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL")
           echo "$out"
           test "$out" = "applied 0 migration(s)"
+      - name: One-use product account proof nonce PostgreSQL isolation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/product_link_proof_nonce.sql "$TITAN_CI_DATABASE_URL"
+
       - name: Two-tenant RLS tests
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$TITAN_CI_DATABASE_URL"
 
