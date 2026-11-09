@@ -9,6 +9,8 @@ const TOKEN=/^[A-Za-z0-9_-]{43}$/;
 const HASH=/^[0-9a-f]{64}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const digest=value=>createHash('sha256').update(value).digest('hex');
+const SUBJECT=/^[^\\s\\x00-\\x1f\\x7f]{1,256}$/u;
+const validIssuer=value=>{try{const x=new URL(value);return x.protocol==='https:'&&!x.username&&!x.password&&!x.search&&!x.hash&&x.href===value;}catch{return false;}};
 const aad=(stateDigest,field)=>'central_company_selection|'+stateDigest+'|'+field;
 async function transaction(pool,task){
   const client=await pool.connect();let begun=false;
@@ -30,8 +32,8 @@ export function createPostgresCompanySelectionStore({pool,sealer=createStateSeal
     throw new TypeError('trusted selection store dependencies required');
   return Object.freeze({
     async save(state,record){
-      if(!TOKEN.test(state??'')||!record||typeof record.issuer!=='string'||
-        typeof record.subject!=='string'||!HASH.test(record.bindingHash??'')||
+      if(!TOKEN.test(state??'')||!record||!validIssuer(record.issuer)||
+        typeof record.subject!=='string'||!SUBJECT.test(record.subject)||!HASH.test(record.bindingHash??'')||
         !Array.isArray(record.organisationIds)||record.organisationIds.length===0||
         record.organisationIds.length>128||!record.organisationIds.every(id=>typeof id==='string'&&UUID.test(id))||
         new Set(record.organisationIds).size!==record.organisationIds.length||
@@ -61,6 +63,7 @@ export function createPostgresCompanySelectionStore({pool,sealer=createStateSeal
           const issuer=sealer.open(row.sealed_issuer,aad(key,'issuer'));
           const subject=sealer.open(row.sealed_subject,aad(key,'subject'));
           const organisationIds=JSON.parse(sealer.open(row.sealed_company_ids,aad(key,'companies')));
+          if(!validIssuer(issuer)||!SUBJECT.test(subject))return null;
           if(!Array.isArray(organisationIds)||organisationIds.length===0||organisationIds.length>128||
             !organisationIds.every(id=>typeof id==='string'&&UUID.test(id))||
             new Set(organisationIds).size!==organisationIds.length||!HASH.test(row.binding_hash))return null;
