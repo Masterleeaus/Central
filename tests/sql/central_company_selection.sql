@@ -4,10 +4,8 @@ BEGIN;
 INSERT INTO titan.central_company_selection_states
 (state_digest,binding_hash,sealed_issuer,sealed_subject,sealed_company_ids,expires_at)
 VALUES(repeat('a',64),repeat('b',64),'sealed-issuer','sealed-subject','sealed-companies',now()+interval '5 minutes');
--- Separate expired selection verifies server-side expiry is a hard barrier.
-INSERT INTO titan.central_company_selection_states
-(state_digest,binding_hash,sealed_issuer,sealed_subject,sealed_company_ids,expires_at)
-VALUES(repeat('c',64),repeat('d',64),'historical-issuer','historical-subject','historical-companies',now()-interval '1 minute');
+-- The schema disallows inserting expired rows. Simulate a request occurring
+-- after expiry using a future clock bound against an otherwise valid row.
 SET LOCAL ROLE titan_central_selection;
 DO $$
 DECLARE n int;
@@ -16,7 +14,7 @@ BEGIN
  IF n<>1 THEN RAISE EXCEPTION 'Selection role cannot inspect pending state'; END IF;
  -- The application always binds the current clock to the expiring DELETE.
  DELETE FROM titan.central_company_selection_states
- WHERE state_digest=repeat('c',64) AND expires_at > now();
+ WHERE state_digest=repeat('a',64) AND expires_at > now()+interval '10 minutes';
  GET DIAGNOSTICS n=ROW_COUNT;
  IF n<>0 THEN RAISE EXCEPTION 'Expired selection consumed as live'; END IF;
  DELETE FROM titan.central_company_selection_states WHERE state_digest=repeat('a',64);
