@@ -9,7 +9,7 @@
  * Product IDs here are legacy wire identifiers pending separate migration:
  * field=Sorted, desk=Supercharged, academy=LMS.
  */
-import {createHash,createPublicKey,verify as verifySignature,timingSafeEqual} from 'node:crypto';
+import {createHash,createPublicKey,KeyObject,verify as verifySignature,timingSafeEqual} from 'node:crypto';
 const APPS=new Set(['field','desk','academy']);
 const ID=/^[a-zA-Z0-9:_-]{1,200}$/;
 const UUID=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
@@ -39,7 +39,7 @@ export function validateProductLinkClaims(claims,now=Date.now()){
  return claims;
 }
 export function trustedProductKeyPin(publicKey) {
- const key=createPublicKey(publicKey);
+ const key=publicKey instanceof KeyObject && publicKey.type==='public' ? publicKey : createPublicKey(publicKey);
  if(key.asymmetricKeyType!=='ed25519')throw Error('product proof key type invalid');
  return createHash('sha256').update(key.export({format:'der',type:'spki'})).digest('hex');
 }
