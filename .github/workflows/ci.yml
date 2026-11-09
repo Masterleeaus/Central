@@ -92,6 +92,8 @@ jobs:
           test "$out" = "applied 0 migration(s)"
       - name: Two-tenant RLS tests
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$TITAN_CI_DATABASE_URL"
+      - name: Onboarding state machine tests (migration 0017)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/onboarding_states.sql "$TITAN_CI_DATABASE_URL"
       - name: Transactional outbox tests (SQL, real PostgreSQL)
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/outbox.sql "$TITAN_CI_DATABASE_URL"
       - name: Session revocation RLS tests (two organisations)
