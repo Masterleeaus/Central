@@ -20,7 +20,7 @@ function perApplicationAudiences(audiences) {
 }
 /** No administrative mutations or user-controlled SQL. Organisation/app/action are the only request inputs.
  * logger(event, fields) receives structured decision fields only: never tokens or subject values. */
-export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, globalLogoutHandler, logger=()=>{}, healthQuery, rateLimits=DEFAULT_RATE_LIMITS, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
+export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, supportHandler, globalLogoutHandler, logger=()=>{}, healthQuery, rateLimits=DEFAULT_RATE_LIMITS, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
   if (!pool || !verifyToken || !issuer) throw new Error('missing Central API dependencies');
   const trust={expectedIssuer:issuer,audienceByApplication:perApplicationAudiences(audiences)};
   const ipLimiter=createRateLimiter(rateLimits.ip);
@@ -36,6 +36,12 @@ export function createCentralHandler({ pool, verifyToken, issuer, audiences, adm
       catch {audit('healthz_database_unavailable');return respond(res,503,{status:'unavailable'});}
     }
     if (globalLogoutHandler && await globalLogoutHandler(req,res)) return;
+    if (pathname.startsWith('/v1/support/')) {
+      // Support console (issue #39). Opt-in: unmounted unless a support handler is injected.
+      if(!supportHandler) return respond(res,404,{error:'not_found'});
+      if(await supportHandler(req,res)) return;
+      return respond(res,404,{error:'not_found'});
+    }
     if (pathname.startsWith('/v1/admin/')) {
       if(!adminHandler) return respond(res,404,{error:'not_found'});
       if(await adminHandler(req,res)) return;
