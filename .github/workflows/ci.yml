@@ -69,6 +69,12 @@ jobs:
 
       # Check mode: the example config must parse and be assessed as NOT ready (exit 1).
       # Exit 2 (unreadable) or 0 (ready) fails the job.
+      - name: Validate product host selection proxy and isolated nginx parser
+        run: |
+          python3 -I deploy/proxy/validate_product_selection.py
+          python3 -m unittest discover -s deploy/tests -p 'test_product_selection_proxy.py' -v
+          bash deploy/proxy/nginx/product-selection-syntax-smoke.sh
+
       - name: Parse deployed nginx rate-limit templates with an isolated real nginx
         run: bash deploy/proxy/nginx/syntax-smoke.sh
 
