@@ -1,7 +1,7 @@
 /** PostgreSQL implementation of a generation counter for session revocation.
  * A version increment invalidates all app sessions bound to that user+org+app.
  * Each statement runs in a transaction under a restricted role (role-transaction.mjs):
- * readVersion as titan_trusted_reader, revokeAll as titan_trusted_writer (migrations 0007-0009).
+ * readVersion as titan_trusted_reader, revokeAll as titan_trusted_writer (migrations 0007-0010).
  * Writes must be called exclusively after trusted administrator authority checks.
  */
 import {withRoleTransaction} from './role-transaction.mjs';
@@ -15,7 +15,13 @@ export function createPostgresSessionRevocations({pool}={}) {
   return {
     async readVersion(args){
       check(args);
-      const result=await withRoleTransaction(pool,'titan_trusted_reader',conn=>conn.query('SELECT generation FROM titan.titan_session_revocations WHERE application_id=$1 AND logto_subject=$2 AND organisation_id=$3',[args.applicationId,args.logtoSubject,args.organisationId]));
+      // Migration 0010 makes the reader see only rows for the organisation set for this transaction.
+      // Without this scope the SELECT returns no rows, readVersion would report generation 0 and a
+      // revoked session would pass. The scope is a bound parameter, set after SET LOCAL ROLE.
+      const result=await withRoleTransaction(pool,'titan_trusted_reader',async conn=>{
+        await conn.query("SELECT set_config('titan.organisation_id', $1, true)",[args.organisationId]);
+        return conn.query('SELECT generation FROM titan.titan_session_revocations WHERE application_id=$1 AND logto_subject=$2 AND organisation_id=$3',[args.applicationId,args.logtoSubject,args.organisationId]);
+      });
       if(result.rows.length>1)throw new Error('ambiguous revocation record');
       const value=result.rows.length===0?0:Number(result.rows[0].generation);
       if(!Number.isSafeInteger(value)||value<0)throw new Error('invalid revocation generation');

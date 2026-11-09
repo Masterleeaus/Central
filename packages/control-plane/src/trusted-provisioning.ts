@@ -9,7 +9,10 @@ import { LogtoManagementVerifier } from './logto-management.js';
  * Management API for this request. It is NOT evidence that an end-user bearer token is a machine credential. */
 export type TrustedActor={logtoSubject:string; operatorAuthorityVerified:true};
 export type AuthorizeProvisioning=(actor:TrustedActor,command:ProvisioningCommand)=>Promise<boolean>;
-export type VerifyLocalLink=(command:Extract<ProvisioningCommand,{kind:'link'}>)=>Promise<boolean>;
+/** Verifies the product-signed assertion carried by a link command against the Central identity and organisation.
+ * `logtoSubject` and `logtoOrganisationId` are resolved by Central, never taken from the command. */
+export interface LinkCheckInput { command:Extract<ProvisioningCommand,{kind:'link'|'link_relink'}>; logtoSubject:string; logtoOrganisationId:string; }
+export type VerifyLocalLink=(input:LinkCheckInput)=>Promise<boolean>;
 export type GetCanonicalLogtoId=(type:'identity'|'organisation',uuid:string)=>Promise<string|undefined>;
 export class TrustedProvisioningService {
  constructor(private readonly provisioner:CentralProvisioner,private readonly logto:LogtoManagementVerifier,
@@ -33,12 +36,13 @@ export class TrustedProvisioningService {
     if(!org)throw Error('unverified organisation');
     await this.logto.assertOrganisation(org);break;
    }
-   case 'link':{
+   case 'link':
+   case 'link_relink':{
     const user=await this.resolve('identity',command.identityId);
     const org=await this.resolve('organisation',command.organisationId);
     if(!user||!org) throw Error('unverified canonical identity or organisation');
     await this.logto.assertMembership(user,org);
-    if(await this.verifyLocalLink(command)!==true)throw Error('unverified application account control');
+    if(await this.verifyLocalLink({command,logtoSubject:user,logtoOrganisationId:org})!==true)throw Error('unverified application account control');
     break;
    }
    // Reductions (suspend, demote, revoke) must still succeed after Logto has removed the
