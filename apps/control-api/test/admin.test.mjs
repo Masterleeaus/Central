@@ -35,3 +35,25 @@ test('malformed command rejected',async()=>assert.equal((await invoke('/v1/admin
 test('invalid provisioning caller role rejected',async()=>assert.equal((await invoke('/v1/admin/provision',{method:'POST',body:{...input,command:{...command,role:'superuser'}}})).status,400));
 test('service failures do not leak details',async()=>{const r=await invoke('/v1/admin/provision',{method:'POST',body:input,provision:async()=>{throw Error('sensitive database details')}});assert.equal(r.status,503);assert.ok(!JSON.stringify(r.body).includes('sensitive'));});
 test('default Central handler has no admin interface',async()=>{const pool={connect:async()=>({query:async()=>({rows:[]}),release(){}})};const s=createServer(createCentralHandler({pool,verifyToken:async()=>({logtoSubject:'a'}),issuer:'https://issuer.test',audiences:AUDIENCES}));s.listen(0,'127.0.0.1');await once(s,'listening');try{const r=await fetch(`http://127.0.0.1:${s.address().port}/v1/admin/oidc/plans`);assert.equal(r.status,404)}finally{s.close();await once(s,'close')}});
+
+// Account-link commands (issue #37): the assertion replaces caller-supplied verification times.
+const JWS='eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ1c3JfYWJjZGVmMTIifQ.c2lnbmF0dXJl';
+const linkBody=(command)=>({requestId:ID,authorityReference:'logto-audit:123',command});
+test('link command requires a signed assertion, not a caller-supplied verifiedAt',async()=>{
+ const ok=await invoke('/v1/admin/provision',{method:'POST',body:linkBody({kind:'link',id:ID,identityId:ID,organisationId:ID,applicationId:'field',localUserId:'u-1',localAccountId:'a-1',assertion:JWS})});
+ assert.equal(ok.status,201);
+ const old=await invoke('/v1/admin/provision',{method:'POST',body:linkBody({kind:'link',id:ID,identityId:ID,organisationId:ID,applicationId:'field',localUserId:'u-1',localAccountId:'a-1',verifiedAt:'2026-11-02T00:00:00.000Z'})});
+ assert.equal(old.status,400);
+ const notJws=await invoke('/v1/admin/provision',{method:'POST',body:linkBody({kind:'link',id:ID,identityId:ID,organisationId:ID,applicationId:'field',localUserId:'u-1',localAccountId:'a-1',assertion:'not-a-token'})});
+ assert.equal(notJws.status,400);
+});
+test('relink and unlink are accepted only with an expected revision',async()=>{
+ const relink=await invoke('/v1/admin/provision',{method:'POST',body:linkBody({kind:'link_relink',id:ID,identityId:ID,organisationId:ID,applicationId:'desk',expectedRevision:2,localUserId:'u-2',localAccountId:'a-2',assertion:JWS})});
+ assert.equal(relink.status,201);
+ const relinkNoRev=await invoke('/v1/admin/provision',{method:'POST',body:linkBody({kind:'link_relink',id:ID,identityId:ID,organisationId:ID,applicationId:'desk',localUserId:'u-2',localAccountId:'a-2',assertion:JWS})});
+ assert.equal(relinkNoRev.status,400);
+ const unlink=await invoke('/v1/admin/provision',{method:'POST',body:linkBody({kind:'link_revoke',id:ID,organisationId:ID,expectedRevision:3})});
+ assert.equal(unlink.status,201);
+ const unlinkNoRev=await invoke('/v1/admin/provision',{method:'POST',body:linkBody({kind:'link_revoke',id:ID,organisationId:ID})});
+ assert.equal(unlinkNoRev.status,400);
+});
