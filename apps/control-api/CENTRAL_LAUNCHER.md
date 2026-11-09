@@ -443,3 +443,40 @@ Multicompany Central browser selection already has one-use browser-bound
 state, a trusted company list and a membership recheck. The separate
 product OIDC adapter still lacks complete multi-company selection and
 product-local account binding; issue #32 remains open.
+
+## Product-owned multi-company OIDC selection — implementation boundary
+
+`product-oidc-selection-service.mjs` composes the verified product OIDC
+callback, trusted initial company lookup, app-owned single-company access
+rechecks, one-use browser-bound HTML selection, and product-local session
+rotation. The verified OIDC callback **never** accepts a company ID from
+an incoming query. The selection page is restricted to companies from
+the initial trusted membership query, and every submitted company is
+revalidated against fresh Central membership, current entitlement and
+the product's own local account immediately before session issue.
+A failed lookup or a changed/revoked account denies the login.
+
+`product-selection-pg.mjs` stores short-lived selections in the separate
+legacy migrations `0017`/`0018`. Data is scoped per application
+(`field`, `desk`, `academy`) by an exact role and PostgreSQL RLS.
+Values holding verified issuer/subject and eligible company IDs are
+sealed with per-field AEAD AAD, not plaintext. Raw 43-character state
+tokens never enter the database; it stores a domain-separated digest
+and a separate browser-binding hash. Each state is deleted on use and
+cannot be replayed. Store operations must use the explicitly configured,
+app-owned database role; no application's login may inherit another
+product's selection role.
+
+`product-selection-http.mjs` handles only product `/select` POSTs
+through an origin-checked, SameSite browser-bound 4-KiB form. The form
+requires a trusted 43-character OIDC browser-binding cookie and a
+fresh server-side membership/product-local-account check before a
+product cookie is installed. A rejected POST cannot reuse consumed state.
+
+**Integration status:** This is reusable, tested Central-side source.
+It has not been mounted in real Sorted, Supercharged or LMS servers,
+nor has its session rotation been tested with those products' actual
+session stores and credentials. Do not switch off product-native login
+or mark cross-product SSO deployed. Product-specific feature flags,
+API compatibility, key provisioning and server integration must be
+verified separately.
