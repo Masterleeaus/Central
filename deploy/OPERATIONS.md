@@ -70,3 +70,24 @@ Keep the previous release and its verified database backup until the new release
 Run the read-only preflight from the repository root with the actual non-secret deployment configuration. The checked-in staging example must remain blocked until evidence exists. A successful preflight does not prove that a real Logto deployment, application SSO flow, multi-tenant isolation, or rollback rehearsal has passed.
 
 The host owner must separately confirm the service account, Node path, domain/TLS/proxy configuration, secrets provisioning, isolated PostgreSQL role, and backup/restore procedure. No remote host changes are made by this repository guide.
+
+## Authentication overload and rate-limit operations
+
+Before enabling browser rollout, confirm the public reverse proxy applies
+IP-keyed `limit_req` and `limit_conn` (or equivalently tested Apache
+enforcement) to `/v1/access/check`, product OIDC start/callback,
+Central OIDC start/callback and company-selection POST. Confirm the
+proxy rewrites forwarding headers from the actual client socket.
+
+Run `python3 -I deploy/proxy/validate_templates.py` and test the real
+proxy configuration (`nginx -t` or `apachectl -t`) before reload.
+Load-test from an isolated test IP with synthetic requests only.
+Expected rejection: HTTP 429; verify no OIDC token exchange or
+membership query occurs for rejected requests and legitimate traffic
+recovers after the concurrency permit is released. Check structured
+`access_rate_limited` and `login_rate_limited` metrics without
+logging token, subject, state or authorization code values.
+
+Limits in Node are per-process; scaling workers requires the external
+proxy limit. A global in-process cap is a backstop, not a replacement.
+A reverse-proxy reload or service restart may reset rate windows.
