@@ -96,3 +96,17 @@ test('enabled browser builds an independent canonical name pool and closes both 
   }finally{await service.close()}
   assert.equal(ended.length,2);
 });
+
+test('server enforces finite connection and HTTP header/request deadlines',async()=>{
+ const db=fakeDatabase();const port=await availablePort();
+ const service=await startCentralService({
+  env:{...env,TITAN_CENTRAL_PORT:String(port)},
+  loadPg:db.loadPg,verifyToken:async()=>({})
+ });
+ try {
+  assert.equal(service.server.maxConnections,128);
+  assert.equal(service.server.headersTimeout,10000);
+  assert.equal(service.server.requestTimeout,15000);
+  assert.equal(service.server.keepAliveTimeout,5000);
+ }finally{await service.close()}
+});
