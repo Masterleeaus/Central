@@ -83,6 +83,7 @@ export function createCentralSessionManager({store,clock=()=>Date.now(),random=(
       if(!validIdentity(identityId)||!validCompany(companyId))throw new TypeError('verified identity and company required');
       const existing=safeRecord(await store.find(digest(old)),clock());
       if(!existing||existing.identityId!==identityId)throw new Error('session not authorised');
+      if(existing.companyId.toLowerCase()===companyId.toLowerCase())throw new Error('company switch must change company');
       const next=random();
       if(!TOKEN.test(next)||next===old)throw new TypeError('invalid replacement token');
       const expiresAt=clock()+MAX_AGE*1000;
