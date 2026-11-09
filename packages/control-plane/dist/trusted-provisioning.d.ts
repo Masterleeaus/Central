@@ -12,9 +12,16 @@ export type TrustedActor = {
     operatorAuthorityVerified: true;
 };
 export type AuthorizeProvisioning = (actor: TrustedActor, command: ProvisioningCommand) => Promise<boolean>;
-export type VerifyLocalLink = (command: Extract<ProvisioningCommand, {
-    kind: 'link';
-}>) => Promise<boolean>;
+/** Verifies the product-signed assertion carried by a link command against the Central identity and organisation.
+ * `logtoSubject` and `logtoOrganisationId` are resolved by Central, never taken from the command. */
+export interface LinkCheckInput {
+    command: Extract<ProvisioningCommand, {
+        kind: 'link' | 'link_relink';
+    }>;
+    logtoSubject: string;
+    logtoOrganisationId: string;
+}
+export type VerifyLocalLink = (input: LinkCheckInput) => Promise<boolean>;
 export type GetCanonicalLogtoId = (type: 'identity' | 'organisation', uuid: string) => Promise<string | undefined>;
 export declare class TrustedProvisioningService {
     private readonly provisioner;

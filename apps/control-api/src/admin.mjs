@@ -34,14 +34,21 @@ const attrs = (value,allowed) => isObject(value)&&Object.keys(value).every(k=>al
 const allowedCommands = {
  membership:['kind','id','identityId','organisationId','role'],
  entitlement:['kind','id','organisationId','applicationId','features','expiresAt'],
- link:['kind','id','identityId','organisationId','applicationId','localUserId','localAccountId','verifiedAt']
+ link:['kind','id','identityId','organisationId','applicationId','localUserId','localAccountId','assertion'],
+ link_relink:['kind','id','identityId','organisationId','applicationId','expectedRevision','localUserId','localAccountId','assertion'],
+ link_revoke:['kind','id','organisationId','expectedRevision']
 };
+/** Compact JWS shape. The signature is verified by TrustedProvisioningService, never here. */
+const ASSERTION = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 function validCommand(command) {
  if(!isObject(command)||!Object.hasOwn(allowedCommands,command.kind)||!attrs(command,allowedCommands[command.kind])||!uuid(command.id))return false;
  const str = v => typeof v==='string'&&v.length>0&&v.length<=256;
  if(command.kind==='membership')return uuid(command.identityId)&&uuid(command.organisationId)&&['owner','admin','manager','member','learner'].includes(command.role);
  if(command.kind==='entitlement')return uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&Array.isArray(command.features)&&command.features.length<=100&&command.features.every(f=>str(f)&&f.length<=100)&&new Set(command.features).size===command.features.length&&(command.expiresAt===undefined||(str(command.expiresAt)&&Number.isFinite(Date.parse(command.expiresAt))&&new Date(command.expiresAt).toISOString()===command.expiresAt));
- if(command.kind==='link')return uuid(command.identityId)&&uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&str(command.localUserId)&&str(command.localAccountId)&&str(command.verifiedAt)&&Number.isFinite(Date.parse(command.verifiedAt));
+ const revision = v => Number.isSafeInteger(v)&&v>=1;
+ if(command.kind==='link')return uuid(command.identityId)&&uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&str(command.localUserId)&&str(command.localAccountId)&&typeof command.assertion==='string'&&command.assertion.length<=4096&&ASSERTION.test(command.assertion);
+ if(command.kind==='link_relink')return uuid(command.identityId)&&uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&revision(command.expectedRevision)&&str(command.localUserId)&&str(command.localAccountId)&&typeof command.assertion==='string'&&command.assertion.length<=4096&&ASSERTION.test(command.assertion);
+ if(command.kind==='link_revoke')return uuid(command.organisationId)&&revision(command.expectedRevision);
  return false;
 }
 async function readJson(req, maxBytes=8192) {
