@@ -2,7 +2,7 @@
 
 The database test runs only when both are available:
   * psql, found on PATH or given by the PSQL environment variable, and
-  * TITAN_TEST_DATABASE_URL, a superuser URL for a database with migrations 0001-0009 applied.
+  * TITAN_TEST_DATABASE_URL, a superuser URL for a database with migrations 0001-0010 applied.
 Otherwise the database test is skipped and unittest prints the reason. Set TITAN_REQUIRE_DB_TESTS=1
 to fail instead of skip; CI sets it so a missing database cannot pass silently.
 

@@ -13,6 +13,7 @@ function makeDatabase({memberRevision=1,role='manager'}={}){
  const key=(a,s,o)=>[a,s,o].join('|');
  const handle=(q,p)=>{
   if(/^(BEGIN|COMMIT|ROLLBACK|SET LOCAL)/.test(q)||q.startsWith('SELECT pg_advisory'))return {rows:[],rowCount:0};
+  if(q.startsWith("SELECT set_config('titan.organisation_id'"))return {rows:[{set_config:p[0]}],rowCount:1};
   if(q.startsWith('SELECT command_kind'))return {rows:db.audit.filter(a=>a.request_id===p[0]).map(a=>({command_kind:a.command_kind,command_digest:a.command_digest}))};
   if(q.includes('FOR UPDATE OF m'))return {rows:[{...db.membership}]};
   if(q.startsWith('UPDATE titan.memberships')){ if(db.membership.revision!==p[1])return {rowCount:0,rows:[]}; db.membership.role=p[2];db.membership.state=p[3];db.membership.revision++;return {rowCount:1,rows:[]}; }
