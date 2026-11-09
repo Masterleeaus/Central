@@ -86,14 +86,19 @@ test('trusted company list excludes unverified company and does not leak names',
  const out=response();await x.service.handler(request(state,B),out);
  assert.equal(out.status,403);assert.equal(x.issued.length,0);
 });
-test('cross-origin and wrong browser cookies do not consume selection state',async()=>{
+test('cross-origin POST does not consume state; wrong browser binding burns it safely',async()=>{
  const x=setup(),state=await startSelection(x);
- for(const options of [{origin:'https://other.example'},{cookie:'titan_field_oidc_binding='+'q'.repeat(43)}]){
-  const out=response();await x.service.handler(request(state,A,options),out);
-  assert.ok([400,403].includes(out.status));assert.equal(x.issued.length,0);
- }
- const good=response();await x.service.handler(request(state,A),good);
- assert.equal(good.status,303);assert.equal(x.issued.length,1);
+ const cross=response();await x.service.handler(request(state,A,{origin:'https://other.example'}),cross);
+ assert.equal(cross.status,403);
+ assert.equal(x.saved.has(state),true);
+ const valid=response();await x.service.handler(request(state,A),valid);
+ assert.equal(valid.status,303);assert.equal(x.issued.length,1);
+ const newer=await startSelection(x);
+ const wrong=response();await x.service.handler(request(newer,A,{cookie:'titan_field_oidc_binding='+'q'.repeat(43)}),wrong);
+ assert.equal(wrong.status,403);
+ const replay=response();await x.service.handler(request(newer,A),replay);
+ assert.equal(replay.status,403,'binding mismatch deliberately consumes the one-use state');
+ assert.equal(x.issued.length,1);
 });
 test('empty authority dependencies fail at initialization',()=>{
  assert.throws(()=>createProductMultiCompanyOidcService({applicationId:'field'}),TypeError);
