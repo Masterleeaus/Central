@@ -52,7 +52,9 @@ export function createCentralLauncherHandler({resolveSession,readProducts,destin
   if (typeof resolveSession !== 'function' || typeof readProducts !== 'function') throw new TypeError('trusted launcher dependencies required');
   const links = validateLauncherDestinations(destinations);
   return async function centralLauncher(req,res) {
-    const path = new URL(req.url ?? '/', 'http://localhost').pathname;
+    let path;
+    try {path=new URL(req.url ?? '/', 'http://localhost').pathname;}
+    catch {response(res,400,'Invalid URL');return true;}
     if (path !== '/central') return false;
     if (req.method !== 'GET') { response(res,405,'Method not allowed'); return true; }
     try {
