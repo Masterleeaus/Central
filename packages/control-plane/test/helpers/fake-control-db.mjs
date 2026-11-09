@@ -5,6 +5,7 @@ export function fakeControlDb({ memberships = [], entitlements = [] } = {}) {
     entitlements: entitlements.map(e => ({ features: [], expires_at: null, revision: 1, state: 'active', ...e })),
     memberships: [...memberships],
     audit: [],
+    activity: [],
     revocations: new Map(),
   };
   let snapshot = null;
@@ -43,6 +44,11 @@ export function fakeControlDb({ memberships = [], entitlements = [] } = {}) {
       const generation = (state.revocations.get(key) ?? 0) + 1;
       state.revocations.set(key, generation);
       return { rows: [{ generation }], rowCount: 1 };
+    }
+    if (text.startsWith('INSERT INTO titan.activity_events')) {
+      // Activity history (issue #36) written in the same transaction as a lifecycle change. Recorded, not queried.
+      state.activity.push({ event_id: p[0] });
+      return { rows: [], rowCount: 1 };
     }
     if (text.startsWith('INSERT INTO titan.provisioning_audit')) {
       state.audit.push({ request_id: p[0], actor_subject: p[1], command_kind: p[3], command_digest: p[4], subject_id: p[5] });

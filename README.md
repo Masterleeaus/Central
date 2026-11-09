@@ -39,6 +39,7 @@ export DATABASE_URL='postgresql://USER@HOST:5432/titan_central'   # never commit
 python3 tools/migrate.py --database-url "$DATABASE_URL"            # apply pending migrations
 python3 tools/migrate.py --database-url "$DATABASE_URL" --dry-run  # list pending only
 psql -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$DATABASE_URL"  # superuser; test database only
+psql -X -v ON_ERROR_STOP=1 -f tests/sql/session_revocation_rls.sql "$DATABASE_URL"  # superuser; empty revocation table only
 ```
 
 The RLS test seeds two tenants and runs inside a transaction that is rolled back. Run it only against a disposable database, never a live one.
@@ -63,8 +64,10 @@ The RLS test seeds two tenants and runs inside a transaction that is rolled back
 | 0008 | Trusted reader scoped to the organisation set for the transaction; `titan_trusted_writer` may read session revocations (needed by the revocation bump). |
 | 0009 | Login-role grants for the control-api stores: `titan_trusted_writer` may SELECT the OIDC login-state columns that consume and prune read. Nothing is granted to the login role itself. |
 | 0015 | Subscription lifecycle ledger (issue #35): `titan.billing_subscriptions` (last applied position per provider subscription) and `titan.billing_events` (one row per verified provider event, with its disposition). Written only by `titan_trusted_writer`. Numbers 0010-0014 are unused. See `docs/SUBSCRIPTIONS.md`. |
+| 0012 | Transactional outbox: `titan.outbox_events` (versioned, tenant-keyed, idempotency-keyed, bounded payload, pending/published/dead), `titan.outbox_event_audit`, and `titan.outbox_processed_events` for consumer dedupe. Tenant-scoped RLS. Versions 0010 and 0011 are reserved by other work. See `docs/EVENTS.md`. |
+| 0010 | Row-level security on `titan.titan_session_revocations`, keyed by `organisation_id`. The reader sees one organisation (the one set for its transaction); the writer keeps cross-tenant bumps. |
 
-Tenant isolation (0006, narrowed by 0008). Tenant scope is the transaction-local setting `titan.organisation_id`. Set it with a bound parameter, never by interpolation: `SELECT set_config('titan.organisation_id', $1, true)`. This has the same effect as `SET LOCAL` and is the only form that takes a bind parameter. With no scope set, tenant rows are invisible and writes fail (fail closed). A malformed value raises an error.
+Tenant isolation (0006, narrowed by 0008; session revocations by 0010). Tenant scope is the transaction-local setting `titan.organisation_id`. Set it with a bound parameter, never by interpolation: `SELECT set_config('titan.organisation_id', $1, true)`. This has the same effect as `SET LOCAL` and is the only form that takes a bind parameter. With no scope set, tenant rows are invisible and writes fail (fail closed). A malformed value raises an error.
 
 Role design. Each role is a NOLOGIN group role. The deployment creates one login role for the service and grants it the two trusted roles. The login role must not be a superuser, must not have `BYPASSRLS`, and must be `NOINHERIT`:
 
@@ -79,9 +82,11 @@ GRANT titan_trusted_reader, titan_trusted_writer TO titan_central_app;
 - `titan_trusted_writer` runs provisioning (`CentralProvisioner`). It runs `SET LOCAL ROLE titan_trusted_writer` and is cross-tenant by design. Every command is separately authorised and writes one audit row in the same transaction.
 - `titan_tenant_app` is tenant-scoped on the three tables and has no grant on identities, organisations or session revocations.
 
-Verified on PostgreSQL 16 with `tests/sql/rls_two_tenant.sql` (run as superuser) and `tests/sql/login_role_path.sql` (run as superuser, which becomes `titan_central_app` for its checks). The session-revocation store (`apps/control-api/src/session-revocation-pg.mjs`) and the OIDC state store (`oidc-state-pg.mjs`) run each statement in a transaction that does `SET LOCAL ROLE titan_trusted_reader` or `titan_trusted_writer` (`role-transaction.mjs`); migration 0009 grants the writer the SELECT that consume and prune need. Still not covered: `titan.titan_session_revocations` and `titan.titan_oidc_login_states` have no RLS. Their statements are restricted by role and by key, not by organisation.
+Verified on PostgreSQL 16 with `tests/sql/rls_two_tenant.sql` (run as superuser), `tests/sql/session_revocation_rls.sql` (run as superuser, which becomes `titan_central_app` for its checks) and `tests/sql/login_role_path.sql` (run as superuser, which becomes `titan_central_app` for its checks). The session-revocation store (`apps/control-api/src/session-revocation-pg.mjs`) and the OIDC state store (`oidc-state-pg.mjs`) run each statement in a transaction that does `SET LOCAL ROLE titan_trusted_reader` or `titan_trusted_writer` (`role-transaction.mjs`); migration 0009 grants the writer the SELECT that consume and prune need. `readVersion` sets the organisation scope inside its transaction before it reads, because migration 0010 hides every revocation row when no scope is set (without it a revoked session would read as generation 0). `revokeAll` is cross-tenant by design and sets no scope.
 
-Running the login-role path test (`tests/test_login_role_path.py`): it runs only when `psql` and `TITAN_TEST_DATABASE_URL` are present, otherwise it is skipped with the reason printed. The database must hold migrations 0001-0009 and no tenant rows, and the URL should be a superuser URL for that database:
+Not tenant-keyed, so not under RLS, by design: `titan.titan_oidc_login_states` (written before the Logto callback, so no organisation is known; protected by role, by the state digest key and by a 10-minute expiry) and `titan.provisioning_audit` (no organisation column; written only by `titan_trusted_writer`, and no other role has a grant on it).
+
+Running the login-role path test (`tests/test_login_role_path.py`): it runs only when `psql` and `TITAN_TEST_DATABASE_URL` are present, otherwise it is skipped with the reason printed. The database must hold migrations 0001-0010 and no tenant rows, and the URL should be a superuser URL for that database:
 
 ```bash
 python3 tools/migrate.py --database-url "$TITAN_TEST_DATABASE_URL"
