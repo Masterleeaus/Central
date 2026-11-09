@@ -4,6 +4,7 @@
 import { createLogtoManagementTokenSupplier, LogtoManagementVerifier, createTitanOidcRegistrationPlans } from '../../../packages/control-plane/dist/index.js';
 import { createAdminHandler, createLogtoOperatorAuthoriser } from './admin.mjs';
 import { timedFetch } from './metrics.mjs';
+import { createFlagChangeHandler } from './config-admin.mjs';
 
 const ID = /^[A-Za-z0-9_-]{1,256}$/;
 const PLACEHOLDER = 'REPLACE_ME';
@@ -38,11 +39,21 @@ export function readOperatorConfig(env) {
   return { organisationId, roleIds };
 }
 
+/** TITAN_OPERATOR_FLAG_CHANGES=1 enables POST /v1/admin/flags/change. Unset or 0 keeps the route off (404). */
+export function readFlagChangeSetting(env) {
+  const raw = env.TITAN_OPERATOR_FLAG_CHANGES;
+  if (raw === undefined || raw === '' || raw === '0') return false;
+  if (raw === '1') return true;
+  throw new Error('invalid TITAN_OPERATOR_FLAG_CHANGES');
+}
+
 /** Builds the /v1/admin/ handler when the operator plane is on, otherwise returns null (route stays 404).
- * fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch. */
-export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher }) {
+ * flags = { registry, store } is required only for the flag-change route. fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch. */
+export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher, flags }) {
   const operator = readOperatorConfig(env);
   if (!operator) return null;
+  const flagChanges = readFlagChangeSetting(env);
+  if (flagChanges && !flags) throw new Error('flag registry and store required for TITAN_OPERATOR_FLAG_CHANGES');
   const origins = {
     desk: httpsOrigin('TITAN_DESK_ORIGIN', env.TITAN_DESK_ORIGIN),
     field: httpsOrigin('TITAN_FIELD_ORIGIN', env.TITAN_FIELD_ORIGIN),
@@ -68,5 +79,5 @@ export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => 
   const verifier = new LogtoManagementVerifier({ origin: logtoOrigin, accessToken: supplier.accessToken, fetcher: timedFetch(fetcher ?? fetch, metrics) });
   const authoriseOperator = createLogtoOperatorAuthoriser({ verifier, operatorOrganisationId: operator.organisationId, administrativeRoleIds: operator.roleIds });
   // provision is intentionally not wired here: POST /v1/admin/provision answers 503 provisioning_disabled.
-  return createAdminHandler({ verifyToken, authoriseOperator, origins, logger });
+  return createAdminHandler({ verifyToken, authoriseOperator, origins, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
 }

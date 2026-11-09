@@ -13,3 +13,4 @@ export * from './organisation-authority.js';
 export * from './oidc-registration.js';
 export * from './logto-applications.js';
 export * from './feature-flags.js';
+export * from './feature-flags-postgres.js';

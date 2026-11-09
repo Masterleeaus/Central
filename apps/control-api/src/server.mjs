@@ -6,7 +6,19 @@ import { createJsonLogger } from './structured-log.mjs';
 import { insecureLocalhostAllowed } from './endpoint-policy.mjs';
 import { createMetrics, pathnameOf, serveMetrics } from './metrics.mjs';
 import { createOperatorAdmin } from './operator-config.mjs';
+import { ORGANISATION_CLAIM, COHORT_CLAIM, createConfigReadHandler, createServiceIdentityVerifier, productAudience } from './config-read.mjs';
+import { FLAG_DECLARATIONS } from './config-declarations.mjs';
+import { FLAG_PRODUCTS, createFlagRegistry, createPostgresFlagStore } from '../../../packages/control-plane/dist/index.js';
 const log = createJsonLogger();
+
+/** TITAN_CONFIG_READ_PRODUCTS: comma-separated products allowed to read flags. Unset means the read endpoint is not served. */
+export function readConfigProducts(env) {
+  const raw = env.TITAN_CONFIG_READ_PRODUCTS;
+  if (raw === undefined || raw === '') return [];
+  const list = raw.split(',').map(s => s.trim());
+  if (list.some(p => !FLAG_PRODUCTS.includes(p)) || new Set(list).size !== list.length) throw new Error('invalid TITAN_CONFIG_READ_PRODUCTS');
+  return list;
+}
 
 export async function startCentralService({env=process.env, loadPg=()=>import('pg'), fetcher, verifyToken:verifyOverride, logger=log}={}) {
   const {TITAN_CENTRAL_DATABASE_URL, TITAN_OIDC_ISSUER, TITAN_OIDC_JWKS_URI, TITAN_FIELD_AUDIENCE, TITAN_DESK_AUDIENCE, TITAN_ACADEMY_AUDIENCE}=env;
@@ -19,10 +31,19 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const metrics=createMetrics();
   const auditLog=(event,fields)=>{try{metrics.observeLog(event,fields);}catch{/* metrics never alter a request */}logger(event,fields);};
   // Operator plane: null unless TITAN_OPERATOR_* is set, in which case /v1/admin/ is mounted. Invalid settings throw here.
-  const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher});
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
-  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,logger:auditLog});
+  // Feature flags (issue #38): declarations in code, PostgreSQL store on the trusted reader and writer roles.
+  const flagRegistry=createFlagRegistry(FLAG_DECLARATIONS);
+  const flagStore=createPostgresFlagStore(pool);
+  const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher,flags:{registry:flagRegistry,store:flagStore}});
+  // Service read endpoint: one verifier per product audience, each accepting only urn:titan-central:product:<product>.
+  const readProducts=readConfigProducts(env);
+  const configHandler=readProducts.length ? createConfigReadHandler({
+    verifyServiceToken:createServiceIdentityVerifier(new Map(readProducts.map(product=>[product,createOidcVerifier({issuer:TITAN_OIDC_ISSUER,audience:productAudience(product),jwksUri:TITAN_OIDC_JWKS_URI,allowInsecureLocalhost:insecureLocalhostAllowed(env),claimNames:[ORGANISATION_CLAIM,COHORT_CLAIM]})]))),
+    registry:flagRegistry,store:flagStore,logger:auditLog,
+  }) : undefined;
+  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,configHandler,logger:auditLog});
   const handler=async (req,res)=>{
     res.on('finish',()=>{try{metrics.observeResponse(res.statusCode);}catch{/* ignore */}});
     if (req.method==='GET' && pathnameOf(req)==='/metrics') return serveMetrics(req,res,metrics);
