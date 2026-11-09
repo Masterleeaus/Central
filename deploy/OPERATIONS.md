@@ -91,3 +91,24 @@ logging token, subject, state or authorization code values.
 Limits in Node are per-process; scaling workers requires the external
 proxy limit. A global in-process cap is a backstop, not a replacement.
 A reverse-proxy reload or service restart may reset rate windows.
+
+## Product OIDC company choice deployment gate
+
+Required preflight for Sorted, Supercharged and LMS product hosts:
+
+1. Verify each product's own trusted membership discovery and local
+   account mapping returns company-scoped, account-scoped identifiers.
+2. Verify the product's session rotation invalidates the old session
+   and persists a revocable session scoped to the selected company.
+3. Mount the product-specific `/auth/titan/<app>/select` handler
+   behind the exact product vhost. Restrict its POST body to 4 KiB.
+4. Deploy and validate per-app PostgreSQL selection roles, RLS and
+   nonce migration 0017/0018, with independent least-privilege login
+   grants; test that one product cannot access another's selections.
+5. Verify switching companies never keeps access to the prior
+   company's local jobs, invoices or learning records.
+6. Verify expiry, replay, changed membership and removed account
+   link all deny session creation while keeping native login intact.
+
+These steps are mandatory before marking #32 or any product adapter
+as deployed. This repository's CI only proves synthetic test fixtures.
