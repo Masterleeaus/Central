@@ -1,5 +1,6 @@
 import {product,environment} from './identifiers.mjs';
 import {fail} from './errors.mjs';
+import {requireOneActiveGrant} from './grant-result.mjs';
 /** Restricted, server-owned grant lookup. A client must never choose its company. */
 export function createPgGrantRegistry({pool,clock=Date.now}={}){
  if(typeof pool?.connect!=='function'||typeof clock!=='function')fail('invalid_grant_pool');
@@ -11,12 +12,13 @@ export function createPgGrantRegistry({pool,clock=Date.now}={}){
    await c.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');begun=true;
    await c.query('SET LOCAL ROLE titan_config_grant_reader');
    await c.query("SET LOCAL statement_timeout = '3000ms'");
-   const result=await c.query(`SELECT product,environment,company_id,cohorts FROM titan_config.service_company_grants
-    WHERE client_id=$1 AND product=$2 AND environment=$3 AND state='active'
-    AND (expires_at IS NULL OR expires_at>$4) ORDER BY company_id LIMIT 2`,
+   const result=await c.query(`SELECT g.product,g.environment,g.company_id,g.cohorts,g.state,c.status AS company_status
+    FROM titan_config.service_company_grants g JOIN titan.companies c ON c.id=g.company_id
+    WHERE g.client_id=$1 AND g.product=$2 AND g.environment=$3 AND g.state='active'
+    AND c.status='active' AND (g.expires_at IS NULL OR g.expires_at>$4)
+    ORDER BY g.company_id LIMIT 2`,
     [clientId,application,env,new Date(clock()).toISOString()]);
-   if(result.rows?.length!==1)fail('unauthorised');
-   const row=result.rows[0];
+   const row=requireOneActiveGrant(result.rows);
    await c.query('COMMIT');begun=false;
    return {active:true,product:row.product,environment:row.environment,companyId:String(row.company_id),cohorts:row.cohorts??[]};
   }catch(e){if(begun)try{await c.query('ROLLBACK')}catch{}throw e}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createPgGrantRegistry} from '../src/pg-grant-registry.mjs';
 test('restricted grant read binds verified client identity and releases connection',async()=>{
  let calls=[],released=0;
- const client={query:async(q,args)=>{calls.push([q,args]);return q.includes('SELECT product,environment')?{rows:[{product:'central',environment:'stage',company_id:'550e8400-e29b-41d4-a716-446655440000',cohorts:['beta']}]}:{rows:[]}},release:()=>released++};
+ const client={query:async(q,args)=>{calls.push([q,args]);return q.includes('FROM titan_config.service_company_grants')?{rows:[{product:'central',environment:'stage',company_id:'550e8400-e29b-41d4-a716-446655440000',cohorts:['beta'],state:'active',company_status:'active'}]}:{rows:[]}},release:()=>released++};
  const lookup=createPgGrantRegistry({pool:{connect:async()=>client}});
  const result=await lookup({clientId:'machine',application:'central',environment:'stage'});
  assert.equal(result.companyId,'550e8400-e29b-41d4-a716-446655440000');
