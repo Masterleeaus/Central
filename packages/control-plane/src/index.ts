@@ -14,3 +14,6 @@ export * from './logto-m2m.js';
 export * from './organisation-authority.js';
 export * from './oidc-registration.js';
 export * from './logto-applications.js';
+export * from './outbox.js';
+export * from './outbox-publisher.js';
+export * from './outbox-consumer.js';

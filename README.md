@@ -63,6 +63,7 @@ The RLS test seeds two tenants and runs inside a transaction that is rolled back
 | 0007 | Provisioning audit types for update and revoke commands; session-revocation and OIDC-state grants. |
 | 0008 | Trusted reader scoped to the organisation set for the transaction; `titan_trusted_writer` may read session revocations (needed by the revocation bump). |
 | 0009 | Login-role grants for the control-api stores: `titan_trusted_writer` may SELECT the OIDC login-state columns that consume and prune read. Nothing is granted to the login role itself. |
+| 0012 | Transactional outbox: `titan.outbox_events` (versioned, tenant-keyed, idempotency-keyed, bounded payload, pending/published/dead), `titan.outbox_event_audit`, and `titan.outbox_processed_events` for consumer dedupe. Tenant-scoped RLS. Versions 0010 and 0011 are reserved by other work. See `docs/EVENTS.md`. |
 | 0010 | Row-level security on `titan.titan_session_revocations`, keyed by `organisation_id`. The reader sees one organisation (the one set for its transaction); the writer keeps cross-tenant bumps. |
 
 Tenant isolation (0006, narrowed by 0008; session revocations by 0010). Tenant scope is the transaction-local setting `titan.organisation_id`. Set it with a bound parameter, never by interpolation: `SELECT set_config('titan.organisation_id', $1, true)`. This has the same effect as `SET LOCAL` and is the only form that takes a bind parameter. With no scope set, tenant rows are invisible and writes fail (fail closed). A malformed value raises an error.
