@@ -184,3 +184,14 @@ test('multi-company handshake propagates original OIDC company eligibility to on
  assert.deepEqual([...choices.values()][0].organisationIds,[allowed,second]);
  assert.equal(issued,0);
 });
+
+
+test('Central OIDC callback URI rejects nondefault registration ports',()=>{
+ assert.throws(()=>createCentralSignInService({
+  pool:{connect:async()=>{}},sessions:{issue:async()=>{}},
+  issuer:'https://issuer.example',clientId:'id',clientSecret:'secret',
+  redirectUri:'https://central.example:8443/auth/central/callback',
+  verifyIdToken:async()=>{},listEligibleCompanies:async()=>[],
+  recheckCompany:async()=>false,stateStore:{save:async()=>{},consume:async()=>{}}
+ }),/exact callback path/);
+});
