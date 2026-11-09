@@ -51,6 +51,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/company_authority_fixture.sql
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0007_company_authority.sql
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0008_service_login_roles.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0009_migration_receipt_reader.sql
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/e2e_config_fixture.sql
           # These checks target the disposable compatibility fixture, not a production migration.
           for file in packages/config-engine/sql/verify_*.sql; do

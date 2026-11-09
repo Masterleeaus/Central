@@ -12,4 +12,7 @@ CREATE TABLE titan.companies (
 INSERT INTO titan.companies(id,name,status) VALUES
 ('550e8400-e29b-41d4-a716-446655440000','Company A','active'),
 ('550e8400-e29b-41d4-a716-446655440001','Company B','suspended');
+-- This legacy disposable fixture mirrors only the ledger's shape for role grants.
+CREATE TABLE titan.schema_migrations(migration_id text PRIMARY KEY,checksum_sha256 text NOT NULL,
+ applied_at timestamptz NOT NULL DEFAULT now(),applied_by text NOT NULL DEFAULT current_user);
 COMMIT;
