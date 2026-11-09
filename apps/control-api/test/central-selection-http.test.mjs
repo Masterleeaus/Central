@@ -72,3 +72,33 @@ test('cross-origin, extra fields and wrong method are rejected',async()=>{
   assert.equal(wrong.status,405);
   assert.equal(f.issued.length,0);
 });
+
+test('selection refuses concurrent POSTs before consuming one-use state and restores capacity',async()=>{
+ const company='00000000-0000-4000-8000-000000000001';
+ const states=new Map();
+ let entered,finish;
+ const pending=new Promise(resolve=>finish=resolve);
+ const reached=new Promise(resolve=>entered=resolve);
+ let sessionCalls=0;
+ const flow=createCentralSelectionHttp({
+  origin:'https://central.example',concurrencyLimits:{perKey:1,globalLimit:1},
+  selectionStore:{save:async(k,v)=>states.set(k,v),consume:async k=>{const x=states.get(k);states.delete(k);return x}},
+  listOrganisations:async()=>[{id:company,name:'Company'}],
+  recheckCompany:async()=>true,
+  sessions:{issue:async()=>{sessionCalls++;entered();await pending;
+    return {cookie:'__Host-titan-central='+'A'.repeat(43)+'; Secure; HttpOnly; SameSite=Lax'}}}
+ });
+ const pageRes=response();
+ await flow.begin({issuer:'https://issuer.example',subject:'subject',browserBinding:binding},pageRes);
+ const state=/name="state" value="([^"]+)"/.exec(pageRes.body)[1];
+ const firstRes=response();
+ const first=flow.handle(req('state='+state+'&organisation_id='+company),firstRes);
+ await reached;
+ const secondRes=response();
+ await flow.handle(req('state='+state+'&organisation_id='+company),secondRes);
+ assert.equal(secondRes.status,429);
+ assert.equal(sessionCalls,1);
+ finish();await first;
+ assert.equal(firstRes.status,303);
+ assert.equal((await (async()=>{const res=response();await flow.handle(req('state='+state+'&organisation_id='+company),res);return res.status})()),403);
+});
