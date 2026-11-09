@@ -50,6 +50,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0006_grant_audit.sql
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/company_authority_fixture.sql
           psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0007_company_authority.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/e2e_config_fixture.sql
           for file in packages/config-engine/sql/verify_*.sql; do
             echo "Verifying $file"
             psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f "$file"
@@ -62,7 +63,6 @@ jobs:
       - name: End-to-end signed JWT and real PostgreSQL configuration read
         run: |
           npm ci --prefix apps/control-api --ignore-scripts --no-audit --no-fund
-          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/e2e_config_fixture.sql
           node packages/config-engine/scripts/e2e-config-read.mjs
       - name: PostgreSQL real role session verification
         run: bash packages/config-engine/scripts/roles.sh "$CONFIG_TEST_DATABASE_URL"
