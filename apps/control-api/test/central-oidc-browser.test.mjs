@@ -120,3 +120,42 @@ test('central callback concurrency rejects token-exchange fanout and releases ca
  assert.equal(third.status,303);
  assert.equal(calls,2);
 });
+
+test('OIDC company list never includes denied candidates in selection handoff',async()=>{
+ const seen=[];
+ const handler=createCentralOidcBrowserHandler({
+  oidcLogin:{begin:async()=>({authorizationUrl:'https://issuer.example/oidc'}),
+   complete:async()=>verified},
+  sessions:{issue:async()=>{throw Error('should not issue')}},
+  listEligibleCompanies:async()=>[
+   {companyId:COMPANY,authorised:true},
+   {companyId:SECOND,authorised:true},
+   {companyId:'00000000-0000-4000-8000-000000000099',authorised:false}
+  ],
+  recheckCompany:async()=>true,
+  selectionFlow:{begin:async(input,response)=>{seen.push(input);response.writeHead(200,{});response.end('selection')},handle:async()=>true}
+ });
+ const res=makeRes();
+ await handler(callback('__Host-titan-central-oidc='+'A'.repeat(43)),res);
+ assert.equal(res.status,200);
+ assert.deepEqual(seen[0].allowedCompanyIds,[COMPANY,SECOND]);
+});
+test('duplicate, malformed or untyped company membership results never issue a session',async()=>{
+ for(const entries of [
+  [{companyId:COMPANY,authorised:true},{companyId:COMPANY,authorised:true}],
+  [{companyId:COMPANY,authorised:'true'}],
+  [{companyId:'invalid',authorised:true}]
+ ]){
+  let issued=0;
+  const handler=createCentralOidcBrowserHandler({
+   oidcLogin:{begin:async()=>({authorizationUrl:'https://issuer.example'}),
+    complete:async()=>verified},
+   sessions:{issue:async()=>{issued++}},
+   listEligibleCompanies:async()=>entries,recheckCompany:async()=>true
+  });
+  const res=makeRes();
+  await handler(callback('__Host-titan-central-oidc='+'A'.repeat(43)),res);
+  assert.equal(res.status,403);
+  assert.equal(issued,0);
+ }
+});
