@@ -13,7 +13,7 @@
  * This records an after-the-fact staging commitment, not prior human consent.
  */
 import {
-  createHash, createPrivateKey, createPublicKey, sign as signBytes,
+  createHash, createPrivateKey, createPublicKey, KeyObject, sign as signBytes,
   verify as verifyBytes, timingSafeEqual
 } from 'node:crypto';
 import {readFileSync,writeFileSync,openSync,closeSync} from 'node:fs';
@@ -47,13 +47,13 @@ export function validateReceipt(x) {
   return x;
 }
 export function pin(publicKey) {
-  const key=createPublicKey(publicKey);
+  const key=publicKey instanceof KeyObject && publicKey.type==='public' ? publicKey : createPublicKey(publicKey);
   if(key.asymmetricKeyType!=='ed25519')throw Error('Ed25519 public key required');
   return sha(key.export({format:'der',type:'spki'}));
 }
 export function signedReceipt(receipt,privateKey) {
   validateReceipt(receipt);
-  const key=createPrivateKey(privateKey);
+  const key=privateKey instanceof KeyObject && privateKey.type==='private' ? privateKey : createPrivateKey(privateKey);
   if(key.asymmetricKeyType!=='ed25519')throw Error('Ed25519 signing key required');
   const pub=createPublicKey(key);
   const payload=Buffer.from('titan:staging-external-receipt:v1\n'+canonical(receipt),'utf8');
