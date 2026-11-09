@@ -24,17 +24,21 @@ const cookie = (name, value, maxAge) => `${name}=${value}; Path=/; Secure; HttpO
  * authorise delegates to CentralAccessService in a single read-only snapshot.
  * localAccountActive revalidates the resolved app's actual account link/role.
  * The initial login deliberately fails closed for multiple eligible organisations.
+ * A server-side one-use browser-bound selection flow may supply organisationId;
+ * this resolver then rechecks trusted discovery, access and local account state
+ * only for that previously offered company, never trusting an ID alone.
  */
 export function createVerifiedIdentityResolver({applicationId, issuer, audience, findOrganisationIds, authorise, localAccountActive, clock=()=>new Date().toISOString()}={}) {
   if (!APPS.has(applicationId) || !validIssuer(issuer) || !valid(audience) ||
       typeof findOrganisationIds!=='function' || typeof authorise!=='function' || typeof localAccountActive!=='function') throw new TypeError('invalid resolver dependencies');
-  return async ({issuer:verifiedIssuer, subject, applicationId:requestedApp}) => {
+  return async ({issuer:verifiedIssuer, subject, applicationId:requestedApp, organisationId:selectedOrganisationId}) => {
     if (requestedApp !== applicationId || verifiedIssuer !== issuer || !valid(subject)) return {authorised:false};
     try {
       const ids = await findOrganisationIds({issuer:verifiedIssuer,subject});
       if (!Array.isArray(ids) || ids.length < 1 || ids.length > 128 || ids.some(x=>!valid(x)) || new Set(ids).size !== ids.length) return {authorised:false};
+      if(selectedOrganisationId!==undefined && (!valid(selectedOrganisationId)||!ids.includes(selectedOrganisationId)))return {authorised:false};
       const decisions=[];
-      for (const organisationId of ids) {
+      for (const organisationId of selectedOrganisationId===undefined ? ids : [selectedOrganisationId]) {
         const decision=await authorise({principal:{logtoSubject:subject,issuer:verifiedIssuer,audience,verifiedAt:clock()},organisationId,applicationId,action:'session:open'});
         if (decision?.allowed) decisions.push(decision);
       }
