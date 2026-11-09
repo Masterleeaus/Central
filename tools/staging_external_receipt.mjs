@@ -74,7 +74,7 @@ export function validateSigned(x,publicKey,trustedPin) {
   const bytes=Buffer.from(x.signature_ed25519,'base64');
   if(bytes.length!==64||!verifyBytes(null,
       Buffer.from('titan:staging-external-receipt:v1\n'+canonical(x.receipt)),
-      createPublicKey(publicKey),bytes)) throw Error('receipt signature mismatch');
+      publicKey instanceof KeyObject && publicKey.type==='public' ? publicKey : createPublicKey(publicKey),bytes)) throw Error('receipt signature mismatch');
   return x.receipt;
 }
 function q(record) {
