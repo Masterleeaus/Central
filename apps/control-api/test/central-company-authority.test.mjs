@@ -81,3 +81,13 @@ test('invalid company or wrong issuer cannot acquire a database connection',asyn
   assert.equal(await ctx.authority.recheckCompany({issuer:'https://foreign.example/',subject:'subject-1',companyId:A}),false);
   assert.equal(ctx.calls.length,0);
 });
+
+
+test('same Logto organisation cannot be ambiguously mapped to different Central companies',async()=>{
+ const ctx=setup({companies:[
+  {organisation_id:A,logto_organisation_id:'duplicated-logto-company'},
+  {organisation_id:B,logto_organisation_id:'duplicated-logto-company'}
+ ]});
+ await assert.rejects(ctx.authority.listEligibleCompanies({issuer:ISSUER,subject:'subject-1'}),/invalid membership discovery/);
+ assert.equal(ctx.calls.at(-1).sql,'ROLLBACK');
+});
