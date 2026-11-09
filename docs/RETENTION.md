@@ -70,6 +70,15 @@ retention period of their own.
 - **TO DECIDE (legal):** how an erasure request for an operator or subject is handled across audit rows, backups
   and logs, and who approves it.
 
+## 6. Activity history (`titan.activity_events`, migration 0011)
+
+- **CURRENT:** rows are append-only. No role has UPDATE, DELETE or TRUNCATE, and a trigger rejects them for every role. Nothing in the code deletes rows.
+- **CURRENT:** each row holds identifiers, an outcome and a detail object of at most 1,024 bytes, redacted before insert. Credentials and email addresses are refused, and personal-data keys are removed. Actor and target fields refuse address-shaped values.
+- **Proposed:** a purge run by the owner, outside the application, that removes rows older than the retention period. It must be the only path that deletes rows, must be bounded in batches, and must be recorded. It is not written.
+- **TO DECIDE (legal/owner):** the retention period. This must match section 1 unless there is a reason for a different period.
+- **TO DECIDE (owner):** whether activity export is needed (for example to a customer's own store) and in what format. The current reader returns one organisation's events, newest first, in pages of 100, and is the basis for any export.
+- **TO DECIDE (owner):** which roles may read activity. Tenant users should see events their role permits. Support operators should see only what their role permits, and each read should be audited. No operator read path exists yet.
+
 ## Open items summary
 
 | Item | Owner of decision |
@@ -78,6 +87,7 @@ retention period of their own.
 | Whether audit rows hold personal data; pseudonymisation | Legal |
 | Whether access decisions need an audit table | Owner |
 | Longest session lifetime (revocation retention floor) | Owner |
+| Activity history retention period, export format, read roles | Legal and owner |
 | Journal retention period; central log store | Owner |
 | Proxy access-log IP retention | Legal |
 | Backup retention and erasure handling | Legal and owner |
