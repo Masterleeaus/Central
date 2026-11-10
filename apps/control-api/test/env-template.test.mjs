@@ -6,7 +6,13 @@ import { fileURLToPath } from 'node:url';
 const root = new URL('../../../', import.meta.url);
 const read = (rel) => readFileSync(new URL(rel, root), 'utf8');
 const LOCATION_FILES = { 'central.env': 'deploy/env.example', 'outbox-worker.env': 'deploy/outbox-worker.env.example' };
-const NON_SECRET_DEFAULTS = { TITAN_CENTRAL_PORT: '3102' };
+// Non-secret values the template may carry in clear: the loopback port default and the owner-provided Logto
+// management resource and scope (issue #73). Secret rows are never listed here.
+const NON_SECRET_DEFAULTS = {
+  TITAN_CENTRAL_PORT: ['3102'],
+  TITAN_LOGTO_MANAGEMENT_RESOURCE: ['https://auth.titanzero.io/api'],
+  TITAN_LOGTO_MANAGEMENT_SCOPE: ['all'],
+};
 
 const template = read('deploy/env.example');
 const outboxTemplate = read('deploy/outbox-worker.env.example');
@@ -71,7 +77,7 @@ test('secret rows keep the REPLACE_ME placeholder and no secret value is written
 test('active central.env values are placeholders or the listed non-secret defaults', () => {
   for (const match of template.matchAll(/^(TITAN_[A-Z0-9_]+)=(.*)$/gm)) {
     const [, name, value] = match;
-    const allowed = value === 'REPLACE_ME' || value === '' || NON_SECRET_DEFAULTS[name] === value;
+    const allowed = value === 'REPLACE_ME' || value === '' || (NON_SECRET_DEFAULTS[name] ?? []).includes(value);
     assert.ok(allowed, `${name} has a value that is not a placeholder`);
   }
 });
