@@ -1,0 +1,10 @@
+{
+  "name": "wrong-user",
+  "changes": {
+    "accountAllowed": false,
+    "request": {
+      "localUserId": "another-user"
+    }
+  },
+  "expectedAllowed": false
+}

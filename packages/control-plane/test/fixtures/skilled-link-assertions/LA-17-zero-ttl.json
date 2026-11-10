@@ -1,0 +1,7 @@
+{
+  "name": "zero-ttl",
+  "changes": {
+    "ttlSeconds": 0
+  },
+  "expectedAllowed": false
+}
