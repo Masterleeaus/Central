@@ -1,6 +1,7 @@
 /** Titan Central opt-in operator API. No privileged route exists without injected live authorisation. */
 import { createTitanOidcRegistrationPlans } from '../../../packages/control-plane/dist/oidc-registration.js';
 import { LogtoAuthorityError } from '../../../packages/control-plane/dist/logto-management.js';
+import { FLAG_CHANGE_PATH, flagErrorStatus, parseFlagChange } from './config-admin.mjs';
 import { planLookup } from '../../../packages/control-plane/dist/product-registry.js';
 
 const logtoId = v => typeof v==='string' && /^[A-Za-z0-9_-]{1,256}$/.test(v);
@@ -63,8 +64,11 @@ async function readJson(req, maxBytes=8192) {
  * Provisioning must be an already constructed TrustedProvisioningService; it repeats its own checks.
  * This handler is never installed by default in the server.
  */
-export function createAdminHandler({verifyToken,authoriseOperator,provision,origins,productRegistry,logger=()=>{}}={}) {
+/** flagChange, when given, enables POST /v1/admin/flags/change: async (command, operatorSubject) => revision. Omitted means the route is not served. */
+export function createAdminHandler({verifyToken,authoriseOperator,provision,origins,productRegistry,logger=()=>{},flagChange}={}) {
  if(typeof verifyToken!=='function'||typeof authoriseOperator!=='function'||!origins)throw new Error('operator verification and fixed app origins required');
+ if(flagChange!==undefined&&typeof flagChange!=='function')throw new Error('flagChange must be a function');
+ const adminPaths=['/v1/admin/oidc/plans','/v1/admin/provision',...(flagChange?[FLAG_CHANGE_PATH]:[])];
  // Eager check, not user-controlled request origins.
  const plans=createTitanOidcRegistrationPlans(origins);
  // Canonical product id shown beside the legacy id. Origins still come from the validated plans, which the
@@ -79,7 +83,7 @@ export function createAdminHandler({verifyToken,authoriseOperator,provision,orig
  return async (req,res)=>{
   let path;
   try{path=new URL(req.url??'/', 'http://localhost').pathname;}catch{send(res,400,{error:'invalid_url'});return true;}
-  if(!['/v1/admin/oidc/plans','/v1/admin/provision'].includes(path))return false;
+  if(!adminPaths.includes(path))return false;
   const method=path.endsWith('/plans')?'GET':'POST';
   if(req.method!==method){send(res,405,{error:'method_not_allowed'});return true;}
   const token=bearer(req);
@@ -92,6 +96,23 @@ export function createAdminHandler({verifyToken,authoriseOperator,provision,orig
   catch{send(res,503,{error:'authority_unavailable'});return true;}
   if(!operatorAuthorised){send(res,403,{error:'forbidden'});return true;}
   if(req.url.includes('?')){send(res,400,{error:'unexpected_query'});return true;}
+  if(path===FLAG_CHANGE_PATH){
+   let body;
+   try{body=await readJson(req);}catch(e){send(res,e.message==='payload_too_large'?413:e.message==='unsupported_media_type'?415:400,{error:e.message});return true;}
+   const command=parseFlagChange(body);
+   if(!command){send(res,400,{error:'invalid_command'});return true;}
+   try{
+    const revision=await flagChange(command,principal.logtoSubject);
+    logger('admin_flag_changed',{op:command.op,product:command.product,environment:command.environment,key:command.key,revision});
+    send(res,200,{status:'changed',revision});
+   }catch(e){
+    const status=flagErrorStatus(e);
+    if(status){send(res,status,{error:e.code.toLowerCase()});return true;}
+    logger('admin_flag_change_failed',{error_class:e?.name});
+    send(res,503,{error:'flag_store_unavailable'});
+   }
+   return true;
+  }
   if(path.endsWith('/plans')){send(res,200,{applications:plans.map(planWithProduct),registrationStatus:'not_registered',note:'Operator-reviewed plans; no Logto registrations performed'});return true;}
   if(typeof provision!=='function'){send(res,503,{error:'provisioning_disabled'});return true;}
   // Avoid an unaudited client performing platform-level identity or organisation creation.

@@ -4,6 +4,7 @@
 import { createLogtoManagementTokenSupplier, LogtoManagementVerifier, createTitanOidcRegistrationPlans, buildProductRegistry, originsForLegacyIds } from '../../../packages/control-plane/dist/index.js';
 import { createAdminHandler, createLogtoOperatorAuthoriser } from './admin.mjs';
 import { timedFetch } from './metrics.mjs';
+import { createFlagChangeHandler } from './config-admin.mjs';
 
 const ID = /^[A-Za-z0-9_-]{1,256}$/;
 const PLACEHOLDER = 'REPLACE_ME';
@@ -36,6 +37,14 @@ export function readOperatorConfig(env) {
   if (roleIds.length < 1 || roleIds.length > 32 || new Set(roleIds).size !== roleIds.length || !roleIds.every(r => r !== PLACEHOLDER && ID.test(r)))
     throw new Error('invalid TITAN_OPERATOR_ROLE_IDS');
   return { organisationId, roleIds };
+}
+
+/** TITAN_OPERATOR_FLAG_CHANGES=1 enables POST /v1/admin/flags/change. Unset or 0 keeps the route off (404). */
+export function readFlagChangeSetting(env) {
+  const raw = env.TITAN_OPERATOR_FLAG_CHANGES;
+  if (raw === undefined || raw === '' || raw === '0') return false;
+  if (raw === '1') return true;
+  throw new Error('invalid TITAN_OPERATOR_FLAG_CHANGES');
 }
 
 /**
@@ -74,10 +83,12 @@ export function loadProductRegistry(env) {
 }
 
 /** Builds the /v1/admin/ handler when the operator plane is on, otherwise returns null (route stays 404).
- * fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch. */
-export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher, productRegistry = loadProductRegistry(env) }) {
+ * flags = { registry, store } is required only for the flag-change route. fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch. */
+export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher, flags, productRegistry = loadProductRegistry(env) }) {
   const operator = readOperatorConfig(env);
   if (!operator) return null;
+  const flagChanges = readFlagChangeSetting(env);
+  if (flagChanges && !flags) throw new Error('flag registry and store required for TITAN_OPERATOR_FLAG_CHANGES');
   // Origins come only from the validated product registry (loadProductRegistry), never from raw env values here.
   let origins;
   try {
@@ -105,5 +116,5 @@ export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => 
   const verifier = new LogtoManagementVerifier({ origin: logtoOrigin, accessToken: supplier.accessToken, fetcher: timedFetch(fetcher ?? fetch, metrics) });
   const authoriseOperator = createLogtoOperatorAuthoriser({ verifier, operatorOrganisationId: operator.organisationId, administrativeRoleIds: operator.roleIds });
   // provision is intentionally not wired here: POST /v1/admin/provision answers 503 provisioning_disabled.
-  return createAdminHandler({ verifyToken, authoriseOperator, origins, productRegistry, logger });
+  return createAdminHandler({ verifyToken, authoriseOperator, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
 }

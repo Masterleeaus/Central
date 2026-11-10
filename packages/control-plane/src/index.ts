@@ -25,6 +25,7 @@ export * from './billing-adapter.js';
 export * from './subscription-lifecycle.js';
 export * from './billing-ledger-pg.js';
 export * from './feature-flags.js';
+export * from './feature-flags-postgres.js';
 export * from './outbox.js';
 export * from './outbox-publisher.js';
 export * from './outbox-consumer.js';
