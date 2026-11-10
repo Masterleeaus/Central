@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 const root = new URL('../../../', import.meta.url);
 const read = (rel) => readFileSync(new URL(rel, root), 'utf8');
 const LOCATION_FILES = { 'central.env': 'deploy/env.example', 'outbox-worker.env': 'deploy/outbox-worker.env.example' };
-// Non-secret values the template may carry in clear: the loopback port default and the owner-provided Logto
-// management resource and scope (issue #73). Secret rows are never listed here.
+// Non-secret values the template may carry in clear: the loopback port default and the public Logto
+// Management API resource and scope (owner-provided, issue #73). They are identifiers, not secrets.
+// Secret rows are never listed here.
 const NON_SECRET_DEFAULTS = {
   TITAN_CENTRAL_PORT: ['3102'],
   TITAN_LOGTO_MANAGEMENT_RESOURCE: ['https://auth.titanzero.io/api'],
