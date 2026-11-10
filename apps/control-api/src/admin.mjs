@@ -2,6 +2,7 @@
 import { createTitanOidcRegistrationPlans } from '../../../packages/control-plane/dist/oidc-registration.js';
 import { LogtoAuthorityError } from '../../../packages/control-plane/dist/logto-management.js';
 import { FLAG_CHANGE_PATH, flagErrorStatus, parseFlagChange } from './config-admin.mjs';
+import { planLookup } from '../../../packages/control-plane/dist/product-registry.js';
 
 const logtoId = v => typeof v==='string' && /^[A-Za-z0-9_-]{1,256}$/.test(v);
 /**
@@ -34,14 +35,21 @@ const attrs = (value,allowed) => isObject(value)&&Object.keys(value).every(k=>al
 const allowedCommands = {
  membership:['kind','id','identityId','organisationId','role'],
  entitlement:['kind','id','organisationId','applicationId','features','expiresAt'],
- link:['kind','id','identityId','organisationId','applicationId','localUserId','localAccountId','verifiedAt']
+ link:['kind','id','identityId','organisationId','applicationId','localUserId','localAccountId','assertion'],
+ link_relink:['kind','id','identityId','organisationId','applicationId','expectedRevision','localUserId','localAccountId','assertion'],
+ link_revoke:['kind','id','organisationId','expectedRevision']
 };
+/** Compact JWS shape. The signature is verified by TrustedProvisioningService, never here. */
+const ASSERTION = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 function validCommand(command) {
  if(!isObject(command)||!Object.hasOwn(allowedCommands,command.kind)||!attrs(command,allowedCommands[command.kind])||!uuid(command.id))return false;
  const str = v => typeof v==='string'&&v.length>0&&v.length<=256;
  if(command.kind==='membership')return uuid(command.identityId)&&uuid(command.organisationId)&&['owner','admin','manager','member','learner'].includes(command.role);
  if(command.kind==='entitlement')return uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&Array.isArray(command.features)&&command.features.length<=100&&command.features.every(f=>str(f)&&f.length<=100)&&new Set(command.features).size===command.features.length&&(command.expiresAt===undefined||(str(command.expiresAt)&&Number.isFinite(Date.parse(command.expiresAt))&&new Date(command.expiresAt).toISOString()===command.expiresAt));
- if(command.kind==='link')return uuid(command.identityId)&&uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&str(command.localUserId)&&str(command.localAccountId)&&str(command.verifiedAt)&&Number.isFinite(Date.parse(command.verifiedAt));
+ const revision = v => Number.isSafeInteger(v)&&v>=1;
+ if(command.kind==='link')return uuid(command.identityId)&&uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&str(command.localUserId)&&str(command.localAccountId)&&typeof command.assertion==='string'&&command.assertion.length<=4096&&ASSERTION.test(command.assertion);
+ if(command.kind==='link_relink')return uuid(command.identityId)&&uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&revision(command.expectedRevision)&&str(command.localUserId)&&str(command.localAccountId)&&typeof command.assertion==='string'&&command.assertion.length<=4096&&ASSERTION.test(command.assertion);
+ if(command.kind==='link_revoke')return uuid(command.organisationId)&&revision(command.expectedRevision);
  return false;
 }
 async function readJson(req, maxBytes=8192) {
@@ -57,12 +65,21 @@ async function readJson(req, maxBytes=8192) {
  * This handler is never installed by default in the server.
  */
 /** flagChange, when given, enables POST /v1/admin/flags/change: async (command, operatorSubject) => revision. Omitted means the route is not served. */
-export function createAdminHandler({verifyToken,authoriseOperator,provision,origins,logger=()=>{},flagChange}={}) {
+export function createAdminHandler({verifyToken,authoriseOperator,provision,origins,productRegistry,logger=()=>{},flagChange}={}) {
  if(typeof verifyToken!=='function'||typeof authoriseOperator!=='function'||!origins)throw new Error('operator verification and fixed app origins required');
  if(flagChange!==undefined&&typeof flagChange!=='function')throw new Error('flagChange must be a function');
  const adminPaths=['/v1/admin/oidc/plans','/v1/admin/provision',...(flagChange?[FLAG_CHANGE_PATH]:[])];
  // Eager check, not user-controlled request origins.
  const plans=createTitanOidcRegistrationPlans(origins);
+ // Canonical product id shown beside the legacy id. Origins still come from the validated plans, which the
+ // operator builds from the registry. The product lookup adds labels only.
+ const lookup=productRegistry?planLookup(productRegistry):undefined;
+ const planWithProduct=plan=>{
+  if(!lookup) return plan;
+  const entry=lookup[plan.app];
+  if(!entry||entry.serviceOrigin!==plan.origin) throw Error('plan origin differs from validated registry');
+  return {...plan,productId:entry.productId,legacyId:entry.legacyId,displayName:entry.displayName};
+ };
  return async (req,res)=>{
   let path;
   try{path=new URL(req.url??'/', 'http://localhost').pathname;}catch{send(res,400,{error:'invalid_url'});return true;}
@@ -96,7 +113,7 @@ export function createAdminHandler({verifyToken,authoriseOperator,provision,orig
    }
    return true;
   }
-  if(path.endsWith('/plans')){send(res,200,{applications:plans,registrationStatus:'not_registered',note:'Operator-reviewed plans; no Logto registrations performed'});return true;}
+  if(path.endsWith('/plans')){send(res,200,{applications:plans.map(planWithProduct),registrationStatus:'not_registered',note:'Operator-reviewed plans; no Logto registrations performed'});return true;}
   if(typeof provision!=='function'){send(res,503,{error:'provisioning_disabled'});return true;}
   // Avoid an unaudited client performing platform-level identity or organisation creation.
   let body;

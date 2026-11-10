@@ -1,0 +1,31 @@
+name: Central Skilled service decision contract
+on:
+  pull_request:
+    paths:
+      - 'apps/control-api/src/service-decision-*.mjs'
+      - 'apps/control-api/src/app.mjs'
+      - 'apps/control-api/src/server.mjs'
+      - 'apps/control-api/test/service-decision-*.mjs'
+      - '.github/workflows/central-skilled-service-decision.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/control-api/src/service-decision-*.mjs'
+      - 'apps/control-api/src/app.mjs'
+      - 'apps/control-api/src/server.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scoped-service-decisions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify server-to-server contract and RLS access engine
+        run: node --test apps/control-api/test/service-decision-*.test.mjs
+      - name: Existing Central control-api HTTP regression suite
+        run: node --test apps/control-api/test/*.test.mjs

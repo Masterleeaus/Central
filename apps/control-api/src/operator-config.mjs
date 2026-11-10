@@ -1,7 +1,7 @@
 /** Operator (admin) plane configuration. Read from the environment at startup only.
  * Off unless TITAN_OPERATOR_ORGANISATION_ID and TITAN_OPERATOR_ROLE_IDS are both set. Once either is set,
  * every operator setting must be valid or startup throws. Error messages name variables, never values. */
-import { createLogtoManagementTokenSupplier, LogtoManagementVerifier, createTitanOidcRegistrationPlans } from '../../../packages/control-plane/dist/index.js';
+import { createLogtoManagementTokenSupplier, LogtoManagementVerifier, createTitanOidcRegistrationPlans, buildProductRegistry, originsForLegacyIds } from '../../../packages/control-plane/dist/index.js';
 import { createAdminHandler, createLogtoOperatorAuthoriser } from './admin.mjs';
 import { timedFetch } from './metrics.mjs';
 import { createFlagChangeHandler } from './config-admin.mjs';
@@ -47,18 +47,55 @@ export function readFlagChangeSetting(env) {
   throw new Error('invalid TITAN_OPERATOR_FLAG_CHANGES');
 }
 
+/**
+ * Product registry from operator configuration (issue #29). Runs at every startup, so an invalid configuration
+ * fails startup even when the operator plane is off. Names only in messages, never values.
+ *   TITAN_FIELD_ORIGIN, TITAN_DESK_ORIGIN, TITAN_ACADEMY_ORIGIN: product service origins (legacy variable names,
+ *     mapped to Sorted, Supercharged and LMS). Set all three together or none.
+ *   TITAN_PRODUCT_TRUSTED_ORIGINS: comma-separated operator allowlist. Required whenever an origin is set.
+ * With nothing set, the registry is returned with no origins and nothing is validated against the network.
+ */
+export const PRODUCT_ORIGIN_VARIABLES = Object.freeze({ sorted: 'TITAN_FIELD_ORIGIN', supercharged: 'TITAN_DESK_ORIGIN', lms: 'TITAN_ACADEMY_ORIGIN' });
+export const PRODUCT_TRUSTED_ORIGINS_VARIABLE = 'TITAN_PRODUCT_TRUSTED_ORIGINS';
+const PRODUCT_ORIGIN_NAMES = Object.values(PRODUCT_ORIGIN_VARIABLES);
+
+export function loadProductRegistry(env) {
+  const serviceOrigins = {};
+  for (const [productId, name] of Object.entries(PRODUCT_ORIGIN_VARIABLES)) {
+    if (present(env[name])) serviceOrigins[productId] = env[name];
+  }
+  const originCount = Object.keys(serviceOrigins).length;
+  const trustedRaw = env[PRODUCT_TRUSTED_ORIGINS_VARIABLE];
+  if (originCount === 0 && !present(trustedRaw)) return buildProductRegistry({ serviceOrigins: {}, trustedOrigins: [] });
+  if (originCount !== 0 && originCount !== PRODUCT_ORIGIN_NAMES.length) {
+    throw new Error(`${PRODUCT_ORIGIN_NAMES.join(', ')} must be set together`);
+  }
+  if (!present(trustedRaw)) throw new Error(`${PRODUCT_TRUSTED_ORIGINS_VARIABLE} must be set when product origins are configured`);
+  if (typeof trustedRaw !== 'string') throw new Error(`invalid ${PRODUCT_TRUSTED_ORIGINS_VARIABLE}`);
+  const trustedOrigins = trustedRaw.split(',').map(s => s.trim());
+  if (trustedOrigins.length > 16 || trustedOrigins.some(o => o === '' || o === PLACEHOLDER)) throw new Error(`invalid ${PRODUCT_TRUSTED_ORIGINS_VARIABLE}`);
+  try {
+    return buildProductRegistry({ serviceOrigins, trustedOrigins });
+  } catch (e) {
+    // Registry messages name products and rules, never the configured origin values.
+    throw new Error(`invalid product origin configuration (${e.code ?? 'unknown'}): ${e.message}`);
+  }
+}
+
 /** Builds the /v1/admin/ handler when the operator plane is on, otherwise returns null (route stays 404).
  * flags = { registry, store } is required only for the flag-change route. fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch. */
-export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher, flags }) {
+export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher, flags, productRegistry = loadProductRegistry(env) }) {
   const operator = readOperatorConfig(env);
   if (!operator) return null;
   const flagChanges = readFlagChangeSetting(env);
   if (flagChanges && !flags) throw new Error('flag registry and store required for TITAN_OPERATOR_FLAG_CHANGES');
-  const origins = {
-    desk: httpsOrigin('TITAN_DESK_ORIGIN', env.TITAN_DESK_ORIGIN),
-    field: httpsOrigin('TITAN_FIELD_ORIGIN', env.TITAN_FIELD_ORIGIN),
-    academy: httpsOrigin('TITAN_ACADEMY_ORIGIN', env.TITAN_ACADEMY_ORIGIN),
-  };
+  // Origins come only from the validated product registry (loadProductRegistry), never from raw env values here.
+  let origins;
+  try {
+    origins = { ...originsForLegacyIds(productRegistry) };
+  } catch {
+    throw new Error('operator plane requires TITAN_FIELD_ORIGIN, TITAN_DESK_ORIGIN and TITAN_ACADEMY_ORIGIN to be valid product origins');
+  }
   // Fail at startup, before any request, if the registration plans would be invalid.
   createTitanOidcRegistrationPlans(origins);
   const logtoOrigin = httpsOrigin('TITAN_LOGTO_MANAGEMENT_ORIGIN', env.TITAN_LOGTO_MANAGEMENT_ORIGIN);
@@ -79,5 +116,5 @@ export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => 
   const verifier = new LogtoManagementVerifier({ origin: logtoOrigin, accessToken: supplier.accessToken, fetcher: timedFetch(fetcher ?? fetch, metrics) });
   const authoriseOperator = createLogtoOperatorAuthoriser({ verifier, operatorOrganisationId: operator.organisationId, administrativeRoleIds: operator.roleIds });
   // provision is intentionally not wired here: POST /v1/admin/provision answers 503 provisioning_disabled.
-  return createAdminHandler({ verifyToken, authoriseOperator, origins, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
+  return createAdminHandler({ verifyToken, authoriseOperator, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
 }

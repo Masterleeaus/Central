@@ -51,16 +51,34 @@ def write_dir(files):
 class RealMigrationsTests(unittest.TestCase):
     def test_all_repository_migrations_are_one_transaction(self):
         found = migrate.discover(ROOT / 'migrations')
-        # 0010, 0011, 0012 and 0014 belong to other passes and are not in this repository.
-        self.assertEqual([m.version for m in found], [1, 2, 3, 4, 5, 6, 7, 8, 9, 13])
+        self.assertEqual([m.version for m in found], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
         for m in found:
             self.assertIn('COMMIT;', m.text, m.name)
 
+    def test_onboarding_migration_0017_follows_0014_and_is_one_transaction(self):
+        found = {m.version: m for m in migrate.discover(ROOT / 'migrations')}
+        self.assertIn(17, found)
+        self.assertEqual(found[17].name, 'customer_onboarding')
+        self.assertIn('CREATE TABLE IF NOT EXISTS titan.onboardings', found[17].text)
+        self.assertEqual(found[17].text.count('BEGIN;'), 1)
+        self.assertEqual(found[17].text.count('COMMIT;'), 1)
+
     def test_repository_migrations_apply_in_order_then_are_noop(self):
         client = FakeClient()
-        self.assertEqual(migrate.run(client, ROOT / 'migrations'), [1, 2, 3, 4, 5, 6, 7, 8, 9, 13])
+        self.assertEqual(migrate.run(client, ROOT / 'migrations'), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
         self.assertEqual(migrate.run(client, ROOT / 'migrations'), [])
-        self.assertEqual(len(client.executed), 10)
+        self.assertEqual(len(client.executed), 17)
+
+    def test_migration_0016_grants_only_to_the_trusted_writer(self):
+        text = (ROOT / 'migrations' / '0016_organisation_selection.sql').read_text(encoding='utf-8')
+        sql = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('--'))
+        statements = [' '.join(part.split()) for part in sql.split(';')]
+        grants = [stmt for stmt in statements if stmt.startswith('GRANT')]
+        self.assertEqual(len(grants), 4)
+        for grant in grants:
+            self.assertTrue(grant.endswith('TO titan_trusted_writer'), grant)
+        for role in ('titan_tenant_app', 'titan_trusted_reader', 'titan_central_app'):
+            self.assertNotIn(role, sql)
 
 
 class RunnerTests(unittest.TestCase):

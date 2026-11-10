@@ -182,6 +182,7 @@ test('flag-change route is off by default and only TITAN_OPERATOR_FLAG_CHANGES=1
     TITAN_DESK_ORIGIN: 'https://desk.example.test',
     TITAN_FIELD_ORIGIN: 'https://field.example.test',
     TITAN_ACADEMY_ORIGIN: 'https://academy.example.test',
+    TITAN_PRODUCT_TRUSTED_ORIGINS: 'https://desk.example.test,https://field.example.test,https://academy.example.test',
   };
   const flags = { registry, store: memoryFlagStore() };
   const fakeReq = { url: FLAG_CHANGE_PATH, method: 'POST', headers: {} };
