@@ -18,6 +18,14 @@ APACHE_VHOST = PROXY / 'apache' / 'titan-central-vhost.conf'
 ACCESS_PROBES = ['/v1/access/check']
 CALLBACK_PROBES = ['/auth/titan/field/callback', '/auth/titan/desk/callback', '/auth/titan/academy/callback']
 ADMIN_PROBES = ['/v1/admin', '/v1/admin/', '/v1/admin/provision', '/v1/admin/oidc/plans']
+# Served by the same Node process as the public routes, so the proxy is the only barrier (issue #74).
+METRICS_PROBES = ['/metrics', '/metrics/', '/metrics/x']
+INTERNAL_PROBES = ['/internal/', '/internal/x']
+PRIVATE_PROBES = ADMIN_PROBES + METRICS_PROBES + INTERNAL_PROBES
+
+
+def _kind(probe):
+    return 'admin path' if probe.startswith('/v1/admin') else 'private path'
 
 
 def strip_comments(text):
@@ -64,9 +72,9 @@ def check_nginx(zones_text, locations_text):
     for modifier, pattern, body in locs:
         label = f'location {modifier} {pattern}'.replace('  ', ' ')
         if 'proxy_pass' in body:
-            for probe in ADMIN_PROBES:
+            for probe in PRIVATE_PROBES:
                 if nginx_match(modifier, pattern, probe):
-                    errors.append(f'{label} proxies the admin path {probe}')
+                    errors.append(f'{label} proxies the {_kind(probe)} {probe}')
                     break
             if not re.search(r'proxy_set_header\s+X-Forwarded-For\s+\$remote_addr\s*;', body):
                 errors.append(f'{label} does not overwrite X-Forwarded-For from $remote_addr')
@@ -86,6 +94,9 @@ def check_nginx(zones_text, locations_text):
     if not any(nginx_match(m, p, '/v1/admin/provision') and re.search(r'return\s+404\s*;|deny\s+all\s*;', b)
                for m, p, b in locs):
         errors.append('nginx locations: no admin deny block (return 404 / deny all) for /v1/admin/')
+    for probe in METRICS_PROBES + INTERNAL_PROBES:
+        if not any(nginx_match(m, p, probe) and re.search(r'return\s+404\s*;|deny\s+all\s*;', b) for m, p, b in locs):
+            errors.append(f'nginx locations: no deny block (return 404 / deny all) for {probe}')
     return errors
 
 
@@ -125,17 +136,20 @@ def check_apache(text):
             prefix = t[1]
             if prefix == '/':
                 errors.append('apache: ProxyPass / proxies every path, including the admin API')
-            for probe in ADMIN_PROBES:
+            for probe in PRIVATE_PROBES:
                 if probe.startswith(prefix):
-                    errors.append(f'apache: ProxyPass {prefix} proxies the admin path {probe}')
+                    errors.append(f'apache: ProxyPass {prefix} proxies the {_kind(probe)} {probe}')
                     break
         if t[:1] == ['ProxyPassMatch'] and len(t) >= 3:
-            for probe in ADMIN_PROBES:
+            for probe in PRIVATE_PROBES:
                 if re.search(t[1], probe):
-                    errors.append(f'apache: ProxyPassMatch {t[1]} proxies the admin path {probe}')
+                    errors.append(f'apache: ProxyPassMatch {t[1]} proxies the {_kind(probe)} {probe}')
                     break
     if not any(t[:2] == ['RedirectMatch', '404'] and len(t) == 3 and re.search(t[2], '/v1/admin/provision') for t in d):
         errors.append('apache: no RedirectMatch 404 denial for /v1/admin/')
+    for probe in METRICS_PROBES + INTERNAL_PROBES:
+        if not any(t[:2] == ['RedirectMatch', '404'] and len(t) == 3 and re.search(t[2], probe) for t in d):
+            errors.append(f'apache: no RedirectMatch 404 denial for {probe}')
     return errors
 
 
