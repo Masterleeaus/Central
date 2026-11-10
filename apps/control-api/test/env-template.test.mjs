@@ -6,7 +6,12 @@ import { fileURLToPath } from 'node:url';
 const root = new URL('../../../', import.meta.url);
 const read = (rel) => readFileSync(new URL(rel, root), 'utf8');
 const LOCATION_FILES = { 'central.env': 'deploy/env.example', 'outbox-worker.env': 'deploy/outbox-worker.env.example' };
-const NON_SECRET_DEFAULTS = { TITAN_CENTRAL_PORT: '3102' };
+const NON_SECRET_DEFAULTS = {
+  TITAN_CENTRAL_PORT: '3102',
+  // Public identifiers, not secrets: the Logto Management API resource and the scope granted to the M2M app.
+  TITAN_LOGTO_MANAGEMENT_RESOURCE: 'https://auth.titanzero.io/api',
+  TITAN_LOGTO_MANAGEMENT_SCOPE: 'all',
+};
 
 const template = read('deploy/env.example');
 const outboxTemplate = read('deploy/outbox-worker.env.example');
