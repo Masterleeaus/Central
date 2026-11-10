@@ -1,6 +1,6 @@
 # Centrally governed configuration and feature flags (issue #38)
 
-Status: **partial**. The data model (migration `0013_feature_flags.sql`), the resolver, the change and rollback functions, and the database checks are implemented and tested. The HTTP read endpoint described in section 4 is a **contract only**. It is not implemented in this change, and no product can call it yet.
+Status: **implemented, not yet deployed**. The data model (migration `0013_feature_flags.sql`), the resolver, the change and rollback functions, the PostgreSQL adapter, the server-to-server read endpoint (section 4), and the operator change path (section 5) are in this repository. The read endpoint is served only when `TITAN_CONFIG_READ_PRODUCTS` is set, and the change route only when `TITAN_OPERATOR_FLAG_CHANGES=1`. No product reads Central configuration yet, and no flag is declared yet (`apps/control-api/src/config-declarations.mjs` is empty).
 
 ## 1. Scope and limits
 
@@ -56,9 +56,9 @@ An expired row is ignored and resolution moves to the next rule. These fallbacks
 
 An undeclared flag, or a request that carries a field other than `product`, `environment` and `key`, is an error and is not resolved to a default.
 
-## 4. Server-to-server read interface (contract)
+## 4. Server-to-server read interface
 
-**Not implemented.** This section fixes the contract that the endpoint must follow when it is built.
+Implemented in `apps/control-api/src/config-read.mjs`, mounted in `app.mjs` and enabled by `TITAN_CONFIG_READ_PRODUCTS` (comma-separated products, for example `sorted,lms`). Unset means the route answers 404.
 
 - **Route**: `GET /internal/v1/config/{environment}/{flag_key}`. Served only on the internal listener, never through the browser-facing proxy.
 - **Caller identity**: the calling product authenticates with a client-credentials token whose audience is that product (`urn:titan-central:product:<product>`). Central verifies the token signature, audience and expiry before any other step.
@@ -70,7 +70,41 @@ An undeclared flag, or a request that carries a field other than `product`, `env
 - **Store failure**: the endpoint still answers 200 with the declared default and `source: "fallback"`. The product must not treat that as an error and must not cache it. A 5xx is returned only if Central cannot produce a response at all.
 - **Cache**: a product may cache a 200 response from a non-fallback source for at most 60 seconds. It must not cache a `fallback` response.
 
-### Product-side rules
+### 4.1 Verified context mapping
+
+The read path uses the existing access-token verifier (`createOidcVerifier` in `apps/control-api/src/oidc.mjs`), with one verifier per product audience. Each verifier accepts only its own audience, so a token minted for one product cannot be used for another. The verifier returns the named claims it was asked for, and only after the signature, issuer, audience and expiry checks.
+
+| Input | Source | Rule |
+| --- | --- | --- |
+| Product | Audience that matched: `urn:titan-central:product:<product>` | Must be a value in `FLAG_PRODUCTS`. Never read from the path, query or body. |
+| Environment | Path segment | Must be `development`, `staging` or `production`. |
+| Organisation | Claim `titan_organisation_id` | UUID string, lower-cased. Absent or null means the global scope (`organisation_id` NULL). Any other value makes the token unauthenticated (401). |
+| Cohorts | Claim `titan_cohorts` | Array of up to 32 cohort names. Absent means none. Malformed means 401. |
+| Subject | Claim `sub` | Service client identity. Not used for targeting and not logged. |
+
+These claim names are a deployment contract with the token issuer. Logto must add `titan_organisation_id` and `titan_cohorts` to the service tokens for the product audiences. This repository does not configure Logto, and that is not verified here. A token without these claims is still valid, but it reads only global values. The verified context is built by `verifiedContextFromClaims` and passed to `trustVerifiedContext`, which is the only way to create one.
+
+### 4.2 Request and response
+
+- `GET /internal/v1/config/{environment}/{flag_key}`, with no query string. A query string of any kind returns 400 `unexpected_parameter` before the store is touched.
+- Authentication failure: 401 `unauthenticated`. A verified identity whose product is not in `FLAG_PRODUCTS`: 403 `unknown_product`. Neither returns a value.
+- Undeclared key: 404 `undeclared_flag`. Invalid environment or key syntax: 400.
+- Success: 200 `{ "key", "value", "source", "revision" }` with `Cache-Control: no-store`.
+- Store unavailable, timed out, or holding an invalid row: 200 with the declared default and `source: "fallback"` and `revision: null`. It is not an error.
+- Rate limit: the same per-IP limiter as `/v1/access/check`, applied before token verification.
+
+**Deployment requirement.** The endpoint is on the same loopback listener as the access check. The reverse proxy in front of Central must not route `/internal/` or `/v1/admin/` to the public internet. This is a deployment control, not enforced in code.
+
+### 4.3 Product-side contract (other repositories; not verified here)
+
+The Sorted, Supercharged and LMS repositories are not attached to this session. Nothing below has been implemented or tested in those products. It is the contract this repository expects them to meet.
+
+- The product's compiled-in default for each flag must match the Central declaration.
+- A `fallback` response must not be cached. A `default` or non-fallback 200 may be cached for at most 60 seconds.
+- On timeout, non-200, or a value that is not valid for the flag's type, the product uses its compiled-in default. It does not keep an earlier value and does not fail the request.
+- The product must not read a flag it did not declare, and must not send tenant or cohort data.
+
+### Product-side rules (summary of 4.3)
 
 - A product ships with a compiled-in default for every flag it reads. That default must match the Central declaration.
 - If Central is unreachable, times out, returns a non-200 response, or returns a value that is not valid for the flag's type, the product uses its compiled-in default. It does not keep an earlier value and does not fail the request.
@@ -81,10 +115,16 @@ An undeclared flag, or a request that carries a field other than `product`, `env
 - Every change requires: the scope, the **expected revision** the operator last read (0 to create), the new value or targeting, an `actor` and a `reason`. A mismatched expected revision is refused with no write.
 - An organisation override requires `expires_at` in the future. Overrides are for temporary use and expire on their own.
 - A rollback names the history revision to restore. It is recorded as a new revision with `action = 'rollback'`. It does not edit or remove any history row.
-- Who may make a change is not decided by this code. Operator authorisation is a separate control and must be in place before the change path is exposed.
+- **Route**: `POST /v1/admin/flags/change`, served only when `TITAN_OPERATOR_FLAG_CHANGES=1` and the operator plane is configured. Otherwise 404. Off by default.
+- **Authorisation**: the same path as the other admin routes. The bearer token is verified, then `createLogtoOperatorAuthoriser` checks Logto organisation membership and an administrator role at decision time. Denied is 403, and an unavailable authority is 503. The change is not attempted in either case.
+- **Body**: `op` is `set` or `rollback`. Fields: `product`, `environment`, `key`, `organisationId` (UUID or null, the scope the operator is changing, not a tenant from the request), `expectedRevision`, `reason`. A `set` also takes `value`, and optionally `rolloutPercent`, `cohort`, `expiresAt`. A `rollback` takes `toRevision`. Unknown fields are refused, including `actor`.
+- **Actor**: the verified operator subject (`logtoSubject`). It is written to history by the database trigger and cannot be supplied by the client.
+- **Responses**: 200 `{ "status": "changed", "revision" }`. 409 `stale_revision` when `expectedRevision` is not the current revision, with nothing written. 400 for invalid values, targeting or rollback. 404 `undeclared_flag`. 503 `flag_store_unavailable`.
+- **Scope of the organisation field**: this field is accepted on the change path only. It is the operator's choice of scope and is authorised by the operator check. The read path never accepts an organisation from the client.
 
 ## 6. Verification
 
 - Node tests (`packages/control-plane/test/feature-flags.test.mjs`) run against an in-memory store that uses the same commit rule as the database. They cover registry rejection, precedence, expiry, deterministic bucketing, tenant targeting from the verified context, store failure and timeout, invalid stored rows, stale-revision rejection, rollback and history.
 - SQL test (`tests/sql/feature_flags.sql`) runs against PostgreSQL 16. It covers the CHECK constraints, the audit requirements, history immutability, the grants for the trusted writer, and rollback.
-- The in-memory store does not exercise the database. The database behaviour is covered only by the SQL test.
+- `apps/control-api/test/config-read.test.mjs` and `config-admin.test.mjs` cover the read endpoint, the change path, the claim mapping, and a real RS256 token through `createOidcVerifier`. They use an in-memory store with the same commit rule.
+- `apps/control-api/test/feature-flags-postgres.test.mjs` runs the PostgreSQL adapter, the resolver and the read endpoint against a real server. It is skipped unless `TITAN_FLAG_TEST_DATABASE_URL` is set. The URL logs in as `titan_central_app`, a NOINHERIT member of `titan_trusted_reader` and `titan_trusted_writer`, on a database with migrations 0001 to 0009 and 0013. It covers stale and concurrent revisions, override expiry, rollback, history immutability for the writer role, and fallback on an unreachable database.
