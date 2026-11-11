@@ -14,6 +14,10 @@ export type AuthorizeProvisioning=(actor:TrustedActor,command:ProvisioningComman
 export interface LinkCheckInput { command:LinkAssertionCommand; logtoSubject:string; logtoOrganisationId:string; }
 export type VerifyLocalLink=(input:LinkCheckInput)=>Promise<boolean>;
 export type GetCanonicalLogtoId=(type:'identity'|'organisation',uuid:string)=>Promise<string|undefined>;
+/** Thrown when the authorisation policy refuses a command. Carries no detail beyond the refusal. */
+export class ProvisioningForbiddenError extends Error {
+ constructor(){ super('provisioning forbidden'); this.name='ProvisioningForbiddenError'; }
+}
 export class TrustedProvisioningService {
  constructor(private readonly provisioner:CentralProvisioner,private readonly logto:LogtoManagementVerifier,
   private readonly authorize:AuthorizeProvisioning,private readonly resolve:GetCanonicalLogtoId,
@@ -21,7 +25,7 @@ export class TrustedProvisioningService {
  async apply(actor:TrustedActor,context:ProvisioningContext,command:ProvisioningCommand):Promise<'created'|'updated'|'replayed'> {
   if(!actor||actor.operatorAuthorityVerified!==true||!actor.logtoSubject||actor.logtoSubject!==context.actorSubject) throw Error('unverified provisioning actor');
   // Authorize before querying management services or writing SQL. Fail closed by default.
-  if(await this.authorize(actor,command)!==true) throw Error('provisioning forbidden');
+  if(await this.authorize(actor,command)!==true) throw new ProvisioningForbiddenError();
   // An identical retry of an applied resolution is answered without verifying its assertion again: the nonce was spent.
   if(command.kind==='link_review_resolve'&&typeof this.provisioner.wasApplied==='function'&&await this.provisioner.wasApplied(context,command)) return 'replayed';
   switch(command.kind){

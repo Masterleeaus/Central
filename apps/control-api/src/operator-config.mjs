@@ -7,6 +7,7 @@ import {
   createPostgresLinkNonceStore, createPostgresCanonicalResolver,
 } from '../../../packages/control-plane/dist/index.js';
 import { createAdminHandler, createLogtoOperatorAuthoriser, OPERATOR_COMMAND_KINDS } from './admin.mjs';
+import { readOrganisationAccess } from '../../../packages/control-plane/dist/administration.js';
 import { timedFetch } from './metrics.mjs';
 import { createFlagChangeHandler } from './config-admin.mjs';
 
@@ -134,5 +135,6 @@ export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => 
   const authoriseOperator = createLogtoOperatorAuthoriser({ verifier, operatorOrganisationId: operator.organisationId, administrativeRoleIds: operator.roleIds });
   // Provisioning is wired only when a database pool and link key sets are both supplied.
   const provision = pool && linkKeySets && linkKeySets.length > 0 ? createOperatorProvisioning({ pool, logto: verifier, linkKeySets }) : undefined;
-  return createAdminHandler({ verifyToken, authoriseOperator, provision, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
+  const readOrganisation = pool ? (organisationId) => readOrganisationAccess(pool, organisationId) : undefined;
+  return createAdminHandler({ verifyToken, authoriseOperator, provision, readOrganisation, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
 }

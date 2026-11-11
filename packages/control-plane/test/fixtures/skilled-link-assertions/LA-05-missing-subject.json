@@ -1,0 +1,9 @@
+{
+  "name": "missing-subject",
+  "changes": {
+    "request": {
+      "logtoSubject": ""
+    }
+  },
+  "expectedAllowed": false
+}

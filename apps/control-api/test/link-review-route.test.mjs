@@ -125,9 +125,15 @@ test('an unauthenticated resolution is refused with 401 before any authority che
 });
 
 test('a provisioning failure answers 503 without the underlying detail', async () => {
-  const r = await invokeAdmin(body(approve()), { provision: async () => { throw new Error('revision conflict: account link missing or changed at db-host-7'); } });
+  const r = await invokeAdmin(body(approve()), { provision: async () => { throw new Error('database unavailable at db-host-7'); } });
   assert.equal(r.status, 503);
   assert.deepEqual(r.body, { error: 'provisioning_unavailable' });
+});
+
+test('a stale link review returns the shared revision conflict response without database detail', async () => {
+  const r = await invokeAdmin(body(approve()), { provision: async () => { throw new Error('revision conflict: account link missing or changed at db-host-7'); } });
+  assert.equal(r.status, 409);
+  assert.deepEqual(r.body, { error: 'revision_conflict' });
 });
 
 // ---- startup wiring against the real server, with a recording fake pool and a fake Logto ----

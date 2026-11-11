@@ -159,3 +159,23 @@ Each resolution writes one `provisioning_audit` row: request ID, reviewer (`acto
 - Review UI and a review queue listing are not implemented. Reviews are resolved only through `link_review_resolve`.
 - Migrations 0010 to 0013 are not present on this branch; 0014 is applied after 0009, and 0018 after 0014 (0015 is billing events on main).
 - Tests: `packages/control-plane/test/link-assertion.test.mjs` (rejection rules, replay, rotation, key validation), `link-lifecycle.test.mjs` (create, review, relink, unlink, digests), `link-trusted-flow.test.mjs` (verifier behind the trusted service, cross-tenant, cross-product, email-only), and `apps/control-api/test/session-revocation-provisioning.test.mjs` (unlink revokes one application's session). The lifecycle SQL was run against PostgreSQL 16 with migrations 0001 to 0009, 0014 and 0015. Resolution was verified through the built provisioner with real Ed25519 assertions: 37 checks covering approval, relink, stale revision, idempotent retry, rejection, claimed accounts, cross-tenant and non-operator refusal, the resolved-row trigger and the column grants. The existing `tests/sql/rls_two_tenant.sql` passes on the same migrations. Tests for the new behaviour: `packages/control-plane/test/link-review-resolution.test.mjs`, `apps/control-api/test/link-key-config.test.mjs`, `apps/control-api/test/link-review-route.test.mjs`.
+
+## Skilled fixture alignment (issue #71)
+
+Skilled's link-assertion fixtures are copied verbatim into `packages/control-plane/test/fixtures/skilled-link-assertions/` (LA-01 to LA-26, Skilled commit 95935bb). The issue's earlier reference to LA-01 to LA-10 was out of date. `packages/control-plane/test/skilled-link-fixtures.test.mjs` checks each one against this verifier. The canonical file `canonical-signed.json` holds the public key and one signed token per fixture with its expected Central result, for Skilled to check against.
+
+Wire compatibility, checked by that test:
+- Header `{alg: "EdDSA", typ: "titan-link+jwt", kid}` and claims `iss` (`lms`), `aud`, `sub`, `org`, `lu`, `la`, `nonce`, `iat`, `exp`. Skilled's signer and this verifier use the same names and values.
+- Identifier and nonce formats are the same (`^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$` and 22 to 128 base64url characters). Lifetime is an integer from 1 to 300 seconds.
+- Skilled signs with an Ed25519 private key. This verifier takes the matching public key as an OKP JWK.
+
+Outcomes (`OUTCOME` in the test):
+- **Rejected by Central:** LA-05 to LA-08 and LA-15 (identifiers) give `identifier_not_permitted`. LA-14 (wrong local user) gives `account_mismatch`. LA-16 (invalid kid) gives `malformed`. LA-17 to LA-19 (ttl 0, 301, 1.5) give `bad_lifetime`. LA-20 (invalid nonce) gives `malformed`. LA-21 (wrong key) gives `bad_signature`.
+- **Accepted by Central, refused by Skilled before signing:** LA-09 to LA-13 and LA-22 to LA-26 (account, organisation, member and company checks). Central cannot see Skilled's authority state, so a well-formed token that Central's own records match is accepted. Skilled's signing refusals are the only control for these cases. **Owner decision:** whether Central should require more evidence for product-side authority, or accept the product signature as sufficient. This is not changed here.
+
+Differences to resolve:
+1. **companyId.** Skilled uses an internal `companyId` in its authority checks. It is not on the wire and not a Central concept. Central identifies the organisation only by `org` (the Logto organisation ID). Skilled must keep its mapping from `org` to `companyId` on its own side.
+2. **Skilled has no verifier.** Its test only checks its own signatures. Checking Skilled's signer against the canonical file requires a Skilled-side test that signs the same claims and compares them to `canonical-signed.json`. That is not done here, because Skilled was not edited.
+3. **Key configuration.** The `lms` key set in Central must include kid `skilled-key-2026` (or whichever kid Skilled uses in production) with the public key that matches Skilled's signing key. Keys are operator-provisioned. No key is committed.
+
+The test signs with a fixed test key, derived from a hash of a fixed label. It is not a secret. `WRITE_CANONICAL=1 node --test test/skilled-link-fixtures.test.mjs` regenerates the canonical file. Without that variable, the test fails if the committed file differs from the generator.

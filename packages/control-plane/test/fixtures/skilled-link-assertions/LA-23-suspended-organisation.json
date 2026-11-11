@@ -1,0 +1,7 @@
+{
+  "name": "suspended-organisation",
+  "changes": {
+    "organisationAllowed": false
+  },
+  "expectedAllowed": false
+}
