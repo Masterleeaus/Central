@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CentralAccessService, makeOidcRedirect, allApplications, linkFromVerifiedAssertion } from '../dist/index.js';
+import { CentralAccessService, makeOidcRedirect, allApplications } from '../dist/index.js';
 const now='2026-11-02T12:00:00Z';
 const fixture=()=>({
  identity:{id:'ti-1',logtoSubject:'logto-1',status:'active'},
@@ -39,5 +39,4 @@ const denied=[
 ];
 for (const [name,mutate,request,expected] of denied) test(name,async()=>assert.deepEqual(await setup(mutate).authorise(req(request)),{allowed:false,reason:expected}));
 test('OIDC registrations cover all three apps with unique client env keys',()=>{const apps=allApplications();assert.deepEqual(apps.map(a=>a.id),['field','desk','academy']);assert.equal(new Set(apps.map(a=>a.oidcClientIdEnv)).size,3);});
-test('redirect URI rejects insecure origins',()=>{assert.equal(makeOidcRedirect('https://field.titanzero.io/','field'),'https://field.titanzero.io/auth/callback');for(const url of ['http://field.titanzero.io/','https://field.titanzero.io/bad','https://user:secret@field.titanzero.io/'])assert.throws(()=>makeOidcRedirect(url,'field'));});
-test('signed/verified local link assertion must be recent',()=>{const a={identityId:'ti-1',organisationId:'org-1',applicationId:'field',localUserId:'user-1',localAccountId:'account-1',verifiedBy:'field-api',assertedAt:now};assert.equal(linkFromVerifiedAssertion('link-1',a,now).status,'verified');assert.throws(()=>linkFromVerifiedAssertion('link-1',{...a,assertedAt:'2026-01-01T00:00:00Z'},now));});
+test('redirect URI rejects insecure origins',()=>{assert.equal(makeOidcRedirect('https://field.titanzero.io/','field'),'https://field.titanzero.io/auth/titan/field/callback');for(const url of ['http://field.titanzero.io/','https://field.titanzero.io/bad','https://user:secret@field.titanzero.io/'])assert.throws(()=>makeOidcRedirect(url,'field'));});

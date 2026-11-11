@@ -4,7 +4,7 @@ Status: Logto is the upstream identity service. Its source is **not vendored** i
 
 ## What the audit recorded
 
-Source: `PASS01_SOURCE_AUDIT.md`, `PASS15_DEPLOYMENT_RUNBOOK.md`.
+Source: `docs/records/pass/PASS01_SOURCE_AUDIT.md`, `docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md`.
 
 | Item | Recorded value |
 | --- | --- |
@@ -28,13 +28,19 @@ Do this before any production maintenance. Record each result in the table below
 
 | Field | Value |
 | --- | --- |
-| Release tag | _not yet recorded_ |
-| Commit SHA (full) | _not yet recorded_ |
-| Verified by / date | _not yet recorded_ |
+| Release tag | `v1.45.0` |
+| Commit SHA (full) | `94c088f9e4f87ba93df1f72ed20edf16ce364f61` |
+| Verified by / date | Tag resolved from `logto-io/logto` by a shallow clone into a scratch directory outside this repository, 2026-11-11. `packages/core/package.json` at that commit reports `1.45.0`. Tree comparison not run (see below). |
+
+### Tree comparison against the vendored tree
+
+Result: **not run. The vendored Logto tree is absent.** This repository has no vendored Logto tree: no `logto-master/` directory and no tracked files under it. The step 3 comparison therefore has no input, and no differing paths are listed. The Logto-named files in the repository (`packages/control-plane/src/logto-*.ts`, `tools/verify_logto_source.py`) are Titan code or tooling that checks a source ZIP, not upstream source.
+
+The pinned commit above is the only result recorded. Re-run the comparison when a vendored tree exists at a path that this document names.
 
 ## PostgreSQL requirement
 
-- The live server runs PostgreSQL **13.23**. `PASS15_DEPLOYMENT_RUNBOOK.md` treats it as **not a supported foundation** for current Logto. Do not run Logto or Titan Central against it, and do not migrate it in place.
+- The live server runs PostgreSQL **13.23**. `docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md` treats it as **not a supported foundation** for current Logto. Do not run Logto or Titan Central against it, and do not migrate it in place.
 - The example Compose file in the upstream tree uses `postgres:17-alpine`. It is marked demonstration only. Its version alone is not a proven minimum.
 - The exact minimum supported version must be confirmed against the upstream documentation and database constraints for the pinned release. Then test Logto migrations in an isolated instance.
 - Logto and `titan_central` must use separate databases with restricted service roles (ADR-003). No cross-database foreign keys.

@@ -1,0 +1,9 @@
+{
+  "name": "short-subject",
+  "changes": {
+    "request": {
+      "logtoSubject": "abc"
+    }
+  },
+  "expectedAllowed": false
+}

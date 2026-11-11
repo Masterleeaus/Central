@@ -58,6 +58,8 @@ jobs:
       - name: control-plane tests
         working-directory: packages/control-plane
         run: node --test test/*.test.mjs
+      - name: configuration engine tests
+        run: node --test packages/config-engine/test/*.test.mjs
       - name: control-api tests
         working-directory: apps/control-api
         run: node --test test/*.test.mjs
@@ -92,6 +94,13 @@ jobs:
           python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["ready"] is False' "$RUNNER_TEMP/preflight.json"
 
       # Database: fresh schema, idempotent re-run, then two-tenant RLS. Any cross-tenant success fails.
+      # Production provisions this NOINHERIT service login before applying migrations.
+      # CI must mirror that prerequisite; later migrations grant it narrowly scoped roles.
+      - name: Provision Central service login for migration grants
+        run: |
+          psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" <<'SQL'
+          CREATE ROLE titan_central_app LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
+          SQL
       - name: Apply migrations to a fresh database
         run: python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL"
       - name: Re-running migrations applies nothing
@@ -107,6 +116,31 @@ jobs:
 
       - name: Two-tenant RLS tests
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$TITAN_CI_DATABASE_URL"
+      - name: Onboarding state machine tests (migration 0017)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/onboarding_states.sql "$TITAN_CI_DATABASE_URL"
+      - name: Transactional outbox tests (SQL, real PostgreSQL)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/outbox.sql "$TITAN_CI_DATABASE_URL"
+      - name: Session revocation RLS tests (two organisations)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/session_revocation_rls.sql "$TITAN_CI_DATABASE_URL"
+      # Login-role path: the service login role (NOINHERIT, member of the trusted roles) runs the
+      # session-revocation and OIDC-state statements and the access check through SET LOCAL ROLE.
+      # TITAN_REQUIRE_DB_TESTS makes a missing psql or database URL fail the job instead of skipping.
+      - name: Login-role path tests (SQL, real PostgreSQL)
+        env:
+          TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
+          TITAN_REQUIRE_DB_TESTS: '1'
+        run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
+
+
+      # The draft shared-schema chain is a separate clean-install path until #43 reconciles it.
+      - name: Shared company core clean-install checks
+        env:
+          PGPASSWORD: ci-only-throwaway
+        run: |
+          createdb -h localhost -U postgres titan_shared_core_ci
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d titan_shared_core_ci -f database/migrations/0001_shared_company_core.sql
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d titan_shared_core_ci -f tests/sql/shared_company_core.sql
+
 
       - name: Browser-session role isolation and atomic deletion
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_browser_sessions.sql "$TITAN_CI_DATABASE_URL"
@@ -351,3 +385,32 @@ jobs:
             echo "SECURITY FAILURE: untrusted key was accepted"
             exit 1
           fi
+
+  # Launcher (apps/launcher): node:test suite plus the headless-browser smoke test.
+  # Plain Node, no lockfile, so no npm ci. Playwright is installed into $RUNNER_TEMP and
+  # found through NODE_PATH; without it the smoke test would skip silently.
+  launcher:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Playwright test dependency
+        run: npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+
+      - name: Launcher test suite
+        working-directory: apps/launcher
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+        run: npm test
+
+      # The smoke test calls t.skip() when it cannot launch Chromium, so fail if it skipped here.
+      - name: Launcher smoke test (headless, 390px and 320px)
+        working-directory: apps/launcher
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+          LAUNCHER_SCREENSHOT_PATH: ${{ runner.temp }}/titan-launcher-mobile.png
+        run: |
+          out=$(node --test test/smoke.playwright.test.mjs 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -Eq '^[[:space:]]*(#|ℹ)?[[:space:]]*skipped[[:space:]]+0[[:space:]]*$' || { echo "launcher smoke test was skipped"; exit 1; }

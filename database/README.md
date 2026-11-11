@@ -1,10 +1,11 @@
 # Shared Titan PostgreSQL database
 
-This is the canonical database contract for Titan Central, Sorted,
+This defines the target shared database contract for Titan Central, Sorted,
 Supercharged, and LMS. The LMS source repository is `Masterleeaus/Skilled`.
 PostgreSQL is the common database engine. This directory begins the new
-clean-install migration chain; the old `/migrations` SQL remains
-historical draft material until it is reconciled and promoted.
+clean-install migration chain. The existing `/migrations` chain remains the
+active legacy source and continues to be tested separately; it must not be
+removed or applied together with this clean-install chain.
 
 ## Canonical tenant rule
 

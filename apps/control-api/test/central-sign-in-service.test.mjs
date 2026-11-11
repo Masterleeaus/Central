@@ -19,7 +19,7 @@ function fixture(){
     verifyIdToken:async()=>({sub:'subject-123',nonce:storedNonce,iss:'https://issuer.example',aud:'central-client',exp:Math.floor(NOW/1000)+120}),
     listEligibleCompanies:async identity=>{trace.push(['eligible',identity]);return [{companyId:ORG,authorised:true}]},
     recheckCompany:async identity=>{trace.push(['recheck',identity]);return true},
-    fetcher:async()=>({ok:true,json:async()=>({id_token:'signed-token-placeholder',access_token:'access-token-placeholder',token_type:'Bearer'})}),
+    fetcher:async(url)=>String(url).includes('.well-known')?{ok:true,text:async()=>JSON.stringify({issuer:'https://issuer.example',authorization_endpoint:'https://issuer.example/authorize',token_endpoint:'https://issuer.example/token'})}:{ok:true,json:async()=>({id_token:'signed-token-placeholder',access_token:'access-token-placeholder',token_type:'Bearer'})},
     stateStore,clock:()=>NOW
   });
   return {service,state,trace};
@@ -86,7 +86,7 @@ test('default company authority performs restricted discovery and current RLS me
     redirectUri:'https://central.example/auth/central/callback',
     verifyIdToken:async()=>({sub:'subject-123',nonce,iss:'https://issuer.example',aud:'central-client',exp:Math.floor(NOW/1000)+120}),
     stateStore:{async save(key,value){state.set(key,value);nonce=value.nonce},async consume(key){const record=state.get(key);state.delete(key);return record??null}},
-    fetcher:async()=>({ok:true,json:async()=>({id_token:'id-token',access_token:'access-token',token_type:'Bearer'})}),
+    fetcher:async(url)=>String(url).includes('.well-known')?{ok:true,text:async()=>JSON.stringify({issuer:'https://issuer.example',authorization_endpoint:'https://issuer.example/authorize',token_endpoint:'https://issuer.example/token'})}:{ok:true,json:async()=>({id_token:'id-token',access_token:'access-token',token_type:'Bearer'})},
     getCompanyName:async()=> 'Verified Company',clock:()=>NOW
   });
   const begin=response();await service.handler({method:'GET',url:'/auth/central/start',headers:{}},begin);
@@ -125,7 +125,7 @@ test('multi-company OIDC callback hands off to one-use selection and issues sess
     recheckCompany:async record=>{trace.push(['recheck',record]);return true},
     stateStore:{async save(key,value){state.set(key,value);nonce=value.nonce},async consume(key){const record=state.get(key);state.delete(key);return record??null}},
     selectionStore:{async save(key,value){choices.set(key,value)},async consume(key){const record=choices.get(key);choices.delete(key);return record??null}},
-    fetcher:async()=>({ok:true,json:async()=>({id_token:'signed-token',access_token:'access-token',token_type:'Bearer'})}),
+    fetcher:async(url)=>String(url).includes('.well-known')?{ok:true,text:async()=>JSON.stringify({issuer:'https://issuer.example',authorization_endpoint:'https://issuer.example/authorize',token_endpoint:'https://issuer.example/token'})}:{ok:true,json:async()=>({id_token:'signed-token',access_token:'access-token',token_type:'Bearer'})},
     clock:()=>NOW
   });
   const start=response();await service.handler({method:'GET',url:'/auth/central/start',headers:{}},start);
@@ -170,7 +170,7 @@ test('multi-company handshake propagates original OIDC company eligibility to on
   recheckCompany:async()=>true,
   stateStore:{save:async(k,v)=>{state.set(k,v);nonce=v.nonce},consume:async k=>{const v=state.get(k);state.delete(k);return v}},
   selectionStore:{save:async(k,v)=>choices.set(k,v),consume:async k=>{const v=choices.get(k);choices.delete(k);return v}},
-  fetcher:async()=>({ok:true,json:async()=>({id_token:'test',access_token:'test',token_type:'Bearer'})}),
+  fetcher:async(url)=>String(url).includes('.well-known')?{ok:true,text:async()=>JSON.stringify({issuer:'https://issuer.example',authorization_endpoint:'https://issuer.example/authorize',token_endpoint:'https://issuer.example/token'})}:{ok:true,json:async()=>({id_token:'test',access_token:'test',token_type:'Bearer'})},
   clock:()=>NOW
  });
  const start=response();await service.handler({method:'GET',url:'/auth/central/start',headers:{}},start);

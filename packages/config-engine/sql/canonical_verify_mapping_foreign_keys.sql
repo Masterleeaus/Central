@@ -1,0 +1,2 @@
+\set ON_ERROR_STOP on
+DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='titan.application_company_links'::regclass AND confrelid='titan.companies'::regclass AND contype='f') OR NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='titan.application_user_links'::regclass AND confrelid='titan.identities'::regclass AND contype='f') THEN RAISE EXCEPTION 'mapping FK missing';END IF; END $$;

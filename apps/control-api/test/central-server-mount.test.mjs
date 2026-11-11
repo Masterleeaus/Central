@@ -19,6 +19,7 @@ async function availablePort(){
 function fakeDatabase(){
   const stats={ended:0};
   class Pool{
+    async query(){return {rows:[]}}
     async connect(){return {async query(){return {rows:[]}},release(){}}}
     async end(){stats.ended++}
   }
@@ -40,6 +41,11 @@ test('actual HTTP server delegates the browser login path to an explicitly confi
     assert.equal(result.status,200);
     assert.equal(await result.text(),'browser router mounted');
     assert.equal(created,1);assert.equal(handled,1);
+    for(const [path,status] of [['/healthz',200],['/metrics',200],['/v1/access/check',401],['/internal/v1/config/flags',404],['/v1/config/evaluate',404]]){
+      const retained=await fetch('http://127.0.0.1:'+port+path);
+      assert.equal(retained.status,status,path);
+      await retained.text();
+    }
   }finally{await service.close()}
   assert.equal(db.stats.ended,1);
 });
@@ -109,4 +115,18 @@ test('server enforces finite connection and HTTP header/request deadlines',async
   assert.equal(service.server.requestTimeout,15000);
   assert.equal(service.server.keepAliveTimeout,5000);
  }finally{await service.close()}
+});
+
+test('browser factory failure closes both pools even if the legacy close rejects',async()=>{
+ const ended=[];
+ class Pool{
+  constructor(opts){this.name=opts.connectionString}
+  async connect(){return {async query(){return {rows:[{companies:'titan.companies',links:'titan.central_legacy_company_links',resolver:'titan.resolve_verified_central_company(uuid,text)'}]}},release(){}}}
+  async end(){ended.push(this.name);if(this.name===env.TITAN_CENTRAL_DATABASE_URL)throw Error('close failure')}
+ }
+ await assert.rejects(startCentralService({
+  env:{...env,TITAN_CENTRAL_BROWSER_ENABLED:'1',TITAN_CENTRAL_SHARED_DATABASE_URL:'postgresql://unit-test.example/titan_shared'},
+  loadPg:async()=>({Pool}),verifyToken:async()=>({}),createBrowserRouter(){throw Error('browser factory failed')}
+ }),/browser factory failed/);
+ assert.equal(ended.length,2);assert.equal(new Set(ended).size,2);
 });

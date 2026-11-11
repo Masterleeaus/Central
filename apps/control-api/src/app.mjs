@@ -1,4 +1,5 @@
-import { CentralAccessService, withCentralReadSnapshot } from '../../../packages/control-plane/dist/index.js';
+import { CentralAccessService, withCentralReadSnapshot, recordActivityInOwnTransaction } from '../../../packages/control-plane/dist/index.js';
+import { randomUUID } from 'node:crypto';
 import { createRateLimiter } from './rate-limit.mjs';
 import { createConcurrencyLimiter } from './concurrency-limit.mjs';
 
@@ -19,9 +20,43 @@ function perApplicationAudiences(audiences) {
   if (values.some(v=>typeof v!=='string'||v.length===0||v.length>256) || new Set(values).size!==3) throw new Error('per-application audiences required');
   return Object.freeze(map);
 }
+/** Access decisions in the activity history (issue #16, on the #36 recorder).
+ * Every allow and deny from CentralAccessService.authorise is written as one titan.activity_events row.
+ * Stored: outcome, requested application and action, decision reason code, role (allow only), HTTP status.
+ * Not stored: the bearer token, the Logto subject (the actor is the Central access check, not the caller),
+ * raw error text. The recorder redacts the detail again before insert and refuses anything secret-shaped.
+ *
+ * Failure policy for a recorder outage (documented in docs/RETENTION.md, section 6):
+ *  - Fail open for the response. A recording failure never changes the access response; the decision is
+ *    returned exactly as before. Failing closed would turn an audit outage into an access outage.
+ *  - Fail visible in the logs. Each failure writes one `activity_record_failed` line with the error class only.
+ *    The line is the only record of a decision whose row was not written.
+ *  - Bounded wait. The response waits at most RECORD_TIMEOUT_MS for the recorder, then goes out. A timed-out
+ *    insert may still commit later; it is then logged as failed as well.
+ *  - No retry and no in-memory queue. Nothing is buffered across requests, so a restart loses nothing that
+ *    was not already written. */
+export const RECORD_TIMEOUT_MS = 2000;
+export function accessActivityInput({organisationId, applicationId, action, decision}) {
+  const allowed = decision.allowed === true;
+  return {
+    organisationId,
+    actorKind: 'service',
+    actorId: 'central-access-check',
+    action: 'access.check',
+    targetType: 'organisation',
+    targetId: organisationId,
+    sourceProduct: 'central',
+    outcome: allowed ? 'success' : 'denied',
+    correlationId: `access-${randomUUID()}`,
+    detail: allowed
+      ? {decision:'allow', application:applicationId, action, reason:'allowed', role:decision.role, status:200}
+      : {decision:'deny', application:applicationId, action, reason:decision.reason, status:403},
+  };
+}
+
 /** No administrative mutations or user-controlled SQL. Organisation/app/action are the only request inputs.
  * logger(event, fields) receives structured decision fields only: never tokens or subject values. */
-export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, globalLogoutHandler, logger=()=>{}, healthQuery, rateLimits=DEFAULT_RATE_LIMITS, concurrencyLimits={perKey:8,globalLimit:96}, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
+export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, supportHandler, globalLogoutHandler, logoutLandingHandler, serviceDecisionHandler, configHandler, configEvaluationHandler, launcherSessionHandler, logger=()=>{}, healthQuery, activityRecorder, rateLimits=DEFAULT_RATE_LIMITS, concurrencyLimits={perKey:8,globalLimit:96}, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
   if (!pool || !verifyToken || !issuer) throw new Error('missing Central API dependencies');
   const trust={expectedIssuer:issuer,audienceByApplication:perApplicationAudiences(audiences)};
   const ipLimiter=createRateLimiter(rateLimits.ip);
@@ -29,6 +64,12 @@ export function createCentralHandler({ pool, verifyToken, issuer, audiences, adm
   const concurrent=createConcurrencyLimiter(concurrencyLimits);
   const audit=(event,fields={})=>{try{logger(event,fields);}catch{/* logging never alters the outcome */}};
   const runHealthQuery=healthQuery??((sql)=>pool.query(sql));
+  const recordActivity=activityRecorder??((input)=>recordActivityInOwnTransaction(pool,input));
+  // Never throws: a recording failure is logged and the caller's response goes out unchanged.
+  const recordDecision=async (input)=>{
+    try {await withTimeout(Promise.resolve().then(()=>recordActivity(input)),RECORD_TIMEOUT_MS);}
+    catch (error) {audit('activity_record_failed',{error_class:error?.message==='timeout'?'RecordTimeout':(error?.name??'Error'),decision:input.detail.decision,application:input.detail.application});}
+  };
   const route=async (req,res)=>{
     let url;
     try {url=new URL(req.url??'/', 'http://localhost');}catch{return respond(res,400,{error:'invalid_url'});}
@@ -37,7 +78,28 @@ export function createCentralHandler({ pool, verifyToken, issuer, audiences, adm
       try {await withTimeout(Promise.resolve().then(()=>runHealthQuery('SELECT 1')),2000);return respond(res,200,{status:'ok'});}
       catch {audit('healthz_database_unavailable');return respond(res,503,{status:'unavailable'});}
     }
+    if (serviceDecisionHandler && await serviceDecisionHandler(req,res)) return;
+    if (launcherSessionHandler && await launcherSessionHandler(req,res)) return;
     if (globalLogoutHandler && await globalLogoutHandler(req,res)) return;
+    // Server-to-server config read (docs/CONFIG.md section 4). Off unless configHandler is given. Shares the per-IP limiter.
+    if (pathname.startsWith('/internal/v1/config/')) {
+      if (!configHandler) return respond(res,404,{error:'not_found'});
+      const configIp=ipLimiter.take(clientIp(req));
+      if (!configIp.allowed) {audit('config_rate_limited',{scope:'ip'});return respond(res,429,{error:'rate_limited'},{'retry-after':String(configIp.retryAfterSeconds)});}
+      return configHandler(req,res);
+    }
+    if (pathname.startsWith('/v1/support/')) {
+      // Support console (issue #39). Opt-in: unmounted unless a support handler is injected.
+      if(!supportHandler) return respond(res,404,{error:'not_found'});
+      if(await supportHandler(req,res)) return;
+      return respond(res,404,{error:'not_found'});
+    }
+    if (logoutLandingHandler && await logoutLandingHandler(req,res)) return;
+    if (pathname.startsWith('/v1/config/')) {
+      if (!configEvaluationHandler) return respond(res,404,{error:'not_found'});
+      if (await configEvaluationHandler(req,res)) return;
+      return respond(res,404,{error:'not_found'});
+    }
     if (pathname.startsWith('/v1/admin/')) {
       if(!adminHandler) return respond(res,404,{error:'not_found'});
       if(await adminHandler(req,res)) return;
@@ -63,9 +125,11 @@ export function createCentralHandler({ pool, verifyToken, issuer, audiences, adm
       const decision=await withCentralReadSnapshot(pool, organisationId, repo=>new CentralAccessService(repo,trust).authorise({principal,organisationId,applicationId,action}));
       if (!decision.allowed) {
         audit('access_decision',{decision:'deny',application:applicationId,action,organisation_id:organisationId,reason:decision.reason,status:403});
+        await recordDecision(accessActivityInput({organisationId,applicationId,action,decision}));
         return respond(res,403,{allowed:false,role:null,reason:decision.reason});
       }
       audit('access_decision',{decision:'allow',application:applicationId,action,organisation_id:organisationId,role:decision.role,status:200});
+      await recordDecision(accessActivityInput({organisationId,applicationId,action,decision}));
       // Response is deliberately limited to allowed, role and a reason code. Identity IDs and revisions stay server-side.
       return respond(res,200,{allowed:true,role:decision.role,reason:'allowed'});
     } catch (e) {audit('access_error',{error_class:e?.name});return respond(res,503,{error:'access_unavailable'});}

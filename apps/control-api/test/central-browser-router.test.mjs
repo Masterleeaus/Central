@@ -45,7 +45,7 @@ function setup({concurrencyLimits,delaySave}={}){
     stateStore:{async save(key,value){if(delaySave)await delaySave();loginState.set(key,value);nonce=value.nonce},async consume(key){const found=loginState.get(key);loginState.delete(key);return found??null}},
     selectionStore:{async save(key,value){selectionState.set(key,value)},async consume(key){const found=selectionState.get(key);selectionState.delete(key);return found??null}},
     verifyIdToken:async()=>({iss:env.TITAN_OIDC_ISSUER,aud:env.TITAN_CENTRAL_BROWSER_CLIENT_ID,sub:'subject-1',nonce,exp:Math.floor(Date.now()/1000)+300,iat:Math.floor(Date.now()/1000)}),
-    fetcher:async()=>({ok:true,json:async()=>({id_token:'signed-token-mocked',access_token:'access-token',token_type:'Bearer'})})
+    fetcher:async(url)=>String(url).includes('.well-known')?{ok:true,text:async()=>JSON.stringify({issuer:env.TITAN_OIDC_ISSUER,authorization_endpoint:'https://issuer.example/authorize',token_endpoint:'https://issuer.example/token'})}:{ok:true,json:async()=>({id_token:'signed-token-mocked',access_token:'access-token',token_type:'Bearer'})}
   });
   return {router,calls,sessions};
 }

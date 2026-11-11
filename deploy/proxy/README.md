@@ -56,6 +56,26 @@ Menu names differ between DirectAdmin versions. Check yours before changing anyt
   traffic together. The proxy's per-IP limit is the only per-client limit. Do not change `clientIp` to read a header
   without a separate trust review. This is recorded in the app test `test/proxy-client-ip.test.mjs`.
 
+## 3a. Private paths (issue #74)
+
+These paths are served by the same Node process as the public routes, so the proxy is the only barrier:
+
+- `/v1/admin/` (operator API)
+- `/metrics` (Prometheus text; `apps/control-api/src/metrics.mjs`)
+- `/internal/` (any future internal surface)
+
+The templates deny each one with a 404 and never proxy it: nginx `location ^~ /metrics`, `location ^~ /internal/`
+and `location ^~ /v1/admin/` with `return 404`; Apache `RedirectMatch 404` for each. Only the explicit public
+routes are proxied, not a catch-all. Two checks enforce this:
+
+- `python3 -I deploy/proxy/validate_templates.py` fails if a proxy location or `ProxyPass` matches any private path,
+  or if a deny is missing for one (offline, structural only).
+- `deploy/proxy/live_check.py` (read-only, run from OUTSIDE the host after the templates are applied) confirms the
+  live responses, see section 4a. It sends unauthenticated GETs only and prints no response bodies.
+
+Status: these rules are in the repository only. They are NOT applied on the host. Owner step: apply the templates
+(section 2) and run the live check; the check must pass before the rule counts as in effect.
+
 ## 4. Verify after applying
 
 Run these from the host itself (loopback), and from an external client where noted.
@@ -73,6 +93,17 @@ Forwarding header overwrite (the app's response should not depend on the client 
 Loopback check (the API must not be reachable directly):
 
     curl -sS -m 3 http://__CENTRAL_HOST_PUBLIC_IP__:__CENTRAL_PORT__/healthz   # expect connection refused or timeout
+
+## 4a. Live check of private-path denial (issue #74)
+
+Run from an external machine (not the host), after applying the templates:
+
+    python3 -I deploy/proxy/live_check.py --host __CENTRAL_HOST__ --port __CENTRAL_PORT__ --public-ip __CENTRAL_HOST_PUBLIC_IP__
+
+Expected: every check PASS (six public checks, plus the node-port check when `--port` and `--public-ip` are given). `/v1/admin/provision`, `/v1/admin/`, `/metrics`, `/metrics/x` and `/internal/` return 404.
+`/v1/access/check` returns 401. The node port is unreachable from outside. The script exits 0 only when every check
+passes. Any FAIL line names the URL and the actual status. Do not paste response bodies into tickets. The script
+never prints them.
 
 Burst test (from one external client), expecting 429 once the limit is exceeded:
 
