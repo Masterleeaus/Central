@@ -153,6 +153,9 @@ jobs:
       - name: Verify Scheduled shared entitlement and account-link registration
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_scheduled_product_registration.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
 
+      - name: Verify Scheduled cross-company RLS isolation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_scheduled_rls.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
       - name: Verify canonical two-company isolation and links
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_rls.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
 
