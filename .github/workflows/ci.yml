@@ -106,3 +106,34 @@ jobs:
           TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
           TITAN_REQUIRE_DB_TESTS: '1'
         run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
+
+  # Launcher (apps/launcher): node:test suite plus the headless-browser smoke test.
+  # Plain Node, no lockfile, so no npm ci. Playwright is installed into $RUNNER_TEMP and
+  # found through NODE_PATH; without it the smoke test would skip silently.
+  launcher:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4 # major-version pin only
+      - uses: actions/setup-node@v4 # major-version pin only
+        with:
+          node-version: 22
+
+      - name: Install Playwright and Chromium for the launcher smoke test
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Launcher test suite
+        working-directory: apps/launcher
+        run: npm test
+
+      # The smoke test calls t.skip() when it cannot launch Chromium, so fail if it skipped here.
+      - name: Launcher smoke test (headless, 390px and 320px)
+        working-directory: apps/launcher
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+          LAUNCHER_SCREENSHOT_PATH: ${{ runner.temp }}/titan-launcher-mobile.png
+        run: |
+          out=$(node --test test/smoke.playwright.test.mjs 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -q '^# skipped 0$' || { echo "launcher smoke test was skipped"; exit 1; }
