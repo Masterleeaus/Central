@@ -49,17 +49,17 @@ BEGIN
 END $$;
 -- A malformed tenant selector must fail closed for every Scheduled table.
 SELECT set_config('titan.company_id','not-a-uuid',true);
-DO $
+DO $rls$
 DECLARE table_name text; row_count integer;
 BEGIN
  FOREACH table_name IN ARRAY ARRAY['application_entitlements','application_company_links','application_user_links'] LOOP
   EXECUTE format('SELECT count(*) FROM titan.%I WHERE application_id = %L',table_name,'scheduled') INTO row_count;
   IF row_count<>0 THEN RAISE EXCEPTION 'Malformed Scheduled scope leaked % rows from %',row_count,table_name; END IF;
  END LOOP;
-END $;
+END $rls$;
 -- The read-only role must not be able to mutate Scheduled registration records.
 SELECT set_config('titan.company_id','00000000-0000-4000-8000-000000000741',true);
-DO $
+DO $rls$
 DECLARE table_name text; denied boolean;
 BEGIN
  FOREACH table_name IN ARRAY ARRAY['application_entitlements','application_company_links','application_user_links'] LOOP
@@ -70,7 +70,7 @@ BEGIN
   END;
   IF NOT denied THEN RAISE EXCEPTION 'Scheduled reader can delete from %',table_name; END IF;
  END LOOP;
-END $;
+END $rls$;
 RESET ROLE;
 ROLLBACK;
 \echo Scheduled tenant isolation passed
