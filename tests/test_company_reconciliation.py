@@ -1,0 +1,174 @@
+"""Safe, read-only cross-database reconciliation regression tests."""
+import importlib.util
+import unittest
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[1]
+spec=importlib.util.spec_from_file_location('audit',ROOT/'tools/audit_company_reconciliation.py')
+audit=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(audit)
+A='00000000-0000-4000-8000-000000000001'
+B='00000000-0000-4000-8000-000000000002'
+I='00000000-0000-4000-8000-000000000101'
+J='00000000-0000-4000-8000-000000000201'
+def source():
+    return {
+      'companies':[{'id':A,'logto_organisation_id':'org-a','state':'active'}],
+      'identities':[{'id':I,'logto_subject':'person-a','state':'active'}],
+      'memberships':[{'identity_id':I,'organisation_id':A,'role':'owner','state':'active','expires_at':None}],
+      'entitlements':[{'organisation_id':A,'application_id':'field','state':'active','expires_at':None,'features':[]}],
+      'links':[{'identity_id':I,'organisation_id':A,'application_id':'field','state':'verified','local_user_id':'user-a'}]}
+def target():
+    return {
+      'companies':[{'id':B,'status':'active'}],
+      'identities':[{'id':J,'logto_subject':'person-a','status':'active'}],
+      'mappings':[{'legacy_organisation_id':A,'company_id':B,'logto_organisation_id':'org-a','status':'verified','verified_at':'2026-01-01'}],
+      'memberships':[{'identity_id':J,'company_id':B,'role':'owner','status':'active','expires_at':None}],
+      'entitlements':[{'company_id':B,'application_id':'sorted','status':'active','expires_at':None,'features':[]}],
+      'links':[{'identity_id':J,'company_id':B,'application_id':'sorted','status':'verified','local_user_id':'user-a'}]}
+class AuditTests(unittest.TestCase):
+    def test_complete_verified_mappings_have_no_compared_discrepancies(self):
+        r=audit.reconcile(source(),target())
+        self.assertEqual(r['blocker_count'],0)
+        self.assertFalse(r['migration_authorised'])
+        self.assertFalse(r['snapshots_atomic_across_databases'])
+        self.assertEqual(r['row_counts']['legacy']['memberships'],1)
+        self.assertNotIn('person-a',str(r))
+        self.assertNotIn(A,str(r))
+    def test_no_mapping_blocks_company_and_access_reconciliation(self):
+        c=target();c['mappings']=[]
+        r=audit.reconcile(source(),c)
+        self.assertEqual(r['blockers']['unmapped_legacy_company'],1)
+        self.assertEqual(r['blockers']['unresolvable_membership'],1)
+        self.assertEqual(r['blockers']['unresolvable_entitlement'],1)
+        self.assertEqual(r['blockers']['unresolvable_user_link'],1)
+    def test_pending_mapping_does_not_count_as_approved(self):
+        c=target();c['mappings'][0]['status']='pending';c['mappings'][0]['verified_at']=None
+        r=audit.reconcile(source(),c)
+        self.assertEqual(r['blockers']['unverified_company_mapping'],1)
+    def test_wrong_logto_identity_or_company_pair_detected(self):
+        c=target()
+        c['mappings'][0]['logto_organisation_id']='spoof'
+        c['identities'][0]['logto_subject']='imposter'
+        r=audit.reconcile(source(),c)
+        self.assertEqual(r['blockers']['logto_organisation_mismatch'],1)
+        self.assertEqual(r['blockers']['missing_canonical_identity'],1)
+        self.assertNotIn('imposter',str(r))
+    def test_role_grant_link_state_and_user_mismatch_detected(self):
+        c=target()
+        c['memberships'][0]['role']='learner'
+        c['entitlements'][0]['status']='paused'
+        c['links'][0]['local_user_id']='other-user'
+        r=audit.reconcile(source(),c)
+        self.assertEqual(r['blockers']['membership_access_mismatch'],1)
+        self.assertEqual(r['blockers']['entitlement_status_mismatch'],1)
+        self.assertEqual(r['blockers']['user_link_mismatch'],1)
+    def test_sql_snapshot_is_bounded_explicitly_read_only_and_sanitised(self):
+        from unittest.mock import patch
+        class Result:returncode=0;stdout='{"id":"abc"}\n';stderr=''
+        with patch.object(audit.subprocess,'run',return_value=Result()) as run:
+            rows=audit.query_snapshot('postgresql://test@localhost:5432/legacy',audit.LEGACY['companies'])
+        self.assertEqual(rows,[{'id':'abc'}])
+        script=run.call_args.kwargs['input']
+        self.assertIn('ISOLATION LEVEL REPEATABLE READ READ ONLY',script)
+        self.assertIn('LIMIT 10001',script)
+        self.assertIn('ROLLBACK;',script)
+    def test_failing_psql_never_emits_credentials(self):
+        from unittest.mock import patch
+        class Result:returncode=1;stdout='';stderr='FATAL secret_password'
+        with patch.object(audit.subprocess,'run',return_value=Result()):
+            with self.assertRaisesRegex(RuntimeError,'snapshot failed') as error:
+                audit.query_snapshot('postgresql://user:secret_password@localhost:5432/test','SELECT 1')
+            self.assertNotIn('secret_password',str(error.exception))
+
+    def test_unexpected_active_canonical_access_is_a_blocker(self):
+        c=target()
+        c['memberships'].append({'company_id':B,'identity_id':'unknown-user','role':'owner','status':'active'})
+        c['entitlements'].append({'company_id':B,'application_id':'supercharged','status':'active'})
+        c['links'].append({'company_id':B,'identity_id':'unknown-user','application_id':'supercharged','status':'verified','local_user_id':'extra-user'})
+        r=audit.reconcile(source(),c)
+        self.assertEqual(r['blockers']['unexpected_canonical_active_membership'],1)
+        self.assertEqual(r['blockers']['unexpected_canonical_active_entitlement'],1)
+        self.assertEqual(r['blockers']['unexpected_canonical_verified_user_link'],1)
+    def test_different_entitlement_features_are_detected(self):
+        s=source();s['entitlements'][0]['features']=['invoices']
+        r=audit.reconcile(s,target())
+        self.assertEqual(r['blockers']['entitlement_features_mismatch'],1)
+
+    def test_matching_timezone_converted_expirations(self):
+        from datetime import datetime, timezone
+        s=source(); c=target()
+        s['memberships'][0]['expires_at']='2027-01-01 12:00:00+00'
+        c['memberships'][0]['expires_at']='2027-01-01T23:00:00+11:00'
+        s['entitlements'][0]['expires_at']='2027-01-02 12:00:00+00'
+        c['entitlements'][0]['expires_at']='2027-01-02T12:00:00Z'
+        r=audit.reconcile(s,c,now=datetime(2026,11,9,tzinfo=timezone.utc))
+        self.assertEqual(r['blocker_count'],0)
+    def test_expiry_extension_or_unlimited_access_blocks_cutover(self):
+        from datetime import datetime, timezone
+        now=datetime(2026,11,9,tzinfo=timezone.utc)
+        s=source();c=target()
+        s['memberships'][0]['expires_at']='2026-11-01T00:00:00Z'
+        c['memberships'][0]['expires_at']='2027-01-01T00:00:00Z'
+        s['entitlements'][0]['expires_at']='2026-12-01T00:00:00Z'
+        c['entitlements'][0]['expires_at']=None
+        r=audit.reconcile(s,c,now=now)
+        self.assertEqual(r['blockers']['membership_expiry_mismatch'],1)
+        self.assertEqual(r['blockers']['entitlement_expiry_mismatch'],1)
+    def test_invalid_naive_expiry_fails_closed_as_blocker(self):
+        from datetime import datetime, timezone
+        s=source();c=target()
+        c['memberships'][0]['expires_at']='2026-11-09T10:00:00'
+        r=audit.reconcile(s,c,now=datetime(2026,11,9,tzinfo=timezone.utc))
+        self.assertEqual(r['blockers']['membership_expiry_invalid'],1)
+    def test_subsecond_expiry_difference_under_one_second_is_allowed(self):
+        from datetime import datetime, timezone
+        s=source();c=target()
+        s['entitlements'][0]['expires_at']='2027-01-01T00:00:00.200Z'
+        c['entitlements'][0]['expires_at']='2027-01-01T00:00:00.900Z'
+        r=audit.reconcile(s,c,now=datetime(2026,11,9,tzinfo=timezone.utc))
+        self.assertEqual(r['blocker_count'],0)
+    def test_unverified_mapping_does_not_authorise_access_reconciliation(self):
+        c=target();c['mappings'][0]['status']='revoked'
+        r=audit.reconcile(source(),c)
+        self.assertEqual(r['blockers']['unverified_company_mapping'],1)
+        self.assertEqual(r['blockers']['unresolvable_membership'],1)
+        self.assertEqual(r['blockers']['unresolvable_entitlement'],1)
+
+    def test_dataset_extraction_uses_one_snapshot_for_all_tables(self):
+        from unittest.mock import patch
+        import json
+        class Result:
+            returncode=0
+            stdout=(json.dumps({'section':'companies','record':{'id':'a'}})
+                    +'\n'+json.dumps({'section':'identities','record':{'id':'b'}})+'\n')
+            stderr=''
+        with patch.object(audit.subprocess,'run',return_value=Result()) as execute:
+            records=audit.extract_dataset('postgresql://test@localhost/legacy',audit.LEGACY)
+        self.assertEqual(records['companies'],[{'id':'a'}])
+        self.assertEqual(records['identities'],[{'id':'b'}])
+        script=execute.call_args.kwargs['input']
+        self.assertEqual(script.count('BEGIN TRANSACTION'),1)
+        self.assertEqual(script.count('ROLLBACK;'),1)
+        self.assertIn('REPEATABLE READ READ ONLY',script)
+        self.assertEqual(script.count('LIMIT 10001'),len(audit.LEGACY))
+        self.assertEqual(execute.call_count,1)
+    def test_dataset_extraction_blocks_oversized_table_without_partial_result(self):
+        from unittest.mock import patch
+        import json
+        class Result:
+            returncode=0
+            stdout='\n'.join(json.dumps({'section':'companies','record':{'id':i}})
+                for i in range(audit.MAX_ROWS+1))
+            stderr=''
+        with patch.object(audit.subprocess,'run',return_value=Result()):
+            with self.assertRaisesRegex(RuntimeError,'row limit exceeded'):
+                audit.extract_dataset('postgresql://test@localhost/legacy',audit.LEGACY)
+    def test_dataset_extraction_rejects_forged_section(self):
+        from unittest.mock import patch
+        class Result:
+            returncode=0
+            stdout='{"section":"unknown","record":{"id":"abc"}}\n'
+            stderr=''
+        with patch.object(audit.subprocess,'run',return_value=Result()):
+            with self.assertRaisesRegex(RuntimeError,'invalid dataset snapshot'):
+                audit.extract_dataset('postgresql://test@localhost/legacy',audit.LEGACY)
