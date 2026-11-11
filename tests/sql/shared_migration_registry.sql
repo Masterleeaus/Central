@@ -5,9 +5,9 @@ DO $$
 DECLARE n integer;
 BEGIN
  SELECT count(*) INTO n FROM titan.schema_migrations;
- IF n<>12 THEN RAISE EXCEPTION 'Expected twelve canonical migration records, observed %',n; END IF;
+ IF n<>13 THEN RAISE EXCEPTION 'Expected thirteen canonical migration records, observed %',n; END IF;
  IF (SELECT string_agg(left(migration_id,4),',' ORDER BY migration_id)
-     FROM titan.schema_migrations) <> '0001,0002,0003,0004,0005,0006,0007,0008,0009,0010,0011,0012'
+     FROM titan.schema_migrations) <> '0001,0002,0003,0004,0005,0006,0007,0008,0009,0010,0011,0012,0013'
  THEN RAISE EXCEPTION 'Unexpected canonical migration IDs'; END IF;
  IF EXISTS(
   SELECT 1 FROM titan.schema_migrations
