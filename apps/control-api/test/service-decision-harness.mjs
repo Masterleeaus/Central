@@ -11,8 +11,8 @@ export const decision={allowed:true,applicationId:'academy',organisationId:'logt
  localUserId:'skilled-user-0001',localAccountId:'skilled-account-0001',
  membershipRevision:1,entitlementRevision:2,linkRevision:3};
 export async function call({body=valid,auth='Bearer '+token,method='POST',url=SKILLED_DECISION_PATH,
- decide=async()=>decision,headers={},logger=()=>{}}={}){
- const handler=createSkilledDecisionHandler({issuer,audience:'academy-client',token,decide,logger});
+ decide=async()=>decision,headers={},logger=()=>{},clock}={}){
+ const handler=createSkilledDecisionHandler({issuer,audience:'academy-client',token,decide,logger,...(clock?{clock}:{})});
  const server=createServer(async(req,res)=>{if(!await handler(req,res)){res.statusCode=404;res.end('not found')}});
  server.listen(0,'127.0.0.1');await once(server,'listening');
  try{

@@ -11,8 +11,10 @@ The handler delegates to existing `CentralAccessService` inside `withCentralRead
 
 ### Response (200 only when authorized)
 ```json
-{"issuer":"https://logto.example","subject":"logto-subject","requestId":"same-request-id","decision":{"allowed":true,"applicationId":"academy","organisationId":"trusted-logto-organisation-id","localUserId":"trusted-user-id","localAccountId":"trusted-account-id","membershipRevision":1,"entitlementRevision":2,"linkRevision":3}}
+{"issuer":"https://logto.example","subject":"logto-subject","requestId":"same-request-id","decision":{"allowed":true,"applicationId":"academy","organisationId":"trusted-logto-organisation-id","localUserId":"trusted-user-id","localAccountId":"trusted-account-id","membershipRevision":1,"entitlementRevision":2,"linkRevision":3,"expiresAt":"2026-11-11T10:05:00.000Z"}}
 ```
+
+**Expiry (owner decision):** every issued decision carries `expiresAt`, an RFC 3339 timestamp equal to the issue time plus exactly 300 seconds (5 minutes). A decision whose `expiresAt` has passed must not be treated as authorization; the consumer must request a new decision. `expiresAt` is set only on 200 responses. Denied (403) and unavailable (503) responses carry no decision.
 
 Bad credentials are 401; unsupported input is 400; denied access is 403; database or Central engine outage is 503. HTTP responses never contain a service secret, subject-derived diagnostic or internal reason. Existing `/v1/access/check` contract is unchanged. No public admin mutation is exposed. Mandatory service proxy controls: HTTPS, IP allowlisting, operator-managed secret rotation, per-service rate limits and request logging without credentials.
 
