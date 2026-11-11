@@ -1,0 +1,7 @@
+{
+  "name": "valid-max-ttl",
+  "changes": {
+    "ttlSeconds": 300
+  },
+  "expectedAllowed": true
+}

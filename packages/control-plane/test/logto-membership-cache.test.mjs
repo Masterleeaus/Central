@@ -5,19 +5,17 @@ import { LogtoManagementVerifier } from '../dist/logto-management.js';
 const ok = value => ({ ok: true, json: async () => value });
 const notFound = { ok: false, json: async () => ({}) };
 
-/** Mutable fake Logto tenant that counts every management call. */
+/** Mutable fake Logto tenant that counts every management call. `members` are the users of org_a. */
 function tenant({ members = [], roles = {} } = {}) {
   const state = { members: new Set(members), roles, calls: 0 };
   const fetcher = async url => {
     state.calls++;
     const u = new URL(url);
     const p = u.pathname;
-    if (/^\/api\/users\/[^/]+$/.test(p)) return ok({ id: decodeURIComponent(p.split('/')[3]) });
-    if (/^\/api\/organizations\/[^/]+$/.test(p)) return ok({ id: decodeURIComponent(p.split('/')[3]) });
-    if (/^\/api\/organizations\/[^/]+\/users$/.test(p)) {
-      const page = Number(u.searchParams.get('page') ?? 1);
-      const all = [...state.members];
-      return ok(all.slice((page - 1) * 100, page * 100).map(id => ({ id })));
+    const userOrgs = p.match(/^\/api\/users\/([^/]+)\/organizations$/);
+    if (userOrgs) {
+      const userId = decodeURIComponent(userOrgs[1]);
+      return ok(state.members.has(userId) ? [{ id: 'org_a' }] : []);
     }
     const roleMatch = p.match(/^\/api\/organizations\/[^/]+\/users\/([^/]+)\/roles$/);
     if (roleMatch) return ok((state.roles[decodeURIComponent(roleMatch[1])] ?? []).map(id => ({ id })));
@@ -42,20 +40,19 @@ test('repeat check within TTL costs zero Logto calls', async () => {
   const v = verifier(t, () => now, { membershipCacheTtlMs: 30_000 });
   await v.assertMembership('user_a', 'org_a');
   const afterFirst = t.state.calls;
-  assert.ok(afterFirst <= 3, `cold check used ${afterFirst} calls`);
+  assert.equal(afterFirst, 1, `cold check used ${afterFirst} calls`);
   now = 29_999;
   await v.assertMembership('user_a', 'org_a');
   await v.assertMembership('user_a', 'org_a');
   assert.equal(t.state.calls, afterFirst);
 });
 
-test('cold check on a 2,400-member organisation is bounded by the page limit', async () => {
+test('cold check on a 2,400-member organisation costs exactly one Logto call', async () => {
   const members = Array.from({ length: 2400 }, (_, i) => `user_${i}`);
   const t = tenant({ members });
   const v = verifier(t, () => 0);
-  await v.assertMembership('user_2399', 'org_a'); // last member, last page
-  // identity + organisation + 25 member pages at most
-  assert.ok(t.state.calls <= 27, `used ${t.state.calls} calls`);
+  await v.assertMembership('user_2399', 'org_a');
+  assert.equal(t.state.calls, 1);
 });
 
 test('a removed member is not served from cache beyond the TTL', async () => {

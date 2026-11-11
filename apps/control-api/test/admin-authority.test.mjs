@@ -21,6 +21,8 @@ function fakeLogto(state={members:new Set(['op_admin']),roles:{op_admin:[ROLE]},
   if(state.fail) return {ok:false,json:async()=>({})};
   const u=new URL(url);const p=u.pathname;
   if(/^\/api\/users\/[^/]+$/.test(p)) return ok({id:decodeURIComponent(p.split('/')[3])});
+  const uo=p.match(/^\/api\/users\/([^/]+)\/organizations$/);
+  if(uo){const uid=decodeURIComponent(uo[1]);return ok(state.members.has(uid)?[{id:OPERATOR_ORG}]:[]);}
   if(p===`/api/organizations/${OPERATOR_ORG}`) return ok({id:OPERATOR_ORG});
   if(p===`/api/organizations/${OPERATOR_ORG}/users`) return ok([...state.members].map(id=>({id})));
   const r=p.match(/^\/api\/organizations\/[^/]+\/users\/([^/]+)\/roles$/);
@@ -125,12 +127,12 @@ test('authorised operator reaches provisioning with a verified actor derived fro
   assert.equal(r.status,201);
   assert.equal(s.calls.length,1);
   assert.equal(s.calls[0][0].logtoSubject,'op_admin');
-  assert.equal(s.calls[0][0].managementCredentialVerified,true);
+  assert.equal(s.calls[0][0].operatorAuthorityVerified,true);
   assert.equal(s.calls[0][1].actorSubject,'op_admin');
  }finally{await s.close();}
 });
 
-test('the operator flag is never true unless authoriseOperator returned true', async()=>{
+test('the operator authority marker is never true unless authoriseOperator returned true', async()=>{
  const s=await start({authoriseOperator:async()=>false});
  try{const r=await s.request('/v1/admin/provision');assert.equal(r.status,403);assert.equal(s.calls.length,0);}
  finally{await s.close();}

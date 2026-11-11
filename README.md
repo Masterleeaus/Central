@@ -1,8 +1,8 @@
 # Titan Central
 
-Titan Central is the central control plane for the Titan applications (Desk, Field, Academy). It keeps the authorization facts that the apps must agree on: which canonical identity belongs to which organisation, which application entitlements an organisation holds, which local app accounts are verified links to a central identity, and which sessions have been revoked. Logto remains the identity provider. Tenant data stays in each application.
+Titan Central is the central identity and access-control service for Sorted, Supercharged and LMS. It keeps the identity, organisation, entitlement, verified account-link and session-revocation facts these products share. Logto remains the identity provider. The repository still uses the legacy application identifiers field, desk and academy in compatibility-sensitive interfaces; they map to Sorted, Supercharged and LMS, respectively. Tenant data stays in each application.
 
-Status: pre-deployment. The migrations are reviewed drafts, the HTTP service is not deployed, and nothing in this repository has been applied to a live environment. Read [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md) for the decisions and [PASS15_DEPLOYMENT_RUNBOOK.md](PASS15_DEPLOYMENT_RUNBOOK.md) for the gates that must pass before any deployment.
+Status: pre-deployment. The migrations are reviewed drafts, the HTTP service is not deployed, and nothing in this repository has been applied to a live environment. Read [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md) for the decisions and [PASS15_DEPLOYMENT_RUNBOOK.md](docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md) for the gates that must pass before any deployment.
 
 ## Components
 
@@ -39,6 +39,7 @@ export DATABASE_URL='postgresql://USER@HOST:5432/titan_central'   # never commit
 python3 tools/migrate.py --database-url "$DATABASE_URL"            # apply pending migrations
 python3 tools/migrate.py --database-url "$DATABASE_URL" --dry-run  # list pending only
 psql -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$DATABASE_URL"  # superuser; test database only
+psql -X -v ON_ERROR_STOP=1 -f tests/sql/session_revocation_rls.sql "$DATABASE_URL"  # superuser; empty revocation table only
 ```
 
 The RLS test seeds two tenants and runs inside a transaction that is rolled back. Run it only against a disposable database, never a live one.
@@ -59,8 +60,40 @@ The RLS test seeds two tenants and runs inside a transaction that is rolled back
 | 0004 | Session-revocation table (created unqualified, moved by 0005). |
 | 0005 | Moves the 0003 and 0004 tables into schema `titan`. Application queries use `titan.<table>`. |
 | 0006 | Row-level security on `titan.memberships`, `titan.entitlements`, `titan.local_account_links`. |
+| 0007 | Provisioning audit types for update and revoke commands; session-revocation and OIDC-state grants. |
+| 0008 | Trusted reader scoped to the organisation set for the transaction; `titan_trusted_writer` may read session revocations (needed by the revocation bump). |
+| 0009 | Login-role grants for the control-api stores: `titan_trusted_writer` may SELECT the OIDC login-state columns that consume and prune read. Nothing is granted to the login role itself. |
+| 0015 | Subscription lifecycle ledger (issue #35): `titan.billing_subscriptions` (last applied position per provider subscription) and `titan.billing_events` (one row per verified provider event, with its disposition). Written only by `titan_trusted_writer`. Numbers 0010-0014 are unused. See `docs/SUBSCRIPTIONS.md`. |
+| 0012 | Transactional outbox: `titan.outbox_events` (versioned, tenant-keyed, idempotency-keyed, bounded payload, pending/published/dead), `titan.outbox_event_audit`, and `titan.outbox_processed_events` for consumer dedupe. Tenant-scoped RLS. Versions 0010 and 0011 are reserved by other work. See `docs/EVENTS.md`. |
+| 0010 | Row-level security on `titan.titan_session_revocations`, keyed by `organisation_id`. The reader sees one organisation (the one set for its transaction); the writer keeps cross-tenant bumps. |
 
-Tenant isolation (0006): the application must set the transaction-local tenant before any tenant query, for example `SET LOCAL titan.organisation_id = '<organisation uuid>';`. With no tenant set, tenant roles see no rows and cannot write. Roles are NOLOGIN group roles to be granted to login roles at deployment: `titan_tenant_app` (tenant-scoped), `titan_trusted_reader` (server-side access checks; also reads identities and organisations), and `titan_trusted_writer` (separately authorised provisioning). Superusers and `BYPASSRLS` roles bypass RLS, so the application must not connect as either. Session revocations and the provisioning audit table are not yet covered by RLS.
+Tenant isolation (0006, narrowed by 0008; session revocations by 0010). Tenant scope is the transaction-local setting `titan.organisation_id`. Set it with a bound parameter, never by interpolation: `SELECT set_config('titan.organisation_id', $1, true)`. This has the same effect as `SET LOCAL` and is the only form that takes a bind parameter. With no scope set, tenant rows are invisible and writes fail (fail closed). A malformed value raises an error.
+
+Role design. Each role is a NOLOGIN group role. The deployment creates one login role for the service and grants it the two trusted roles. The login role must not be a superuser, must not have `BYPASSRLS`, and must be `NOINHERIT`:
+
+```sql
+CREATE ROLE titan_central_app LOGIN NOINHERIT PASSWORD '<from the secret store>';
+GRANT titan_trusted_reader, titan_trusted_writer TO titan_central_app;
+-- Do not grant titan_tenant_app to the service; it is for a future tenant-facing role only.
+-- Do not make titan_central_app the owner of any titan.* object.
+```
+
+- `titan_trusted_reader` runs the access check (`withCentralReadSnapshot`). It runs `SET LOCAL ROLE titan_trusted_reader`, then sets the organisation scope. It reads identities and organisations (global, not RLS-protected). It reads memberships, entitlements and local account links only for the organisation in scope.
+- `titan_trusted_writer` runs provisioning (`CentralProvisioner`). It runs `SET LOCAL ROLE titan_trusted_writer` and is cross-tenant by design. Every command is separately authorised and writes one audit row in the same transaction.
+- `titan_tenant_app` is tenant-scoped on the three tables and has no grant on identities, organisations or session revocations.
+
+Verified on PostgreSQL 16 with `tests/sql/rls_two_tenant.sql` (run as superuser), `tests/sql/session_revocation_rls.sql` (run as superuser, which becomes `titan_central_app` for its checks) and `tests/sql/login_role_path.sql` (run as superuser, which becomes `titan_central_app` for its checks). The session-revocation store (`apps/control-api/src/session-revocation-pg.mjs`) and the OIDC state store (`oidc-state-pg.mjs`) run each statement in a transaction that does `SET LOCAL ROLE titan_trusted_reader` or `titan_trusted_writer` (`role-transaction.mjs`); migration 0009 grants the writer the SELECT that consume and prune need. `readVersion` sets the organisation scope inside its transaction before it reads, because migration 0010 hides every revocation row when no scope is set (without it a revoked session would read as generation 0). `revokeAll` is cross-tenant by design and sets no scope.
+
+Not tenant-keyed, so not under RLS, by design: `titan.titan_oidc_login_states` (written before the Logto callback, so no organisation is known; protected by role, by the state digest key and by a 10-minute expiry) and `titan.provisioning_audit` (no organisation column; written only by `titan_trusted_writer`, and no other role has a grant on it).
+
+Running the login-role path test (`tests/test_login_role_path.py`): it runs only when `psql` and `TITAN_TEST_DATABASE_URL` are present, otherwise it is skipped with the reason printed. The database must hold migrations 0001-0010 and no tenant rows, and the URL should be a superuser URL for that database:
+
+```bash
+python3 tools/migrate.py --database-url "$TITAN_TEST_DATABASE_URL"
+python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
+```
+
+CI runs this against its PostgreSQL 16 service with `TITAN_REQUIRE_DB_TESTS=1`, so a skip fails the job.
 
 ## Compiled output (`packages/control-plane/dist`)
 
@@ -80,7 +113,10 @@ Names only. Values are supplied by the deployment environment and must never be 
 | --- | --- | --- |
 | `TITAN_CENTRAL_DATABASE_URL` | control-api (required) | PostgreSQL connection string for the `titan_central` database. |
 | `TITAN_OIDC_ISSUER` | control-api (required) | Expected token issuer (the Logto OIDC issuer). |
-| `TITAN_OIDC_AUDIENCE` | control-api (required) | Expected token audience. |
+| `TITAN_FIELD_AUDIENCE` | control-api (required) | Expected audience for Sorted (legacy application ID: `field`). |
+| `TITAN_DESK_AUDIENCE` | control-api (required) | Expected audience for Supercharged (legacy application ID: `desk`). |
+| `TITAN_ACADEMY_AUDIENCE` | control-api (required) | Expected audience for LMS (legacy application ID: `academy`). |
+| `TITAN_OIDC_STATE_KEY` | control-api (required for browser login state) | Base64-encoded 32-byte key used to seal short-lived OIDC state. |
 | `TITAN_OIDC_JWKS_URI` | control-api (required) | JWKS endpoint used to verify token signatures. |
 | `TITAN_CENTRAL_PORT` | control-api (optional) | Loopback port. Defaults to 3102. |
 | `TITAN_CI_DATABASE_URL` | CI only | Throwaway PostgreSQL URL for the database steps in CI. |
@@ -96,5 +132,6 @@ cd apps/control-api && npm start   # requires the control-api variables above
 ## Further reading
 
 - [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md): architecture decisions ADR-001 to ADR-007.
-- [PASS15_DEPLOYMENT_RUNBOOK.md](PASS15_DEPLOYMENT_RUNBOOK.md): deployment runbook and gates.
+- [PASS15_DEPLOYMENT_RUNBOOK.md](docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md): integration and production go/no-go gates.
+- [deploy/OPERATIONS.md](deploy/OPERATIONS.md): systemd template installation, secret storage, service operations and rollback.
 - [packages/control-plane/README.md](packages/control-plane/README.md): the authorization library's trust boundaries.

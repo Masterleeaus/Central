@@ -118,7 +118,7 @@ def assess(config: dict, root: Path | None = None, live: Path | None = None, ups
                     'titan-central/packages/control-plane/src/index.ts',
                     'titan-central/migrations/0004_session_revocations_draft.sql'):
             if not (root/rel).is_file(): issues.append('missing_source:'+rel)
-        manifest=root/'titan-central'/'PASS14_RELEASE_MANIFEST.json'
+        manifest=root/'titan-central'/'docs'/'records'/'pass'/'PASS14_RELEASE_MANIFEST.json'
         if not manifest.is_file(): issues.append('missing_pass14_manifest')
         else:
             try:
@@ -136,18 +136,65 @@ def assess(config: dict, root: Path | None = None, live: Path | None = None, ups
     return {'ready':not issues, 'issues':sorted(set(issues)),'checked':len(NEEDED)}
 
 
+# Operator plane (issue #73). Read-only check of the environment file. Reports variable NAMES only, never values.
+OPERATOR_ID_KEYS=('TITAN_OPERATOR_ORGANISATION_ID','TITAN_OPERATOR_ROLE_IDS')
+LOGTO_MANAGEMENT_KEYS=('TITAN_LOGTO_MANAGEMENT_ORIGIN','TITAN_LOGTO_M2M_CLIENT_ID','TITAN_LOGTO_M2M_CLIENT_SECRET',
+                       'TITAN_LOGTO_MANAGEMENT_RESOURCE','TITAN_LOGTO_MANAGEMENT_SCOPE')
+_PLACEHOLDER='REPLACE_ME'
+
+
+def read_env_file(path: Path) -> dict:
+    """Parses KEY=VALUE lines the way systemd EnvironmentFile= reads them for plain values. Comments and blank lines are skipped."""
+    values={}
+    for raw in path.read_text().splitlines():
+        line=raw.strip()
+        if not line or line.startswith('#') or '=' not in line: continue
+        key,_,value=line.partition('=')
+        values[key.strip()]=value
+    return values
+
+
+def assess_env(env: dict) -> dict:
+    """Fails when any TITAN_OPERATOR_* variable is set but the operator or Logto management values are incomplete.
+    An unset operator plane passes. A REPLACE_ME value counts as missing. Issues name variables only."""
+    issues=[]
+    operator_on=any(env.get(k,'')!='' for k in OPERATOR_ID_KEYS)
+    if operator_on:
+        for key in OPERATOR_ID_KEYS+LOGTO_MANAGEMENT_KEYS:
+            value=env.get(key,'')
+            if value.strip()=='': issues.append('operator_incomplete:'+key)
+            elif value==_PLACEHOLDER: issues.append('operator_placeholder:'+key)
+        origin=env.get('TITAN_LOGTO_MANAGEMENT_ORIGIN','')
+        if origin not in ('',_PLACEHOLDER) and not validate_origin(origin): issues.append('invalid_origin:TITAN_LOGTO_MANAGEMENT_ORIGIN')
+        resource=env.get('TITAN_LOGTO_MANAGEMENT_RESOURCE','')
+        if resource not in ('',_PLACEHOLDER) and not resource.startswith('https://'): issues.append('invalid_resource:TITAN_LOGTO_MANAGEMENT_RESOURCE')
+    return {'ready':not issues,'issues':sorted(set(issues)),'checked':len(OPERATOR_ID_KEYS)+len(LOGTO_MANAGEMENT_KEYS)}
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('--config',type=Path,required=True)
+    p.add_argument('--config',type=Path)
+    p.add_argument('--env-file',type=Path,help='central.env to check for operator configuration completeness')
     p.add_argument('--root',type=Path)
     p.add_argument('--upstream',type=Path)
     p.add_argument('--live',type=Path)
     a=p.parse_args()
-    try:
-        config=json.loads(a.config.read_text())
-    except (OSError,ValueError):
-        print(json.dumps({'ready':False,'issues':['unreadable_configuration']}));raise SystemExit(2)
-    result=assess(config,a.root,a.live,a.upstream)
+    if a.config is None and a.env_file is None: p.error('one of --config or --env-file is required')
+    results=[]
+    if a.config is not None:
+        try:
+            config=json.loads(a.config.read_text())
+        except (OSError,ValueError):
+            print(json.dumps({'ready':False,'issues':['unreadable_configuration']}));raise SystemExit(2)
+        results.append(assess(config,a.root,a.live,a.upstream))
+    if a.env_file is not None:
+        try:
+            results.append(assess_env(read_env_file(a.env_file)))
+        except (OSError,UnicodeDecodeError):
+            print(json.dumps({'ready':False,'issues':['unreadable_env_file']}));raise SystemExit(2)
+    result={'ready':all(r['ready'] for r in results),
+            'issues':sorted({i for r in results for i in r['issues']}),
+            'checked':sum(r['checked'] for r in results)}
     print(json.dumps(result,indent=2))
     raise SystemExit(0 if result['ready'] else 1)
 

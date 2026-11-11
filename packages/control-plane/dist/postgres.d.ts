@@ -23,8 +23,15 @@ export declare class PostgresCentralRepository implements CentralRepository {
     entitlements(organisationId: string, applicationId: ApplicationId): Promise<readonly AppEntitlement[]>;
     localLinks(identityId: string, organisationId: string, applicationId: ApplicationId): Promise<readonly LocalAccountLink[]>;
 }
-/** Every access decision must use one connection and one snapshot; no concurrent pool queries. */
-export declare function withCentralReadSnapshot<T>(pool: SqlPool, task: (repo: PostgresCentralRepository) => Promise<T>): Promise<T>;
+/** Every access decision must use one connection and one snapshot; no concurrent pool queries.
+ * The transaction runs as titan_trusted_reader (SET LOCAL ROLE; the login role must be a member but
+ * does not inherit its privileges) and is scoped to one organisation for the row-level security
+ * policies in migrations 0006 and 0008. The organisation is a bound parameter: SET LOCAL cannot take
+ * one, so set_config(name, value, true) is used, which has the same transaction-local effect.
+ * Both settings end with the transaction, so a pooled connection never keeps the scope. */
+export declare function withCentralReadSnapshot<T>(pool: SqlPool, organisationId: string, task: (repo: PostgresCentralRepository) => Promise<T>): Promise<T>;
+/** Runs one read-only snapshot as titan_trusted_reader scoped to one organisation (see withCentralReadSnapshot). */
+export declare function withTenantReadScope<T>(pool: SqlPool, organisationId: string, task: (conn: SqlClient) => Promise<T>): Promise<T>;
 export type MemberState = 'active' | 'invited' | 'suspended' | 'revoked';
 export type GrantState = 'active' | 'trialing' | 'paused' | 'expired' | 'revoked';
 /** Mutations are not exposed here. Use CentralProvisioner (provisioning.ts), which writes the

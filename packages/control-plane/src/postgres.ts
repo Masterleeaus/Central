@@ -43,13 +43,28 @@ export class PostgresCentralRepository implements CentralRepository {
   }
 }
 
-/** Every access decision must use one connection and one snapshot; no concurrent pool queries. */
-export async function withCentralReadSnapshot<T>(pool: SqlPool, task: (repo: PostgresCentralRepository) => Promise<T>): Promise<T> {
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Every access decision must use one connection and one snapshot; no concurrent pool queries.
+ * The transaction runs as titan_trusted_reader (SET LOCAL ROLE; the login role must be a member but
+ * does not inherit its privileges) and is scoped to one organisation for the row-level security
+ * policies in migrations 0006 and 0008. The organisation is a bound parameter: SET LOCAL cannot take
+ * one, so set_config(name, value, true) is used, which has the same transaction-local effect.
+ * Both settings end with the transaction, so a pooled connection never keeps the scope. */
+export async function withCentralReadSnapshot<T>(pool: SqlPool, organisationId: string, task: (repo: PostgresCentralRepository) => Promise<T>): Promise<T> {
+  return withTenantReadScope(pool, organisationId, conn => task(new PostgresCentralRepository(conn)));
+}
+
+/** Runs one read-only snapshot as titan_trusted_reader scoped to one organisation (see withCentralReadSnapshot). */
+export async function withTenantReadScope<T>(pool: SqlPool, organisationId: string, task: (conn: SqlClient) => Promise<T>): Promise<T> {
+  if (typeof organisationId !== 'string' || !UUID_TEXT.test(organisationId)) throw new Error('organisation scope required');
   const conn=await pool.connect(); let begun=false;
   try {
     await conn.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'); begun=true;
+    await conn.query('SET LOCAL ROLE titan_trusted_reader');
+    await conn.query("SELECT set_config('titan.organisation_id', $1, true)", [organisationId]);
     await conn.query("SET LOCAL statement_timeout = '5000ms'");
-    const result=await task(new PostgresCentralRepository(conn));
+    const result=await task(conn);
     await conn.query('COMMIT'); begun=false;
     return result;
   } catch (error) {

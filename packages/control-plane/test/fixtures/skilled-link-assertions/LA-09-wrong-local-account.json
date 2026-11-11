@@ -1,0 +1,7 @@
+{
+  "name": "wrong-local-account",
+  "changes": {
+    "accountAllowed": false
+  },
+  "expectedAllowed": false
+}

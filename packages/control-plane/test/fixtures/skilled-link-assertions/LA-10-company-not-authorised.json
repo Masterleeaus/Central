@@ -1,0 +1,7 @@
+{
+  "name": "company-not-authorised",
+  "changes": {
+    "organisationAllowed": false
+  },
+  "expectedAllowed": false
+}
