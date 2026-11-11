@@ -118,7 +118,7 @@ def assess(config: dict, root: Path | None = None, live: Path | None = None, ups
                     'titan-central/packages/control-plane/src/index.ts',
                     'titan-central/migrations/0004_session_revocations_draft.sql'):
             if not (root/rel).is_file(): issues.append('missing_source:'+rel)
-        manifest=root/'titan-central'/'PASS14_RELEASE_MANIFEST.json'
+        manifest=root/'titan-central'/'docs'/'records'/'pass'/'PASS14_RELEASE_MANIFEST.json'
         if not manifest.is_file(): issues.append('missing_pass14_manifest')
         else:
             try:
