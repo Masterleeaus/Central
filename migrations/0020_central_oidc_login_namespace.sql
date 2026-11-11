@@ -17,7 +17,8 @@ GRANT USAGE ON SCHEMA titan TO titan_central_oidc;
 GRANT titan_central_oidc TO titan_central_app;
 -- DELETE RETURNING requires SELECT on returned fields.
 GRANT SELECT, INSERT, DELETE ON titan.titan_oidc_login_states TO titan_central_oidc;
-GRANT SELECT ON titan.titan_oidc_login_states TO titan_trusted_writer;
+-- Product writer retains only the column-scoped SELECT granted in migration 0009.
+-- A table-wide SELECT here would expose created_at and violate the login-role privilege contract.
 ALTER TABLE titan.titan_oidc_login_states ENABLE ROW LEVEL SECURITY;
 ALTER TABLE titan.titan_oidc_login_states FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS central_oidc_namespace ON titan.titan_oidc_login_states;
