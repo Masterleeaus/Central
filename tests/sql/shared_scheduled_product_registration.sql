@@ -26,8 +26,8 @@ BEGIN
 END $$;
 
 -- Unsupported product identifiers must fail closed in every registration table.
--- A savepoint lets us assert the constraint error without aborting the fixture.
-DO $
+-- PL/pgSQL exception subtransactions verify rejection without aborting the fixture.
+DO $tag$
 DECLARE
   rejected boolean;
 BEGIN
@@ -55,7 +55,7 @@ BEGIN
   EXCEPTION WHEN check_violation THEN rejected := true;
   END;
   IF NOT rejected THEN RAISE EXCEPTION 'Unknown user-link product accepted'; END IF;
-END $;
+END $tag$;
 
 ROLLBACK;
 \echo scheduled shared product registration checks passed
