@@ -131,7 +131,7 @@ jobs:
       # differently. CI uses a second disposable PostgreSQL database.
       - name: Create independent shared-core test database
         run: psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" -c "CREATE DATABASE titan_shared_ci"
-      - name: Apply canonical migration registry 0001–0012
+      - name: Apply canonical migration registry 0001–0013
         run: python3 tools/migrate_shared.py --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
       - name: Canonical migration rerun applies nothing
         run: |
@@ -149,6 +149,9 @@ jobs:
           grep -q "existing legacy or unknown schema: migration refused" "$RUNNER_TEMP/shared-legacy-guard.txt"
       - name: Validate canonical companies and product IDs
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_core.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Verify Scheduled shared entitlement and account-link registration
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_scheduled_product_registration.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
 
       - name: Verify canonical two-company isolation and links
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_rls.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
