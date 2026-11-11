@@ -32,7 +32,6 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   // Decision and failure events feed the metrics counters and then the structured log, unchanged.
   const metrics=createMetrics();
   const auditLog=(event,fields)=>{try{metrics.observeLog(event,fields);}catch{/* metrics never alter a request */}logger(event,fields);};
-  // Operator plane: null unless TITAN_OPERATOR_* is set, in which case /v1/admin/ is mounted. Invalid settings throw here.
   // Product registry: validated at every startup, so bad product origins stop startup even with the operator plane off.
   const productRegistry=loadProductRegistry(env);
   const {Pool}=await loadPg();
@@ -40,7 +39,8 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   // Feature flags (issue #38): declarations in code, PostgreSQL store on the trusted reader and writer roles.
   const flagRegistry=createFlagRegistry(FLAG_DECLARATIONS);
   const flagStore=createPostgresFlagStore(pool);
-  const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher,flags:{registry:flagRegistry,store:flagStore},productRegistry});
+  // Operator plane: null unless TITAN_OPERATOR_* is set, in which case /v1/admin/ is mounted. Invalid settings throw here.
+  const adminHandler=createOperatorAdmin({env,verifyToken,metrics,logger:auditLog,fetcher,pool,flags:{registry:flagRegistry,store:flagStore},productRegistry});
   // Service read endpoint: one verifier per product audience, each accepting only urn:titan-central:product:<product>.
   const readProducts=readConfigProducts(env);
   const configHandler=readProducts.length ? createConfigReadHandler({

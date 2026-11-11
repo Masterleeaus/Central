@@ -3,6 +3,7 @@
  * every operator setting must be valid or startup throws. Error messages name variables, never values. */
 import { createLogtoManagementTokenSupplier, LogtoManagementVerifier, createTitanOidcRegistrationPlans, buildProductRegistry, originsForLegacyIds } from '../../../packages/control-plane/dist/index.js';
 import { createAdminHandler, createLogtoOperatorAuthoriser } from './admin.mjs';
+import { readOrganisationAccess } from '../../../packages/control-plane/dist/administration.js';
 import { timedFetch } from './metrics.mjs';
 import { createFlagChangeHandler } from './config-admin.mjs';
 
@@ -83,8 +84,9 @@ export function loadProductRegistry(env) {
 }
 
 /** Builds the /v1/admin/ handler when the operator plane is on, otherwise returns null (route stays 404).
- * flags = { registry, store } is required only for the flag-change route. fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch. */
-export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher, flags, productRegistry = loadProductRegistry(env) }) {
+ * flags = { registry, store } is required only for the flag-change route. pool is used only for the read-only organisation view.
+ * fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch. */
+export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher, flags, pool, productRegistry = loadProductRegistry(env) }) {
   const operator = readOperatorConfig(env);
   if (!operator) return null;
   const flagChanges = readFlagChangeSetting(env);
@@ -115,6 +117,8 @@ export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => 
   }
   const verifier = new LogtoManagementVerifier({ origin: logtoOrigin, accessToken: supplier.accessToken, fetcher: timedFetch(fetcher ?? fetch, metrics) });
   const authoriseOperator = createLogtoOperatorAuthoriser({ verifier, operatorOrganisationId: operator.organisationId, administrativeRoleIds: operator.roleIds });
-  // provision is intentionally not wired here: POST /v1/admin/provision answers 503 provisioning_disabled.
-  return createAdminHandler({ verifyToken, authoriseOperator, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
+  // provision and provisionTenant are intentionally not wired here: mutation routes answer 503 provisioning_disabled.
+  // Read-only access view: operator authority only, one organisation per request, tenant-scoped reads.
+  const readOrganisation = pool ? (organisationId) => readOrganisationAccess(pool, organisationId) : undefined;
+  return createAdminHandler({ verifyToken, authoriseOperator, readOrganisation, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
 }

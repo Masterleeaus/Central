@@ -14,6 +14,10 @@ export type AuthorizeProvisioning=(actor:TrustedActor,command:ProvisioningComman
 export interface LinkCheckInput { command:Extract<ProvisioningCommand,{kind:'link'|'link_relink'}>; logtoSubject:string; logtoOrganisationId:string; }
 export type VerifyLocalLink=(input:LinkCheckInput)=>Promise<boolean>;
 export type GetCanonicalLogtoId=(type:'identity'|'organisation',uuid:string)=>Promise<string|undefined>;
+/** Thrown when the authorisation policy refuses a command. Carries no detail beyond the refusal. */
+export class ProvisioningForbiddenError extends Error {
+ constructor(){ super('provisioning forbidden'); this.name='ProvisioningForbiddenError'; }
+}
 export class TrustedProvisioningService {
  constructor(private readonly provisioner:CentralProvisioner,private readonly logto:LogtoManagementVerifier,
   private readonly authorize:AuthorizeProvisioning,private readonly resolve:GetCanonicalLogtoId,
@@ -21,7 +25,7 @@ export class TrustedProvisioningService {
  async apply(actor:TrustedActor,context:ProvisioningContext,command:ProvisioningCommand):Promise<'created'|'updated'|'replayed'> {
   if(!actor||actor.operatorAuthorityVerified!==true||!actor.logtoSubject||actor.logtoSubject!==context.actorSubject) throw Error('unverified provisioning actor');
   // Authorize before querying management services or writing SQL. Fail closed by default.
-  if(await this.authorize(actor,command)!==true) throw Error('provisioning forbidden');
+  if(await this.authorize(actor,command)!==true) throw new ProvisioningForbiddenError();
   switch(command.kind){
    case 'identity': await this.logto.assertIdentity(command.logtoSubject);break;
    case 'organisation':await this.logto.assertOrganisation(command.logtoOrganisationId);break;

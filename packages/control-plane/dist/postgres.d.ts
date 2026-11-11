@@ -30,6 +30,8 @@ export declare class PostgresCentralRepository implements CentralRepository {
  * one, so set_config(name, value, true) is used, which has the same transaction-local effect.
  * Both settings end with the transaction, so a pooled connection never keeps the scope. */
 export declare function withCentralReadSnapshot<T>(pool: SqlPool, organisationId: string, task: (repo: PostgresCentralRepository) => Promise<T>): Promise<T>;
+/** Runs one read-only snapshot as titan_trusted_reader scoped to one organisation (see withCentralReadSnapshot). */
+export declare function withTenantReadScope<T>(pool: SqlPool, organisationId: string, task: (conn: SqlClient) => Promise<T>): Promise<T>;
 export type MemberState = 'active' | 'invited' | 'suspended' | 'revoked';
 export type GrantState = 'active' | 'trialing' | 'paused' | 'expired' | 'revoked';
 /** Mutations are not exposed here. Use CentralProvisioner (provisioning.ts), which writes the
