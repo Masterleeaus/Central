@@ -19,7 +19,20 @@ export type ProvisioningCommand =
  | { kind:'link_relink'; id:string; identityId:string; organisationId:string; applicationId:ApplicationId; expectedRevision:number; localUserId:string; localAccountId:string; assertion:string }
  | { kind:'membership_update'; id:string; organisationId:string; expectedRevision:number; role?:MembershipRole; state?:MemberState }
  | { kind:'entitlement_update'; id:string; organisationId:string; expectedRevision:number; state:GrantState; features?:readonly string[]; expiresAt?:string|null }
- | { kind:'link_revoke'; id:string; organisationId:string; expectedRevision:number };
+ | { kind:'link_revoke'; id:string; organisationId:string; expectedRevision:number }
+ | LinkReviewResolveCommand;
+
+/** Operator resolution of a link_reviews row (issue #37). `id` is the review ID. Identity, organisation and
+ * application are cross-checked against the review row, never trusted from the command alone.
+ * approved: creates the link, or relinks the existing row for the identity, organisation and application
+ * (expectedRevision required for a relink). The review's local account must be the one supplied.
+ * rejected: records the decision only; no link is written. Both need a reason. */
+export type LinkReviewResolveCommand = { kind:'link_review_resolve'; id:string; identityId:string; organisationId:string; applicationId:ApplicationId; reason:string } & (
+ | { decision:'approved'; expectedRevision?:number; localUserId:string; localAccountId:string; assertion:string }
+ | { decision:'rejected' }
+);
+/** Commands whose link assertion must be verified before they reach CentralProvisioner. */
+export type LinkAssertionCommand = Extract<ProvisioningCommand, { kind:'link'|'link_relink' }> | Extract<LinkReviewResolveCommand, { decision:'approved' }>;
 
 type CreateCommand = Extract<ProvisioningCommand, { kind:'identity'|'organisation'|'membership'|'entitlement'|'link' }>;
 type LinkCommand = Extract<ProvisioningCommand, { kind:'link' }>;
@@ -85,6 +98,12 @@ function validate(c:ProvisioningCommand, context:ProvisioningContext):void {
       break;
     case 'link_revoke':
       if(!uuid(c.organisationId)||!revision(c.expectedRevision)) throw Error('invalid link revocation');break;
+    case 'link_review_resolve':
+      if(!uuid(c.identityId)||!uuid(c.organisationId)||!apps.has(c.applicationId)||!nonempty(c.reason,500)) throw Error('invalid link review resolution');
+      if(c.decision==='approved'){
+        if(!nonempty(c.localUserId)||!nonempty(c.localAccountId)||!assertionShape(c.assertion)||(c.expectedRevision!==undefined&&!revision(c.expectedRevision))) throw Error('invalid link review resolution');
+      } else if(c.decision!=='rejected') throw Error('invalid link review resolution');
+      break;
     default:throw Error('unsupported provisioning command');
   }
 }
@@ -113,9 +132,11 @@ export class CentralProvisioner {
     if(previous.rows.length!==1||previous.rows[0].command_kind!==command.kind||previous.rows[0].command_digest!==digest) throw Error('provisioning request ID reused with different payload');
     await conn.query('COMMIT');begun=false;return 'replayed';
    }
-   let outcome:'created'|'updated';
+   let outcome:'created'|'updated'|'replayed';
    try {
-    outcome = isCreate(command) ? (await insertProvisioning(conn,command), 'created') : (await applyUpdate(conn,command), 'updated');
+    outcome = isCreate(command) ? (await insertProvisioning(conn,command), 'created')
+     : command.kind==='link_review_resolve' ? await resolveLinkReview(conn,context,command)
+     : (await applyUpdate(conn,command), 'updated');
    } catch (e) {
     if(!(e instanceof LinkReviewSignal)) throw e;
     // Fail closed: the link is not written. The review and the audit record commit, then the caller is told.
@@ -127,7 +148,8 @@ export class CentralProvisioner {
     await conn.query('COMMIT');begun=false;
     throw new LinkReviewRequired(e.reason,String(review.rows[0]?.id??''));
    }
-   await conn.query('INSERT INTO titan.provisioning_audit(request_id,actor_subject,authority_reference,command_kind,command_digest,subject_id) VALUES ($1,$2,$3,$4,$5,$6)',[context.requestId,context.actorSubject,context.authorityReference,command.kind,digest,command.id]);
+   if(command.kind==='link_review_resolve') await conn.query('INSERT INTO titan.provisioning_audit(request_id,actor_subject,authority_reference,command_kind,command_digest,subject_id,reason) VALUES ($1,$2,$3,$4,$5,$6,$7)',[context.requestId,context.actorSubject,context.authorityReference,command.kind,digest,command.id,command.reason]);
+   else await conn.query('INSERT INTO titan.provisioning_audit(request_id,actor_subject,authority_reference,command_kind,command_digest,subject_id) VALUES ($1,$2,$3,$4,$5,$6)',[context.requestId,context.actorSubject,context.authorityReference,command.kind,digest,command.id]);
    // Activity history (issue #36): same transaction, so a refused event rolls back the lifecycle change.
    const activity=activityFor(command,context);
    if(activity) await recordActivity(conn,activity);
@@ -135,6 +157,67 @@ export class CentralProvisioner {
   }catch(e){if(begun){try{await conn.query('ROLLBACK')}catch{/* retain original exception */}}throw e;}
   finally{conn.release?.();}
  }
+ /** True only when this exact request (same ID and same digest) was already applied. Reads the audit row and
+ * writes nothing. TrustedProvisioningService calls it before assertion verification, so an identical retry of an
+ * applied resolution is answered 'replayed' without spending a second nonce. A reused ID with another payload throws. */
+ async wasApplied(context:ProvisioningContext, command:ProvisioningCommand):Promise<boolean> {
+  validate(command,context);
+  const conn=await this.pool.connect(); let begun=false;
+  try {
+   await conn.query('BEGIN'); begun=true;
+   await conn.query('SET LOCAL ROLE titan_trusted_writer');
+   await conn.query("SET LOCAL statement_timeout = '5000ms'");
+   const previous=await conn.query('SELECT command_kind, command_digest FROM titan.provisioning_audit WHERE request_id=$1',[context.requestId]);
+   await conn.query('COMMIT'); begun=false;
+   if(!previous.rows.length) return false;
+   if(previous.rows.length!==1||previous.rows[0].command_kind!==command.kind||previous.rows[0].command_digest!==stableDigest(command)) throw Error('provisioning request ID reused with different payload');
+   return true;
+  }catch(e){if(begun){try{await conn.query('ROLLBACK')}catch{/* retain original exception */}}throw e;}
+  finally{conn.release?.();}
+ }
+}
+/** Resolves a review row inside the caller's transaction. Approval reuses the create and relink rules of this module
+ * (same locks, same revision guard, same session revocation). Every conflict throws a plain error, so the transaction
+ * rolls back and the review stays open; nothing here records a new review. */
+async function resolveLinkReview(conn:SqlClient,context:ProvisioningContext,c:LinkReviewResolveCommand):Promise<'created'|'updated'|'replayed'>{
+ const locked=await conn.query('SELECT identity_id, organisation_id, application_id, local_account_id, state FROM titan.link_reviews WHERE id=$1 FOR UPDATE',[c.id]);
+ const review=locked.rows[0];
+ if(!review) throw Error('link review not found');
+ if(!sameUuid(review.identity_id,c.identityId)||!sameUuid(review.organisation_id,c.organisationId)||String(review.application_id)!==c.applicationId) throw Error('link review identity, organisation or application mismatch');
+ if(c.decision==='approved'&&String(review.local_account_id)!==c.localAccountId) throw Error('link review local account mismatch');
+ const state=String(review.state);
+ if(state!=='open'){
+  if(state===c.decision) return 'replayed';
+  throw Error('link review already resolved with a different decision');
+ }
+ const resolution=await conn.query("UPDATE titan.link_reviews SET state=$2, resolved_at=now(), resolved_by=$3, resolution_reason=$4, resolution_request_id=$5 WHERE id=$1 AND state='open'",[c.id,c.decision,context.actorSubject,c.reason,context.requestId]);
+ if(resolution.rowCount!==1) throw Error('link review changed during resolution');
+ if(c.decision==='rejected') return 'updated';
+ const same=await conn.query('SELECT l.id, l.state, l.local_account_id, l.revision, i.logto_subject FROM titan.local_account_links l JOIN titan.identities i ON i.id=l.identity_id WHERE l.identity_id=$1 AND l.organisation_id=$2 AND l.application_id=$3 FOR UPDATE OF l',[c.identityId,c.organisationId,c.applicationId]);
+ if(same.rows.length>1) throw Error('ambiguous account link for identity and application');
+ const row=same.rows[0];
+ if(!row){
+  if(c.expectedRevision!==undefined) throw Error('revision conflict: no account link exists to relink');
+  const claimed=await conn.query("SELECT id FROM titan.local_account_links WHERE application_id=$1 AND local_account_id=$2 AND state='verified' FOR UPDATE",[c.applicationId,c.localAccountId]);
+  if(claimed.rows.length>0) throw Error('local account is still verified for another link: resolve that link first');
+  const inserted=await conn.query("INSERT INTO titan.local_account_links(id,identity_id,organisation_id,application_id,local_user_id,local_account_id,state,verified_at) VALUES ($1,$2,$3,$4,$5,$6,'verified',now()) ON CONFLICT DO NOTHING RETURNING id",[c.id,c.identityId,c.organisationId,c.applicationId,c.localUserId,c.localAccountId]);
+  if(inserted.rowCount!==1) throw Error('concurrent account link write: review again');
+  return 'created';
+ }
+ if(c.expectedRevision===undefined||Number(row.revision)!==c.expectedRevision) throw Error('revision conflict: account link missing or changed');
+ if(String(row.state)==='verified'&&String(row.local_account_id)===c.localAccountId) throw Error('relink target is the current account');
+ const claimed=await conn.query("SELECT id FROM titan.local_account_links WHERE application_id=$1 AND local_account_id=$2 AND state='verified' AND id<>$3 FOR UPDATE",[c.applicationId,c.localAccountId,row.id]);
+ if(claimed.rows.length>0) throw Error('local account is still verified for another link: resolve that link first');
+ let updated;
+ try {
+  updated=await conn.query("UPDATE titan.local_account_links SET local_user_id=$3, local_account_id=$4, state='verified', verified_at=now(), revision=revision+1 WHERE id=$1 AND revision=$2",[row.id,c.expectedRevision,c.localUserId,c.localAccountId]);
+ } catch (e) {
+  if(isUniqueViolation(e)) throw Error('concurrent account link write: review again');
+  throw e;
+ }
+ if(updated.rowCount!==1) throw Error('revision conflict: account link changed');
+ await bumpGeneration(conn,c.applicationId,String(row.logto_subject),c.organisationId);
+ return 'updated';
 }
 /** Maps a provisioning command to its activity event. Detail holds enum values and application IDs only.
  * An identity has no organisation, and the activity table is tenant-keyed, so identity creation records no
@@ -150,6 +233,7 @@ function activityFor(c:ProvisioningCommand,context:ProvisioningContext):Activity
   case 'membership_update': return {...base,organisationId:c.organisationId,action:'membership.update',targetType:'membership',targetId:c.id,detail:{...(c.role!==undefined?{role:c.role}:{}),...(c.state!==undefined?{state:c.state}:{})}};
   case 'entitlement_update': return {...base,organisationId:c.organisationId,action:'entitlement.update',targetType:'entitlement',targetId:c.id,detail:{state:c.state}};
   case 'link_revoke': return {...base,organisationId:c.organisationId,action:'account_link.revoke',targetType:'account_link',targetId:c.id};
+  case 'link_review_resolve': return {...base,organisationId:c.organisationId,action:'link_review.resolve',targetType:'link_review',targetId:c.id,detail:{decision:c.decision}};
  }
 }
 /** Replay digest: the assertion is replaced by its SHA-256, so no signed token is stored in the audit table. */

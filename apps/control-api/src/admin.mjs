@@ -33,7 +33,10 @@ const isObject = v => v!==null&&typeof v==='object'&&!Array.isArray(v);
 const uuid = v => typeof v==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(v);
 const safeRequestId = v => uuid(v);
 const attrs = (value,allowed) => isObject(value)&&Object.keys(value).every(k=>allowed.includes(k));
+/** Every command this route accepts. Provisioning rejects any other kind, so this list is the operator surface. */
+export const OPERATOR_COMMAND_KINDS = Object.freeze(['membership','entitlement','link','link_relink','link_revoke','link_review_resolve']);
 const allowedCommands = {
+ link_review_resolve:['kind','id','identityId','organisationId','applicationId','decision','reason','expectedRevision','localUserId','localAccountId','assertion'],
  membership:['kind','id','identityId','organisationId','role'],
  entitlement:['kind','id','organisationId','applicationId','features','expiresAt'],
  link:['kind','id','identityId','organisationId','applicationId','localUserId','localAccountId','assertion'],
@@ -57,6 +60,15 @@ function validCommand(command) {
  if(command.kind==='link')return uuid(command.identityId)&&uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&str(command.localUserId)&&str(command.localAccountId)&&typeof command.assertion==='string'&&command.assertion.length<=4096&&ASSERTION.test(command.assertion);
  if(command.kind==='link_relink')return uuid(command.identityId)&&uuid(command.organisationId)&&['desk','field','academy'].includes(command.applicationId)&&revision(command.expectedRevision)&&str(command.localUserId)&&str(command.localAccountId)&&typeof command.assertion==='string'&&command.assertion.length<=4096&&ASSERTION.test(command.assertion);
  if(command.kind==='link_revoke')return uuid(command.organisationId)&&revision(command.expectedRevision);
+ if(command.kind==='link_review_resolve'){
+  // Same rules as CentralProvisioner: 1 to 500 characters, no surrounding space, no control characters.
+  const reason=command.reason;
+  const reasonOk=typeof reason==='string'&&reason.length>=1&&reason.length<=500&&reason.trim()===reason&&!/[\x00-\x1f\x7f]/.test(reason);
+  if(!uuid(command.identityId)||!uuid(command.organisationId)||!['desk','field','academy'].includes(command.applicationId)||!reasonOk)return false;
+  if(command.decision==='rejected')return ['localUserId','localAccountId','assertion','expectedRevision'].every(f=>command[f]===undefined);
+  if(command.decision==='approved')return str(command.localUserId)&&str(command.localAccountId)&&typeof command.assertion==='string'&&command.assertion.length<=4096&&ASSERTION.test(command.assertion)&&(command.expectedRevision===undefined||revision(command.expectedRevision));
+  return false;
+ }
  return false;
 }
 async function readJson(req, maxBytes=8192) {
@@ -177,7 +189,8 @@ export function createAdminHandler({verifyToken,authoriseOperator,provision,prov
    // Management API). TrustedProvisioningService and the organisation authoriser re-check authority.
    const result=await provision({logtoSubject:principal.logtoSubject,operatorAuthorityVerified:operatorAuthorised},
      {actorSubject:principal.logtoSubject,requestId:body.requestId,authorityReference:body.authorityReference},body.command);
-   if(result!=='created'&&result!=='updated'&&result!=='replayed')throw Error('invalid provisioning result');
+   // 'updated' is a committed relink, revoke or review resolution; it was previously refused here by mistake.
+   if(!['created','updated','replayed'].includes(result))throw Error('invalid provisioning result');
    send(res,result==='created'?201:200,{status:result,requestId:body.requestId});
   }catch(e){logger('admin_provision_failed',e);const [status,payload]=provisioningFailure(e);send(res,status,payload);}
   return true;

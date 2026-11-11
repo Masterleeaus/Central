@@ -17,6 +17,8 @@ export interface LinkPublicJwk {
 export interface LinkKeyConfig {
     /** Key ID carried in the JWS header. Unique within its product. */
     kid: string;
+    /** Signing algorithm the key is for. Only 'EdDSA' is accepted; omitted means EdDSA. */
+    alg?: 'EdDSA';
     jwk: LinkPublicJwk;
     /** Key accepted from this instant (ISO 8601). Rotation: publish the new key before products switch to it. */
     notBefore: string;
