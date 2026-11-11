@@ -39,14 +39,13 @@ test('invalid commands never connect',async()=>{
  await assert.rejects(p.apply({...context,requestId:'bad'},command),/invalid/);
  await assert.rejects(p.apply(context,{...command,id:'bad'}),/invalid/);
  await assert.rejects(p.apply(context,{kind:'membership',id,identityId:id,organisationId:id,role:'root'}),/invalid/);
- await assert.rejects(p.apply(context,{kind:'link',id,identityId:id,organisationId:id,applicationId:'field',localUserId:'a',localAccountId:'b',verifiedAt:'junk'}),/invalid/);
+ await assert.rejects(p.apply(context,{kind:'link',id,identityId:id,organisationId:id,applicationId:'field',localUserId:'a',localAccountId:'b',assertion:'not-a-jws'}),/invalid/);
  await assert.rejects(p.apply(context,{kind:'entitlement',id,organisationId:id,applicationId:'desk',features:['x','x']}),/invalid/);
 });
 test('valid membership, entitlement and link use bound SQL',async()=>{
  for(const c of [
   {kind:'membership',id,identityId:id,organisationId:id,role:'manager'},
-  {kind:'entitlement',id,organisationId:id,applicationId:'academy',features:['courses:read']},
-  {kind:'link',id,identityId:id,organisationId:id,applicationId:'field',localUserId:'u',localAccountId:'a',verifiedAt:'2026-11-02T00:00:00.000Z'}
+  {kind:'entitlement',id,organisationId:id,applicationId:'academy',features:['courses:read']}
  ]){
   const pool=makePool(q=>q.startsWith('SELECT command_kind')?{rows:[]}:{rows:[{id}],rowCount:1});
   assert.equal(await new CentralProvisioner(pool).apply(context,c),'created');

@@ -113,7 +113,8 @@ export type RegistryErrorCode =
   | 'invalid_contract_version'
   | 'missing_required_capability'
   | 'invalid_tenant_key'
-  | 'untrusted_origin';
+  | 'untrusted_origin'
+  | 'missing_origin';
 
 export class ProductRegistryError extends Error {
   readonly code: RegistryErrorCode;
@@ -356,4 +357,35 @@ export function inspectProductContract(product: ProductDefinition, configured: C
     }
   }
   return { productId: product.id, compatible: findings.length === 0, findings };
+}
+
+/**
+ * Runtime plan lookup for the admin plans view (issue #29).
+ * Keyed by legacy id, because access checks and OIDC plans still use legacy ids. Each entry shows the canonical
+ * product id next to the legacy id. The origin comes only from the validated registry.
+ */
+export interface ProductPlanLookupEntry {
+  productId: ProductId;
+  legacyId: ApplicationId;
+  displayName: string;
+  serviceOrigin: string;
+}
+
+/** Throws missing_origin when any canonical product has no validated origin. */
+export function planLookup(registry: readonly RegisteredProduct[]): Readonly<Record<ApplicationId, ProductPlanLookupEntry>> {
+  const out = {} as Record<ApplicationId, ProductPlanLookupEntry>;
+  for (const legacy of Object.keys(LEGACY_TO_PRODUCT) as ApplicationId[]) {
+    const product = resolveLegacyId(registry, legacy);
+    if (product.serviceOrigin === null) {
+      throw new ProductRegistryError('missing_origin', `${product.id} has no validated service origin`);
+    }
+    out[legacy] = Object.freeze({ productId: product.id, legacyId: legacy, displayName: product.displayName, serviceOrigin: product.serviceOrigin });
+  }
+  return Object.freeze(out);
+}
+
+/** Legacy-keyed origins for the OIDC plan builder. Every value comes from the validated registry. */
+export function originsForLegacyIds(registry: readonly RegisteredProduct[]): Readonly<Record<ApplicationId, string>> {
+  const lookup = planLookup(registry);
+  return Object.freeze({ field: lookup.field.serviceOrigin, desk: lookup.desk.serviceOrigin, academy: lookup.academy.serviceOrigin });
 }

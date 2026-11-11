@@ -1,0 +1,7 @@
+{
+  "name": "deleted-local-user",
+  "changes": {
+    "memberAllowed": false
+  },
+  "expectedAllowed": false
+}

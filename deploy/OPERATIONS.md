@@ -1,6 +1,6 @@
 # Titan Central deployment operations
 
-This guide documents how to operate the checked-in systemd template and secret template. It does not mean a live server, Logto tenant, database, DNS, or application integration has been configured or verified. Complete the gates in [PASS15_DEPLOYMENT_RUNBOOK.md](../PASS15_DEPLOYMENT_RUNBOOK.md) before installing the service.
+This guide documents how to operate the checked-in systemd template and secret template. It does not mean a live server, Logto tenant, database, DNS, or application integration has been configured or verified. Complete the gates in [PASS15_DEPLOYMENT_RUNBOOK.md](../docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md) before installing the service.
 
 Use a dedicated service account and an isolated Central database. Do not install this service into Sorted, Supercharged, LMS, or another product's directory or database.
 
@@ -70,3 +70,21 @@ Keep the previous release and its verified database backup until the new release
 Run the read-only preflight from the repository root with the actual non-secret deployment configuration. The checked-in staging example must remain blocked until evidence exists. A successful preflight does not prove that a real Logto deployment, application SSO flow, multi-tenant isolation, or rollback rehearsal has passed.
 
 The host owner must separately confirm the service account, Node path, domain/TLS/proxy configuration, secrets provisioning, isolated PostgreSQL role, and backup/restore procedure. No remote host changes are made by this repository guide.
+
+## Operator plane configuration (owner steps)
+
+The operator (admin) plane stays off until `TITAN_OPERATOR_ORGANISATION_ID` or `TITAN_OPERATOR_ROLE_IDS` is set. Once either is set, every operator value must be complete. Run these steps on the server. Do not print, paste or log the client secret.
+
+1. Edit `/etc/titan-central/central.env` (root:root, 0600) and set `TITAN_OPERATOR_ORGANISATION_ID` and `TITAN_OPERATOR_ROLE_IDS` to the Logto IDs for the operator organisation and its role. The repository template shows the owner-provided format (`tc5p1zpq21uu`, `wocrsarwp3tw2khe42kbi`) in comments only.
+2. Set `TITAN_LOGTO_M2M_CLIENT_ID` to the Logto machine-to-machine application ID. Set `TITAN_LOGTO_M2M_CLIENT_SECRET` to that application's secret, entered on the server only. Leave `TITAN_LOGTO_MANAGEMENT_ORIGIN` as the tenant origin with no path (for example `https://auth.titanzero.io`).
+3. Confirm `TITAN_LOGTO_MANAGEMENT_RESOURCE=https://auth.titanzero.io/api` and `TITAN_LOGTO_MANAGEMENT_SCOPE=all`, as provided by the owner.
+4. Run the read-only check. It prints variable names only, never values:
+
+   ```sh
+   python3 -I deploy/preflight.py --env-file /etc/titan-central/central.env
+   ```
+
+   Exit code 0 means every operator value is present and well-formed. Exit code 1 lists each missing or placeholder variable by name.
+5. Restart the service and confirm the health check (step 3 of "Install and operate the service").
+
+Tenant-administrator role IDs (for the mutation routes in issue #34) are not yet configured. They are owner-provided values and have no configuration key in the code yet.

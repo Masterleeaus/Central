@@ -22,9 +22,9 @@ def make_root(base: Path, pass_number=14, omit=()):
     for rel,text in files.items():
         if rel in omit: continue
         p=base/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(text)
-    if 'titan-central/PASS14_RELEASE_MANIFEST.json' not in omit:
-        (base/'titan-central').mkdir(parents=True,exist_ok=True)
-        (base/'titan-central'/'PASS14_RELEASE_MANIFEST.json').write_text(json.dumps({'pass':pass_number}))
+    if 'titan-central/docs/records/pass/PASS14_RELEASE_MANIFEST.json' not in omit:
+        (base/'titan-central'/'docs'/'records'/'pass').mkdir(parents=True,exist_ok=True)
+        (base/'titan-central'/'docs'/'records'/'pass'/'PASS14_RELEASE_MANIFEST.json').write_text(json.dumps({'pass':pass_number}))
     return base
 
 
@@ -270,7 +270,7 @@ class GateTests(unittest.TestCase):
     def test_missing_pass14_manifest_blocks(self):
         self.ready()
         with TemporaryDirectory() as d:
-            root=make_root(Path(d),omit=('titan-central/PASS14_RELEASE_MANIFEST.json',))
+            root=make_root(Path(d),omit=('titan-central/docs/records/pass/PASS14_RELEASE_MANIFEST.json',))
             upstream=make_upstream(Path(d)/'u')
             self.assertIn('missing_pass14_manifest',assess(self.data,root=root,upstream=upstream)['issues'])
 
@@ -285,7 +285,7 @@ class GateTests(unittest.TestCase):
         self.ready()
         with TemporaryDirectory() as d:
             root=make_root(Path(d))
-            (Path(d)/'titan-central'/'PASS14_RELEASE_MANIFEST.json').write_text('{not json')
+            (Path(d)/'titan-central'/'docs'/'records'/'pass'/'PASS14_RELEASE_MANIFEST.json').write_text('{not json')
             upstream=make_upstream(Path(d)/'u')
             self.assertIn('invalid_baseline_manifest',assess(self.data,root=root,upstream=upstream)['issues'])
 

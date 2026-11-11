@@ -1,0 +1,7 @@
+{
+  "name": "excessive-ttl",
+  "changes": {
+    "ttlSeconds": 301
+  },
+  "expectedAllowed": false
+}

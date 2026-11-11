@@ -250,3 +250,20 @@ export function inspectProductContract(product, configured) {
     }
     return { productId: product.id, compatible: findings.length === 0, findings };
 }
+/** Throws missing_origin when any canonical product has no validated origin. */
+export function planLookup(registry) {
+    const out = {};
+    for (const legacy of Object.keys(LEGACY_TO_PRODUCT)) {
+        const product = resolveLegacyId(registry, legacy);
+        if (product.serviceOrigin === null) {
+            throw new ProductRegistryError('missing_origin', `${product.id} has no validated service origin`);
+        }
+        out[legacy] = Object.freeze({ productId: product.id, legacyId: legacy, displayName: product.displayName, serviceOrigin: product.serviceOrigin });
+    }
+    return Object.freeze(out);
+}
+/** Legacy-keyed origins for the OIDC plan builder. Every value comes from the validated registry. */
+export function originsForLegacyIds(registry) {
+    const lookup = planLookup(registry);
+    return Object.freeze({ field: lookup.field.serviceOrigin, desk: lookup.desk.serviceOrigin, academy: lookup.academy.serviceOrigin });
+}

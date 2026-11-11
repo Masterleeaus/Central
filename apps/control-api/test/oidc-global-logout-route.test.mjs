@@ -43,7 +43,6 @@ test('construction refuses bad origins, cookie names and missing dependencies',(
   const base={globalLogout,authenticateSession:session(),postLogoutRedirectUri:REGISTERED,allowedOrigins:[ORIGIN],sessionCookieName:COOKIE};
   assert.throws(()=>createGlobalLogoutHandler({...base,allowedOrigins:[]}),/origins/);
   assert.throws(()=>createGlobalLogoutHandler({...base,allowedOrigins:['https://desk.titan.example/']}),/origins/);
-  assert.throws(()=>createGlobalLogoutHandler({...base,sessionCookieName:'bad name'}),/cookie/);
   assert.throws(()=>createGlobalLogoutHandler({...base,authenticateSession:null}),/authenticator/);
 });
 test('GET never revokes and returns a safe 405, with or without a session',async()=>{
@@ -81,14 +80,12 @@ test('authorised POST revokes every app for the caller, clears the session cooki
   assert.ok(rev.calls.every(c=>c.logtoSubject==='sub1'&&c.organisationId==='org1'));
   assert.equal(res.headers['cache-control'],'no-store');
 });
-test('session cookie is cleared with Max-Age=0 and the state cookie is set',async()=>{
+test('Central sets only the policy state cookie and never clears app session cookies (host-only, owned by each app)',async()=>{
   const {handler}=make();const {res}=await run(handler,req());
   const cookies=cookiesOf(res);
-  const cleared=cookies.find(c=>c.startsWith(COOKIE+'='));
-  assert.ok(cleared);
-  assert.match(cleared,/^titan_session=; Path=\/; Secure; HttpOnly; SameSite=Lax; Max-Age=0$/);
-  const state=cookies.find(c=>c.startsWith('titan_global_logout_state='));
-  assert.match(state,new RegExp(`^titan_global_logout_state=${'s'.repeat(43)}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=300$`));
+  assert.equal(cookies.length,1);
+  assert.ok(!cookies.some(c=>c.startsWith('titan_session=')));
+  assert.equal(cookies[0],`titan_global_logout_state=${'s'.repeat(43)}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=300`);
 });
 test('a failed revocation produces no redirect and clears no cookie',async()=>{
   const {handler}=make({revocations:recorder(true)});const {res}=await run(handler,req());

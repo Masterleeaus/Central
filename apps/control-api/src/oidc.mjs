@@ -9,8 +9,9 @@ const validString = (v) => typeof v === 'string' && v.length > 0;
  * Tokens and JWKS URLs are NEVER taken from a request. No unverified claims are trusted.
  * Unknown kids trigger at most one forced JWKS refresh per refreshCooldownMs (per instance). */
 export function createOidcVerifier({ issuer, audience, jwksUri, fetcher=fetch, clock=()=>Date.now(), cacheMs=60_000,
-  allowInsecureLocalhost=insecureLocalhostAllowed(), refreshCooldownMs=30_000 }) {
+  allowInsecureLocalhost=insecureLocalhostAllowed(), refreshCooldownMs=30_000, claimNames=[] }) {
   if (!validString(issuer) || !validString(audience) || !validString(jwksUri)) throw new Error('OIDC configuration required');
+  if (!Array.isArray(claimNames) || claimNames.length > 16 || !claimNames.every(n => validString(n))) throw new Error('claimNames must be a list of claim names');
   if (!isSecureEndpoint(issuer, allowInsecureLocalhost)) throw new Error('secure OIDC issuer required');
   if (!isSecureEndpoint(jwksUri, allowInsecureLocalhost)) throw new Error('secure JWKS URI required');
   const guard = createJwksRefreshGuard({ cooldownMs: refreshCooldownMs, clock });
@@ -42,6 +43,9 @@ export function createOidcVerifier({ issuer, audience, jwksUri, fetcher=fetch, c
     const seconds=Math.floor(clock()/1000);
     if (payload.iss!==issuer || !(payload.aud===audience || (Array.isArray(payload.aud)&&payload.aud.includes(audience)))) throw new OidcVerificationError('issuer or audience mismatch');
     if (!validString(payload.sub) || !Number.isSafeInteger(payload.exp) || payload.exp<=seconds || payload.iat && (!Number.isSafeInteger(payload.iat) || payload.iat>seconds+60) || payload.nbf && (!Number.isSafeInteger(payload.nbf) || payload.nbf>seconds+60)) throw new OidcVerificationError('expired or invalid token');
-    return { logtoSubject: payload.sub, issuer, audience, verifiedAt: new Date(clock()).toISOString() };
+    // Only the claims named in claimNames are returned, and only after the signature, issuer, audience and expiry checks above.
+    const claims = {};
+    for (const name of claimNames) if (payload[name] !== undefined) claims[name] = payload[name];
+    return { logtoSubject: payload.sub, issuer, audience, verifiedAt: new Date(clock()).toISOString(), claims };
   };
 }
