@@ -12,20 +12,20 @@ const WRITER='titan_trusted_writer';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const valid = value => typeof value==='string' && /^[A-Za-z0-9_-]{32,256}$/.test(value);
 const aadFor = (applicationId, stateDigest, field) => `titan_oidc_login_states|${applicationId}|${stateDigest}|${field}`;
-export function createPostgresOidcStateStore({pool,applicationId,clock=()=>Date.now(),sealer=createStateSealerFromEnv()}={}) {
-  if(typeof pool?.connect!=='function' || !['desk','field','academy'].includes(applicationId) || typeof sealer?.seal!=='function' || typeof sealer?.open!=='function')throw new TypeError('invalid OIDC state store configuration');
+export function createPostgresOidcStateStore({pool,applicationId,clock=()=>Date.now(),sealer=createStateSealerFromEnv(),role=WRITER}={}) {
+  if(typeof pool?.connect!=='function' || !['desk','field','academy','central'].includes(applicationId) || typeof sealer?.seal!=='function' || typeof sealer?.open!=='function' || ![WRITER,'titan_central_oidc'].includes(role) || (applicationId==='central')!==(role==='titan_central_oidc'))throw new TypeError('invalid OIDC state store configuration');
   return {
     async save(state,record) {
       if(!valid(state)||!valid(record?.nonce)||!valid(record?.verifier)||!valid(record?.bindingHash)||!Number.isSafeInteger(record.expiresAt)||record.expiresAt<=clock()||record.expiresAt>clock()+600_000)throw new TypeError('invalid OIDC login state');
       const stateDigest=digest(state);
       const sealedNonce=sealer.seal(record.nonce,aadFor(applicationId,stateDigest,'nonce'));
       const sealedVerifier=sealer.seal(record.verifier,aadFor(applicationId,stateDigest,'code_verifier'));
-      await withRoleTransaction(pool,WRITER,conn=>conn.query(`INSERT INTO titan.titan_oidc_login_states (application_id,state_digest,nonce,code_verifier,binding_hash,expires_at) VALUES ($1,$2,$3,$4,$5,to_timestamp($6::double precision / 1000))`,[applicationId,stateDigest,sealedNonce,sealedVerifier,record.bindingHash,record.expiresAt]));
+      await withRoleTransaction(pool,role,conn=>conn.query(`INSERT INTO titan.titan_oidc_login_states (application_id,state_digest,nonce,code_verifier,binding_hash,expires_at) VALUES ($1,$2,$3,$4,$5,to_timestamp($6::double precision / 1000))`,[applicationId,stateDigest,sealedNonce,sealedVerifier,record.bindingHash,record.expiresAt]));
     },
     async consume(state) {
       if(!valid(state))return null;
       const stateDigest=digest(state);
-      const result=await withRoleTransaction(pool,WRITER,conn=>conn.query(`DELETE FROM titan.titan_oidc_login_states WHERE application_id=$1 AND state_digest=$2 AND expires_at > to_timestamp($3::double precision / 1000) RETURNING nonce,code_verifier,binding_hash,expires_at`,[applicationId,stateDigest,clock()]));
+      const result=await withRoleTransaction(pool,role,conn=>conn.query(`DELETE FROM titan.titan_oidc_login_states WHERE application_id=$1 AND state_digest=$2 AND expires_at > to_timestamp($3::double precision / 1000) RETURNING nonce,code_verifier,binding_hash,expires_at`,[applicationId,stateDigest,clock()]));
       if(result.rows.length!==1)return null;
       const row=result.rows[0];
       try {

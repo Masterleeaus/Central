@@ -14,7 +14,7 @@ function fakePool({failOn={},rows=[]}={}){
     conns.push(c);return c;
   }};
 }
-test('exposes only the two trusted roles',()=>{assert.deepEqual([...DATABASE_ROLES],['titan_trusted_reader','titan_trusted_writer']);});
+test('exposes only the two trusted roles and isolated Central OIDC role',()=>{assert.deepEqual([...DATABASE_ROLES],['titan_trusted_reader','titan_trusted_writer','titan_central_oidc']);});
 test('rejects a role outside the allowlist without touching the pool',async()=>{const pool=fakePool();await assert.rejects(withRoleTransaction(pool,'postgres',async()=>1),/invalid database role/);await assert.rejects(withRoleTransaction(pool,'titan_tenant_app; DROP',async()=>1),/invalid database role/);assert.equal(pool.conns.length,0);});
 test('rejects a pool without connect()',async()=>{await assert.rejects(withRoleTransaction({query:async()=>({rows:[]})},'titan_trusted_reader',async()=>1),/connect\(\)/);});
 test('runs BEGIN, SET LOCAL ROLE, task, COMMIT and releases the connection clean',async()=>{const pool=fakePool();const out=await withRoleTransaction(pool,'titan_trusted_reader',async c=>{c.log.push('task');return 'value'});assert.equal(out,'value');const [c]=pool.conns;assert.deepEqual(c.log,['BEGIN','SET LOCAL ROLE titan_trusted_reader','task','COMMIT']);assert.equal(c.released_called,true);assert.equal(c.released,undefined);});

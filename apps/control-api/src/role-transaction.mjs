@@ -4,7 +4,7 @@
  * to the pool is back on the login role.
  * If the transaction state cannot be confirmed (BEGIN failed, or ROLLBACK failed after an error),
  * the connection is destroyed on release instead of being reused. */
-export const DATABASE_ROLES = Object.freeze(['titan_trusted_reader', 'titan_trusted_writer']);
+export const DATABASE_ROLES = Object.freeze(['titan_trusted_reader', 'titan_trusted_writer', 'titan_central_oidc']);
 
 export async function withRoleTransaction(pool, role, task) {
   if (!DATABASE_ROLES.includes(role)) throw new TypeError('invalid database role');
@@ -19,6 +19,7 @@ export async function withRoleTransaction(pool, role, task) {
     phase = 'open';
     // role is a constant from DATABASE_ROLES; a role name cannot be a bind parameter.
     await conn.query(`SET LOCAL ROLE ${role}`);
+    if (role === 'titan_central_oidc') await conn.query("SET LOCAL statement_timeout = '5000ms'");
     const result = await task(conn);
     await conn.query('COMMIT');
     phase = 'done';

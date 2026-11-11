@@ -85,6 +85,13 @@ jobs:
           python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["ready"] is False' "$RUNNER_TEMP/preflight.json"
 
       # Database: fresh schema, idempotent re-run, then two-tenant RLS. Any cross-tenant success fails.
+      # Production provisions this NOINHERIT service login before applying migrations.
+      # CI must mirror that prerequisite; later migrations grant it narrowly scoped roles.
+      - name: Provision Central service login for migration grants
+        run: |
+          psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" <<'SQL'
+          CREATE ROLE titan_central_app LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
+          SQL
       - name: Apply migrations to a fresh database
         run: python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL"
       - name: Re-running migrations applies nothing
@@ -124,19 +131,17 @@ jobs:
   # found through NODE_PATH; without it the smoke test would skip silently.
   launcher:
     runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
-      - uses: actions/checkout@v4 # major-version pin only
-      - uses: actions/setup-node@v4 # major-version pin only
-        with:
-          node-version: 22
-
-      - name: Install Playwright and Chromium for the launcher smoke test
-        run: |
-          npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
-          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install chromium
+      - uses: actions/checkout@v4
+      - name: Install pinned Playwright test dependency
+        run: npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
 
       - name: Launcher test suite
         working-directory: apps/launcher
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
         run: npm test
 
       # The smoke test calls t.skip() when it cannot launch Chromium, so fail if it skipped here.
@@ -148,4 +153,5 @@ jobs:
         run: |
           out=$(node --test test/smoke.playwright.test.mjs 2>&1) || { echo "$out"; exit 1; }
           echo "$out"
-          echo "$out" | grep -q '^# skipped 0$' || { echo "launcher smoke test was skipped"; exit 1; }
+          echo "$out" | grep -Eq '^[[:space:]]*(ℹ[[:space:]]*)?skipped[[:space:]]+0 || { echo "launcher smoke test was skipped"; exit 1; }
+ || { echo "launcher smoke test was skipped"; exit 1; }
