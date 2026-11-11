@@ -1,34 +1,11 @@
-# Titan Central — current architecture
+# Titan Central architecture decisions (Pass 01)
 
-## Brand and product registry
+- ADR-001: isolate upstream Logto; Titan extensions live separately.
+- ADR-002: **one** canonical identity provider; three application-local sessions; independently enforced application permissions.
+- ADR-003: target one PostgreSQL database for Titan Central, Sorted, Supercharged, and LMS (source repository: `Masterleeaus/Skilled`). Shared identity/company tables live in the `titan` schema; app-owned domain tables use canonical `company_id` foreign keys to `titan.companies`. Existing separate application databases remain in place until an independently verified migration cutover; this source foundation does not authorize that cutover.
+- ADR-004: company membership must be checked at each app API boundary and revocation propagated, not inferred from email/company text. Each tenant-owned row uses the canonical `company_id` UUID.
+- ADR-005: no shared application secrets; per-service OIDC registrations and signed server-to-server tokens when appropriate.
+- ADR-006: the migration target keeps tenant business data in the shared Titan PostgreSQL database, not in Logto. Logto remains the identity provider.
+- ADR-007: manage deployments as immutable tagged source + reviewable Titan delta, never overwrite live apps from ZIP.
 
-Titan Central is the shared identity, organisation-access and product-entitlement service. The integrated products are registered under these canonical IDs:
-
-| Central ID | Product | Repository |
-|---|---|---|
-| `sorted` | Sorted | `Masterleeaus/Sorted` |
-| `supercharged` | Supercharged | `Masterleeaus/Supercharged` |
-| `lms` | LMS | `Masterleeaus/Skilled` |
-
-The old Central IDs `field`, `desk` and `academy` have been retired before production data exists. New source, test fixtures and draft schemas use the canonical IDs above.
-
-## Source ownership
-
-- This repository is the Titan Central application source.
-- `apps/control-api` is the HTTP service and its OIDC/session adapters.
-- `packages/control-plane/src` is the canonical authorisation, provisioning and product-registration source.
-- `packages/control-plane/dist` is generated TypeScript output used by the API runtime; regenerate it with the root build command.
-- `migrations`, `deploy`, and their tests belong to the same source base.
-- Logto is a separate runtime identity service integrated by Titan Central over OIDC and the Management API. It has its own source repository and deployment lifecycle.
-
-## Security boundaries
-
-- Logto authenticates users; Titan Central verifies OIDC tokens and evaluates current organisation membership and product entitlements.
-- Each product retains its own user, account and business data. Central stores only verified identity and product-account links.
-- Sorted owns its `account_id` tenancy and RLS; Supercharged must complete and verify its company tenancy before tenant-scoped access is enabled; LMS owns `companyRef` and its service-scoped integration credentials.
-- Product adapters must not infer account ownership from email, names, or client-supplied tenant values.
-- OIDC audiences and service-to-service credentials remain distinct trust mechanisms.
-
-## Runtime origins
-
-The staging example keeps the currently configured host origins until deployment DNS and callback ownership are confirmed. Product IDs, labels and callback route identifiers use the current names. Replace the example hostnames only with verified deployment origins.
+- ADR-008: Central owns the canonical shared database schema and ordered migration registry. App repositories contribute reviewed app-domain migrations to that single chain; they do not independently apply schema pushes to production.

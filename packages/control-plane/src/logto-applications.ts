@@ -30,8 +30,8 @@ export class LogtoApplicationInspector {
   if(!Number.isInteger(opts.maxPages??10)||(opts.maxPages??10)<1||(opts.maxPages??10)>100)throw Error('invalid page limit');
   this.origin=u.origin;this.fetcher=opts.fetcher??fetch;this.token=opts.accessToken;this.pages=opts.maxPages??10;
  }
- async inspect(plans:readonly OidcApplicationPlan[], assignedIds:Partial<Record<'supercharged'|'sorted'|'lms',string>>):Promise<readonly RegistrationStatus[]>{
-  if(plans.length!==3||new Set(plans.map(p=>p.app)).size!==3||plans.some(p=>!['supercharged','sorted','lms'].includes(p.app)))throw Error('invalid registration plans');
+ async inspect(plans:readonly OidcApplicationPlan[], assignedIds:Partial<Record<'desk'|'field'|'academy',string>>):Promise<readonly RegistrationStatus[]>{
+  if(plans.length!==3||new Set(plans.map(p=>p.app)).size!==3||plans.some(p=>!['desk','field','academy'].includes(p.app)))throw Error('invalid registration plans');
   // IDs are obtained from a trusted operator, never matched by mutable display names.
   if(Object.values(assignedIds).some(id=>id!==undefined&&(!string(id)||!/^[a-zA-Z0-9_-]{1,256}$/.test(id))))throw Error('invalid assigned client ID');
   const token=await this.token();

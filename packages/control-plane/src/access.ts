@@ -3,14 +3,14 @@ import { getApplication } from './applications.js';
 const deny = (reason: DenialReason): AccessDecision => ({ allowed: false, reason });
 function validExpiry(expiry: string | undefined, now: string): boolean { return !expiry || (Number.isFinite(Date.parse(expiry)) && Date.parse(expiry) > Date.parse(now)); }
 function oneActive<T>(values: readonly T[]): T | undefined { return values.length === 1 ? values[0] : undefined; }
-export interface TrustConfig { expectedIssuer: string; audienceByApplication: Readonly<Record<'sorted' | 'supercharged' | 'lms', string>>; }
+export interface TrustConfig { expectedIssuer: string; audienceByApplication: Readonly<Record<'field' | 'desk' | 'academy', string>>; }
 /** Does not authenticate callers. `principal` MUST come from token-verifying OIDC middleware. */
 export class CentralAccessService {
   constructor(private readonly repository: CentralRepository, private readonly trust: TrustConfig) {}
   async authorise(request: AccessRequest): Promise<AccessDecision> {
     const {principal, organisationId, applicationId, action} = request;
     const now = request.now ?? new Date().toISOString();
-    if (!Number.isFinite(Date.parse(now)) || !principal || typeof principal.logtoSubject !== 'string' || !principal.logtoSubject.trim() || !organisationId?.trim() || !action?.trim() || !['sorted','supercharged','lms'].includes(applicationId)) return deny('invalid_principal');
+    if (!Number.isFinite(Date.parse(now)) || !principal || typeof principal.logtoSubject !== 'string' || !principal.logtoSubject.trim() || !organisationId?.trim() || !action?.trim() || !['field','desk','academy'].includes(applicationId)) return deny('invalid_principal');
     if (principal.issuer !== this.trust.expectedIssuer) return deny('untrusted_issuer');
     if (principal.audience !== this.trust.audienceByApplication[applicationId]) return deny('untrusted_audience');
     if (!Number.isFinite(Date.parse(principal.verifiedAt))) return deny('invalid_principal');

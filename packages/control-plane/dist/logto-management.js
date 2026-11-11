@@ -1,5 +1,7 @@
 const identifier = (v) => typeof v === 'string' && v.length > 0 && v.length <= 256 && /^[A-Za-z0-9_-]+$/.test(v);
 const obj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+/** Fail-closed bound on the unpaginated per-user organisations response. */
+const maxUserOrganisations = 1000;
 export class LogtoAuthorityError extends Error {
     constructor(message = 'Logto authority verification failed') { super(message); this.name = 'LogtoAuthorityError'; }
 }
@@ -8,16 +10,30 @@ export class LogtoManagementVerifier {
     accessToken;
     fetcher;
     maxPages;
+    membershipTtlMs;
+    membershipMaxEntries;
+    clock;
+    /** Key `${organisationId}\0${userId}` -> expiry time (ms). Positive results only, so denials always reach Logto. */
+    membershipCache = new Map();
     constructor(opts) {
         const url = new URL(opts.origin);
         if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/')
             throw new Error('management origin must be an HTTPS origin');
         if (!Number.isInteger(opts.maxPages ?? 25) || (opts.maxPages ?? 25) < 1 || (opts.maxPages ?? 25) > 100)
             throw new Error('invalid page bound');
+        const ttl = opts.membershipCacheTtlMs ?? 30_000;
+        if (!Number.isInteger(ttl) || ttl < 0 || ttl > 300_000)
+            throw new Error('invalid membership cache TTL');
+        const maxEntries = opts.membershipCacheMaxEntries ?? 1000;
+        if (!Number.isInteger(maxEntries) || maxEntries < 1 || maxEntries > 100_000)
+            throw new Error('invalid membership cache size');
         this.origin = url.origin;
         this.accessToken = opts.accessToken;
         this.fetcher = opts.fetcher ?? fetch;
         this.maxPages = opts.maxPages ?? 25;
+        this.membershipTtlMs = ttl;
+        this.membershipMaxEntries = maxEntries;
+        this.clock = opts.clock ?? (() => Date.now());
     }
     async get(path) {
         const token = await this.accessToken();
@@ -40,25 +56,49 @@ export class LogtoManagementVerifier {
         }
     }
     /** Confirm a Logto identity currently belongs to an independently known organisation.
-     * Exhaust pages (up to a configured safe bound); never infer membership from email or profile.
+     * A positive result is reused for at most membershipCacheTtlMs; a cache hit costs zero Logto calls.
+     * A cold lookup is exactly one bounded Logto call, independent of organisation size; never infer membership from email or profile.
      */
     async assertMembership(logtoUserId, logtoOrganisationId) {
         if (!identifier(logtoUserId) || !identifier(logtoOrganisationId))
             throw new LogtoAuthorityError('invalid identity reference');
-        const user = await this.get(`/users/${encodeURIComponent(logtoUserId)}`);
-        const organisation = await this.get(`/organizations/${encodeURIComponent(logtoOrganisationId)}`);
-        if (!obj(user) || user.id !== logtoUserId || !obj(organisation) || organisation.id !== logtoOrganisationId)
-            throw new LogtoAuthorityError('identity or organisation not found');
-        for (let page = 1; page <= this.maxPages; page++) {
-            const members = await this.get(`/organizations/${encodeURIComponent(logtoOrganisationId)}/users?page=${page}&page_size=100`);
-            if (!Array.isArray(members) || members.length > 100 || !members.every(x => obj(x) && identifier(x.id)))
-                throw new LogtoAuthorityError('invalid organisation membership response');
-            if (members.some(x => x.id === logtoUserId))
+        if (this.membershipTtlMs === 0)
+            return this.lookupMembership(logtoUserId, logtoOrganisationId);
+        const key = `${logtoOrganisationId}\u0000${logtoUserId}`;
+        const expiresAt = this.membershipCache.get(key);
+        if (expiresAt !== undefined) {
+            if (expiresAt > this.clock())
                 return;
-            if (members.length < 100)
-                throw new LogtoAuthorityError('user not a current organisation member');
+            this.membershipCache.delete(key);
         }
-        throw new LogtoAuthorityError('membership lookup exceeded safe pagination bound');
+        await this.lookupMembership(logtoUserId, logtoOrganisationId);
+        this.rememberMembership(key);
+    }
+    rememberMembership(key) {
+        const now = this.clock();
+        if (this.membershipCache.size >= this.membershipMaxEntries) {
+            for (const [k, exp] of this.membershipCache)
+                if (exp <= now)
+                    this.membershipCache.delete(k);
+            while (this.membershipCache.size >= this.membershipMaxEntries) {
+                const oldest = this.membershipCache.keys().next().value;
+                if (oldest === undefined)
+                    break;
+                this.membershipCache.delete(oldest);
+            }
+        }
+        this.membershipCache.set(key, now + this.membershipTtlMs);
+    }
+    /** One Logto call: GET /api/users/{userId}/organizations (upstream logto-io/logto v1.45.0,
+     * packages/core/src/routes/admin-user/organization.ts). That endpoint is NOT paginated, so the
+     * response is bounded here instead; a missing user returns 404 and is rejected by get(). */
+    async lookupMembership(logtoUserId, logtoOrganisationId) {
+        const organisations = await this.get(`/users/${encodeURIComponent(logtoUserId)}/organizations`);
+        if (!Array.isArray(organisations) || organisations.length > maxUserOrganisations || !organisations.every(x => obj(x) && identifier(x.id)))
+            throw new LogtoAuthorityError('invalid user organisation response');
+        if (organisations.some(x => x.id === logtoOrganisationId))
+            return;
+        throw new LogtoAuthorityError('user not a current organisation member');
     }
     async assertIdentity(logtoUserId) {
         if (!identifier(logtoUserId))
@@ -75,13 +115,13 @@ export class LogtoManagementVerifier {
             throw new LogtoAuthorityError('organisation not found');
     }
     /** Require at least one exact Logto organisation role ID, fetched at decision time.
-     * Does not infer privileges from email, role display names, or local Supercharged/Sorted profiles.
+     * Does not infer privileges from email, role display names, or local Desk/Field profiles.
      */
     async assertAnyOrganisationRole(logtoUserId, logtoOrganisationId, allowedRoleIds) {
         if (!identifier(logtoUserId) || !identifier(logtoOrganisationId) || !Array.isArray(allowedRoleIds) || allowedRoleIds.length < 1 || allowedRoleIds.length > 32 || !allowedRoleIds.every(identifier))
             throw new LogtoAuthorityError('invalid organisation role scope');
         const allowed = new Set(allowedRoleIds);
-        // Membership is independently rechecked at the time of each privileged decision.
+        // Membership is checked on each privileged decision (served from the bounded TTL cache when fresh).
         await this.assertMembership(logtoUserId, logtoOrganisationId);
         for (let page = 1; page <= this.maxPages; page++) {
             const raw = await this.get(`/organizations/${encodeURIComponent(logtoOrganisationId)}/users/${encodeURIComponent(logtoUserId)}/roles?page=${page}&page_size=100`);

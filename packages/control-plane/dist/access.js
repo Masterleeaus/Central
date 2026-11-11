@@ -13,7 +13,7 @@ export class CentralAccessService {
     async authorise(request) {
         const { principal, organisationId, applicationId, action } = request;
         const now = request.now ?? new Date().toISOString();
-        if (!Number.isFinite(Date.parse(now)) || !principal || typeof principal.logtoSubject !== 'string' || !principal.logtoSubject.trim() || !organisationId?.trim() || !action?.trim() || !['sorted', 'supercharged', 'lms'].includes(applicationId))
+        if (!Number.isFinite(Date.parse(now)) || !principal || typeof principal.logtoSubject !== 'string' || !principal.logtoSubject.trim() || !organisationId?.trim() || !action?.trim() || !['field', 'desk', 'academy'].includes(applicationId))
             return deny('invalid_principal');
         if (principal.issuer !== this.trust.expectedIssuer)
             return deny('untrusted_issuer');

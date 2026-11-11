@@ -1,7 +1,5 @@
-/** Exact, operator-reviewed OIDC client registration plans. No management mutations.
- * Client IDs are assigned by running Logto, not guessed or seeded by the browser.
- */
-export type TitanApp = 'supercharged' | 'sorted' | 'lms';
+/** Callback contract: see oidcCallbackPath in applications.ts (/auth/titan/{app}/callback). */
+export type TitanApp = 'desk' | 'field' | 'academy';
 export interface OidcApplicationPlan {
     app: TitanApp;
     origin: string;

@@ -2,11 +2,14 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createOidcLogin,TitanOidcLoginError} from '../src/oidc-login.mjs';
 const binding='b'.repeat(42), issuer='https://identity.titanzero.io',clientId='desk-client';
+const DISCOVERY='/.well-known/openid-configuration';
+const discoveryResponse=(meta=metadataFor(issuer))=>({ok:true,redirected:false,json:async()=>meta,text:async()=>JSON.stringify(meta)});
+const metadataFor=iss=>({issuer:iss,authorization_endpoint:`${iss}/oidc/auth`,token_endpoint:`${iss}/oidc/token`});
 const setup=(options={})=>{
  let now=1_800_000_000_000;const pending=new Map();let calls=0;
  const loginStore={save:async(k,v)=>{pending.set(k,v)},consume:async(k)=>{const v=pending.get(k);pending.delete(k);return v}};
  let observed;
- const fetcher=async(u,request)=>{calls++;observed={url:u,request};return {ok:true,json:async()=>({id_token:'jwt.token.signature',access_token:'abcdef',token_type:'Bearer'})}};
+ const fetcher=async(u,request)=>{if(String(u).endsWith(DISCOVERY)){return discoveryResponse();}calls++;observed={url:u,request};return {ok:true,json:async()=>({id_token:'jwt.token.signature',access_token:'abcdef',token_type:'Bearer'})}};
  let nonce;
  const verifyIdToken=async()=>({iss:issuer,aud:clientId,sub:'logto-user',nonce,exp:Math.floor(now/1000)+60});
  const login=createOidcLogin({issuer,clientId,clientSecret:'secret',redirectUri:'https://desk.titanzero.io/auth/callback',loginStore,fetcher,verifyIdToken,clock:()=>now,...options});
@@ -20,8 +23,14 @@ test('expired state rejected',async()=>{const s=setup();const u=new URL((await s
 test('nonce mismatch rejected',async()=>{const s=setup();const u=new URL((await s.login.begin({browserBinding:binding})).authorizationUrl);s.setNonce('wrong');await assert.rejects(s.login.complete({state:u.searchParams.get('state'),code:'abc',browserBinding:binding}),TitanOidcLoginError);});
 test('invalid issuer rejected',async()=>{const s=setup({verifyIdToken:async()=>({sub:'ok',iss:'https://evil.test',aud:clientId,nonce:'bad',exp:2000000000})});const u=new URL((await s.login.begin({browserBinding:binding})).authorizationUrl);await assert.rejects(s.login.complete({state:u.searchParams.get('state'),code:'abc',browserBinding:binding}),TitanOidcLoginError);});
 test('invalid audience rejected',async()=>{const s=setup({verifyIdToken:async()=>({sub:'ok',iss:issuer,aud:'other',nonce:'bad',exp:2000000000})});const u=new URL((await s.login.begin({browserBinding:binding})).authorizationUrl);await assert.rejects(s.login.complete({state:u.searchParams.get('state'),code:'abc',browserBinding:binding}),TitanOidcLoginError);});
-test('network failure fails closed',async()=>{const s=setup({fetcher:async()=>{throw Error('offline')}});const u=new URL((await s.login.begin({browserBinding:binding})).authorizationUrl);await assert.rejects(s.login.complete({state:u.searchParams.get('state'),code:'abc',browserBinding:binding}),/token_exchange_unavailable/);});
+test('network failure fails closed',async()=>{const s=setup({fetcher:async(u)=>{if(String(u).endsWith(DISCOVERY))return discoveryResponse();throw Error('offline')}});const u=new URL((await s.login.begin({browserBinding:binding})).authorizationUrl);await assert.rejects(s.login.complete({state:u.searchParams.get('state'),code:'abc',browserBinding:binding}),/token_exchange_unavailable/);});
 test('rejects invalid browser binding',async()=>{const s=setup();await assert.rejects(s.login.begin({browserBinding:'short'}),TitanOidcLoginError);});
 test('rejects callback with missing state',async()=>{const s=setup();await assert.rejects(s.login.complete({state:'',code:'abc',browserBinding:binding}),TitanOidcLoginError);});
 test('rejects non-https issuer',()=>{assert.throws(()=>setup({issuer:'http://evil.example'}),/invalid OIDC URL/);});
 test('rejects insecure callback',()=>{assert.throws(()=>setup({redirectUri:'http://evil.example/auth/callback'}),/invalid OIDC URL/);});
+
+test('localhost OIDC endpoints are refused without the dev flag and accepted with it',()=>{
+ const local={issuer:'http://localhost:9000',redirectUri:'http://localhost:9000/auth/callback'};
+ assert.throws(()=>setup(local),/invalid OIDC URL/);
+ assert.equal(typeof setup({...local,allowInsecureLocalhost:true}).login.begin,'function');
+});

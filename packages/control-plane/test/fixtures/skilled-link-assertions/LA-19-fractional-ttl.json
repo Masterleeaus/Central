@@ -1,0 +1,7 @@
+{
+  "name": "fractional-ttl",
+  "changes": {
+    "ttlSeconds": 1.5
+  },
+  "expectedAllowed": false
+}

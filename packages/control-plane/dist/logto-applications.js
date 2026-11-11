@@ -18,7 +18,7 @@ export class LogtoApplicationInspector {
         this.pages = opts.maxPages ?? 10;
     }
     async inspect(plans, assignedIds) {
-        if (plans.length !== 3 || new Set(plans.map(p => p.app)).size !== 3 || plans.some(p => !['supercharged', 'sorted', 'lms'].includes(p.app)))
+        if (plans.length !== 3 || new Set(plans.map(p => p.app)).size !== 3 || plans.some(p => !['desk', 'field', 'academy'].includes(p.app)))
             throw Error('invalid registration plans');
         // IDs are obtained from a trusted operator, never matched by mutable display names.
         if (Object.values(assignedIds).some(id => id !== undefined && (!string(id) || !/^[a-zA-Z0-9_-]{1,256}$/.test(id))))

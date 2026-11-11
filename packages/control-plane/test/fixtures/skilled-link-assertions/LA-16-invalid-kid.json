@@ -1,0 +1,7 @@
+{
+  "name": "invalid-kid",
+  "changes": {
+    "kid": "not valid"
+  },
+  "expectedAllowed": false
+}

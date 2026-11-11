@@ -21,6 +21,6 @@ export declare class LogtoApplicationInspector {
     private readonly token;
     private readonly pages;
     constructor(opts: LogtoApplicationsOptions);
-    inspect(plans: readonly OidcApplicationPlan[], assignedIds: Partial<Record<'supercharged' | 'sorted' | 'lms', string>>): Promise<readonly RegistrationStatus[]>;
+    inspect(plans: readonly OidcApplicationPlan[], assignedIds: Partial<Record<'desk' | 'field' | 'academy', string>>): Promise<readonly RegistrationStatus[]>;
 }
 export {};

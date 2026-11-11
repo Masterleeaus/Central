@@ -1,0 +1,415 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-only-throwaway
+          POSTGRES_DB: titan_central
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TITAN_CI_DATABASE_URL: postgresql://postgres:ci-only-throwaway@localhost:5432/titan_central
+    steps:
+      - uses: actions/checkout@v4 # major-version pin only
+      - uses: actions/setup-node@v4 # major-version pin only
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5 # major-version pin only
+        with:
+          python-version: '3.13'
+
+      # Dependencies come only from the committed lockfiles.
+      - name: Install locked root workspace dependencies
+        run: npm ci
+
+      # Build to a scratch directory and fail if the committed dist/ differs.
+      # Rebuild with: (cd packages/control-plane && npx tsc -p tsconfig.json)
+      - name: Build control-plane (tsc, scratch output)
+        working-directory: packages/control-plane
+        run: npx tsc -p tsconfig.json --outDir "$RUNNER_TEMP/dist-fresh"
+      - name: Fail if committed control-plane dist is stale
+        working-directory: packages/control-plane
+        run: |
+          if ! diff -r dist "$RUNNER_TEMP/dist-fresh"; then
+            echo "packages/control-plane/dist does not match a fresh build. Run: cd packages/control-plane && npx tsc -p tsconfig.json"
+            exit 1
+          fi
+
+      - name: Verify root workspace package export
+        run: node --input-type=module -e "const m=await import('@titan-central/control-plane'); if(typeof m.CentralAccessService!=='function')throw Error('missing workspace export')"
+
+      - name: control-plane tests
+        working-directory: packages/control-plane
+        run: node --test test/*.test.mjs
+      - name: configuration engine tests
+        run: node --test packages/config-engine/test/*.test.mjs
+      - name: control-api tests
+        working-directory: apps/control-api
+        run: node --test test/*.test.mjs
+
+      - name: Python tests (deploy)
+        run: python3 -m unittest discover -s deploy/tests -p 'test_*.py' -v
+      - name: Python tests (tools and migration runner)
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+      # Check mode: the example config must parse and be assessed as NOT ready (exit 1).
+      # Exit 2 (unreadable) or 0 (ready) fails the job.
+      - name: Validate product host selection proxy and isolated nginx parser
+        run: |
+          python3 -I deploy/proxy/validate_product_selection.py
+          python3 -m unittest discover -s deploy/tests -p 'test_product_selection_proxy.py' -v
+          bash deploy/proxy/nginx/product-selection-syntax-smoke.sh
+
+      - name: Parse deployed nginx rate-limit templates with an isolated real nginx
+        run: bash deploy/proxy/nginx/syntax-smoke.sh
+
+      - name: Preflight check mode
+        run: |
+          set +e
+          python3 deploy/preflight.py --config deploy/staging.example.json > "$RUNNER_TEMP/preflight.json"
+          rc=$?
+          set -e
+          if [ "$rc" -ne 1 ]; then
+            echo "preflight exited $rc; expected 1 (example config is not ready)"
+            cat "$RUNNER_TEMP/preflight.json"
+            exit 1
+          fi
+          python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["ready"] is False' "$RUNNER_TEMP/preflight.json"
+
+      # Database: fresh schema, idempotent re-run, then two-tenant RLS. Any cross-tenant success fails.
+      # Production provisions this NOINHERIT service login before applying migrations.
+      # CI must mirror that prerequisite; later migrations grant it narrowly scoped roles.
+      - name: Provision Central service login for migration grants
+        run: |
+          psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" <<'SQL'
+          CREATE ROLE titan_central_app LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
+          SQL
+      - name: Apply migrations to a fresh database
+        run: python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL"
+      - name: Re-running migrations applies nothing
+        run: |
+          out=$(python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL")
+          echo "$out"
+          test "$out" = "applied 0 migration(s)"
+      - name: Multi-company product selection PostgreSQL replay and app namespace isolation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/product_company_selection.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: One-use product account proof nonce PostgreSQL isolation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/product_link_proof_nonce.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Two-tenant RLS tests
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$TITAN_CI_DATABASE_URL"
+      - name: Onboarding state machine tests (migration 0017)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/onboarding_states.sql "$TITAN_CI_DATABASE_URL"
+      - name: Transactional outbox tests (SQL, real PostgreSQL)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/outbox.sql "$TITAN_CI_DATABASE_URL"
+      - name: Session revocation RLS tests (two organisations)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/session_revocation_rls.sql "$TITAN_CI_DATABASE_URL"
+      # Login-role path: the service login role (NOINHERIT, member of the trusted roles) runs the
+      # session-revocation and OIDC-state statements and the access check through SET LOCAL ROLE.
+      # TITAN_REQUIRE_DB_TESTS makes a missing psql or database URL fail the job instead of skipping.
+      - name: Login-role path tests (SQL, real PostgreSQL)
+        env:
+          TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
+          TITAN_REQUIRE_DB_TESTS: '1'
+        run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
+
+
+      # The draft shared-schema chain is a separate clean-install path until #43 reconciles it.
+      - name: Shared company core clean-install checks
+        env:
+          PGPASSWORD: ci-only-throwaway
+        run: |
+          createdb -h localhost -U postgres titan_shared_core_ci
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d titan_shared_core_ci -f database/migrations/0001_shared_company_core.sql
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d titan_shared_core_ci -f tests/sql/shared_company_core.sql
+
+
+      - name: Browser-session role isolation and atomic deletion
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_browser_sessions.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Central OIDC state isolation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_oidc_state_isolation.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Scoped company discovery and membership isolation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_company_discovery.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Durable company selection role isolation and one-use consumption
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_company_selection.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Central browser session access-reduction revocation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_session_access_revocation.sql "$TITAN_CI_DATABASE_URL"
+
+      - name: Locked Central session issuance and revocation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/central_authorised_issue.sql "$TITAN_CI_DATABASE_URL"
+
+      # Shared company core is an independent draft migration chain. Never run
+      # it in the legacy Central DB: both chains define titan.identities
+      # differently. CI uses a second disposable PostgreSQL database.
+      - name: Create independent shared-core test database
+        run: psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" -c "CREATE DATABASE titan_shared_ci"
+      - name: Apply canonical migration registry 0001–0013
+        run: python3 tools/migrate_shared.py --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Canonical migration rerun applies nothing
+        run: |
+          out=$(python3 tools/migrate_shared.py --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci")
+          echo "$out"
+          test "$out" = "applied 0 canonical migration(s)"
+      - name: Verify canonical checksum registry and legacy schema absence
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_migration_registry.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Canonical runner refuses legacy Central database
+        run: |
+          if python3 tools/migrate_shared.py --database-url "$TITAN_CI_DATABASE_URL" > "$RUNNER_TEMP/shared-legacy-guard.txt" 2>&1; then
+            echo "SECURITY FAILURE: shared runner accepted a legacy database"
+            exit 1
+          fi
+          grep -q "existing legacy or unknown schema: migration refused" "$RUNNER_TEMP/shared-legacy-guard.txt"
+      - name: Validate canonical companies and product IDs
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_core.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Verify Scheduled shared entitlement and account-link registration
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_scheduled_product_registration.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Verify Scheduled cross-company RLS isolation
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_scheduled_rls.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Verify canonical two-company isolation and links
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_rls.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Verify pending and cross-tenant company links deny access
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_legacy_mapping.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Check exact Logto legacy mapping with canonical RLS
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_company_verified_lookup.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Seed separate read-only reconciliation fixtures
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/reconcile_legacy_fixture.sql "$TITAN_CI_DATABASE_URL"
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/reconcile_canonical_fixture.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Audit matching verified company, identity, membership and entitlement records
+        run: |
+          python3 tools/audit_company_reconciliation.py \
+            --legacy-url "$TITAN_CI_DATABASE_URL" \
+            --canonical-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --output "$RUNNER_TEMP/reconciliation-matched.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["blocker_count"]==0 and not r["migration_authorised"]' "$RUNNER_TEMP/reconciliation-matched.json"
+      - name: Rehearse canonical backfill and prove transactional rollback
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_backfill_rollback.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+      - name: Plan deterministic backfill from verified database snapshots without writes
+        run: |
+          python3 tools/plan_company_backfill.py \
+            --legacy-url "$TITAN_CI_DATABASE_URL" \
+            --canonical-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" > "$RUNNER_TEMP/backfill-review.json"
+          python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["conflict_count"]==0 and all(v==0 for v in p["candidate_counts"].values()) and p["status"]=="candidate_review_only" and p["writes_permitted"] is False and p["migration_authorised"] is False' "$RUNNER_TEMP/backfill-review.json"
+      - name: Audit must block altered member role without leaking private IDs
+        run: |
+          psql -X -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "UPDATE titan.company_memberships SET role='learner' WHERE company_id='00000000-0000-4000-8000-000000000011'"
+          set +e
+          python3 tools/audit_company_reconciliation.py \
+            --legacy-url "$TITAN_CI_DATABASE_URL" \
+            --canonical-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --output "$RUNNER_TEMP/reconciliation-blocked.json"
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["blockers"]["membership_access_mismatch"]==1; assert "audit-person" not in str(r) and not r["migration_authorised"]' "$RUNNER_TEMP/reconciliation-blocked.json"
+
+      - name: Audit must detect entitlement expiry extension
+        run: |
+          psql -X -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "UPDATE titan.company_memberships SET role='owner' WHERE company_id='00000000-0000-4000-8000-000000000011'"
+          psql -X -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "UPDATE titan.application_entitlements SET expires_at='2027-01-01T00:00:00Z' WHERE company_id='00000000-0000-4000-8000-000000000011'"
+          set +e
+          python3 tools/audit_company_reconciliation.py \
+            --legacy-url "$TITAN_CI_DATABASE_URL" \
+            --canonical-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --output "$RUNNER_TEMP/reconciliation-expiry-blocked.json"
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["blockers"]["entitlement_expiry_mismatch"]==1 and r["snapshots_consistent_within_each_database"] and not r["migration_authorised"]' "$RUNNER_TEMP/reconciliation-expiry-blocked.json"
+
+      - name: Canonical cutover preflight blocks without independently approved evidence
+        run: |
+          set +e
+          python3 tools/plan_company_cutover.py \
+            --reconciliation "$RUNNER_TEMP/reconciliation-matched.json" \
+            --output "$RUNNER_TEMP/cutover-preflight.json"
+          rc=$?
+          set -e
+          test "$rc" -eq 2
+          python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["status"]=="blocked" and not p["migration_authorised"] and not p["writes_permitted"] and len(p["missing_gates"])>=7' "$RUNNER_TEMP/cutover-preflight.json"
+
+      - name: Signed staging backfill executes transaction then always rolls back
+        env:
+          TITAN_BACKFILL_STAGING_ENABLED: '1'
+          TITAN_BACKFILL_APPROVAL_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        run: |
+          python3 - <<'PY'
+          import hashlib,hmac,json,os,time
+          from pathlib import Path
+          folder=Path(os.environ['RUNNER_TEMP'])
+          manifest={
+            'company_id':'00000000-0000-4000-8000-000000000011',
+            'legacy_organisation_id':'00000000-0000-4000-8000-000000000001',
+            'logto_organisation_id':'logto-company-a',
+            'identity_id':'00000000-0000-4000-8000-000000000901',
+            'logto_subject':'ci-staging-signed-subject',
+            'identity_status':'active','membership_role':'member'
+          }
+          from sys import path
+          path.insert(0,'tools')
+          from rehearse_signed_backfill import digest
+          expire=int(time.time())+300
+          hash_value=digest(manifest)
+          payload=f'titan:staging-backfill-rehearsal:v1:{expire}:{hash_value}'
+          sig=hmac.new(bytes.fromhex(os.environ['TITAN_BACKFILL_APPROVAL_KEY']),
+                       payload.encode(),hashlib.sha256).hexdigest()
+          (folder/'ci-rehearsal-manifest.json').write_text(json.dumps(manifest))
+          (folder/'ci-rehearsal-approval.json').write_text(json.dumps(
+              {'manifest_sha256':hash_value,'expires_at_unix':expire,'signature':sig}))
+          PY
+          python3 tools/rehearse_signed_backfill.py \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --manifest "$RUNNER_TEMP/ci-rehearsal-manifest.json" \
+            --approval "$RUNNER_TEMP/ci-rehearsal-approval.json" \
+            --execute-staging-rehearsal > "$RUNNER_TEMP/signed-rehearsal-result.json"
+          python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["status"]=="rolled_back" and x["records_persisted"]==0 and x["production_execution_permitted"] is False' "$RUNNER_TEMP/signed-rehearsal-result.json"
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "SELECT count(*) FROM titan.identities WHERE logto_subject='ci-staging-signed-subject'")" = "0"
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "SELECT count(*) FROM titan.company_memberships WHERE identity_id='00000000-0000-4000-8000-000000000901'")" = "0"
+      - name: Signed backfill refuses production database and absent staging flag
+        env:
+          TITAN_BACKFILL_APPROVAL_KEY: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        run: |
+          if python3 tools/rehearse_signed_backfill.py \
+            --database-url "$TITAN_CI_DATABASE_URL" \
+            --manifest "$RUNNER_TEMP/ci-rehearsal-manifest.json" \
+            --approval "$RUNNER_TEMP/ci-rehearsal-approval.json" \
+            --execute-staging-rehearsal; then
+            echo "SECURITY FAILURE: rehearsal ran with staging flag disabled"
+            exit 1
+          fi
+
+      - name: Verify restricted staging commit, approval consumption, audit ledger and replay rejection
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_backfill_commit.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Verify outer transaction rollback restores approval and durable audit atomically
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_backfill_atomic_rollback.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Verify authenticated non-superuser can commit only approved staging backfill
+        env:
+          PGPASSWORD: ci-only-throwaway
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_backfill_login_setup.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+          if psql -X -v ON_ERROR_STOP=1 -h localhost -U titan_backfill_ci_login -d titan_shared_ci -c "SELECT * FROM titan.staging_backfill_approvals" > "$RUNNER_TEMP/staging-privilege-denied.txt" 2>&1; then
+            echo "SECURITY FAILURE: staging login can read approvals directly"
+            exit 1
+          fi
+          if psql -X -v ON_ERROR_STOP=1 -h localhost -U titan_backfill_ci_login -d titan_shared_ci -c "SET ROLE titan_staging_backfill_executor; INSERT INTO titan.identities(id,logto_subject,status) VALUES('00000000-0000-4000-8000-000000000806','forbidden-direct-login','active')" > "$RUNNER_TEMP/staging-direct-write-denied.txt" 2>&1; then
+            echo "SECURITY FAILURE: staging login can write identity directly"
+            exit 1
+          fi
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U titan_backfill_ci_login -d titan_shared_ci -c "SET ROLE titan_staging_backfill_executor; SELECT titan.execute_staging_backfill_approval('00000000-0000-4000-8000-000000000705')"
+          psql -X -v ON_ERROR_STOP=1 "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" -c "DO \$\$ BEGIN IF NOT EXISTS(SELECT 1 FROM titan.staging_backfill_audit WHERE approval_id='00000000-0000-4000-8000-000000000705' AND executing_login='titan_backfill_ci_login') THEN RAISE EXCEPTION 'independent login audit missing'; END IF; IF EXISTS(SELECT 1 FROM titan.identities WHERE id='00000000-0000-4000-8000-000000000806') THEN RAISE EXCEPTION 'unapproved direct write succeeded'; END IF; END \$\$;"
+
+      - name: Verify independent issuer ownership and concurrent one-use staging execution
+        env:
+          TITAN_SHARED_CI_DATABASE_URL: postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_issuer_login_setup.sql "$TITAN_SHARED_CI_DATABASE_URL"
+          python3 tests/integration/staging_approval_concurrency.py
+
+      - name: Verify immutable approval and audit record hashes and tamper detection
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/shared_staging_approval_integrity.sql "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+
+      - name: Read-only staging approval integrity report contains no private records
+        run: |
+          python3 tools/verify_staging_approval_integrity.py \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" > "$RUNNER_TEMP/approval-integrity.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["status"]=="integrity_verified_within_database" and r["approvals_checked"]>=5 and r["audits_checked"]>=4 and r["human_signature_verified"] is False and r["db_superuser_tamper_resistant"] is False and "logto_subject" not in r' "$RUNNER_TEMP/approval-integrity.json"
+
+      - name: Ed25519 external receipt unit tests
+        run: node --test tests/test_staging_external_receipt.mjs
+
+      - name: Capture, sign and independently verify committed staging receipt
+        run: |
+          node --input-type=module - <<'NODE'
+          import {generateKeyPairSync} from 'node:crypto';
+          import {writeFileSync} from 'node:fs';
+          import {join} from 'node:path';
+          const {privateKey,publicKey}=generateKeyPairSync('ed25519');
+          const dir=process.env.RUNNER_TEMP;
+          writeFileSync(join(dir,'receipt-private.pem'),
+            privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600});
+          writeFileSync(join(dir,'receipt-public.pem'),
+            publicKey.export({type:'spki',format:'pem'}),{mode:0o600});
+          NODE
+          node tools/staging_external_receipt.mjs capture \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci" \
+            --approval-id "00000000-0000-4000-8000-000000000705" \
+            --output "$RUNNER_TEMP/staging-receipt.json"
+          node tools/staging_external_receipt.mjs sign \
+            --receipt "$RUNNER_TEMP/staging-receipt.json" \
+            --private-key "$RUNNER_TEMP/receipt-private.pem" \
+            --output "$RUNNER_TEMP/staging-signed-receipt.json"
+          PIN=$(node tools/staging_external_receipt.mjs pin \
+            --public-key "$RUNNER_TEMP/receipt-public.pem")
+          node tools/staging_external_receipt.mjs verify \
+            --signed "$RUNNER_TEMP/staging-signed-receipt.json" \
+            --public-key "$RUNNER_TEMP/receipt-public.pem" \
+            --trusted-key-sha256 "$PIN" \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"
+          # A receipt signature made by a different key must not verify
+          # against the independently pinned trusted public key.
+          if node tools/staging_external_receipt.mjs verify \
+            --signed "$RUNNER_TEMP/staging-signed-receipt.json" \
+            --public-key "$RUNNER_TEMP/receipt-public.pem" \
+            --trusted-key-sha256 "0000000000000000000000000000000000000000000000000000000000000000" \
+            --database-url "postgresql://postgres:ci-only-throwaway@localhost:5432/titan_shared_ci"; then
+            echo "SECURITY FAILURE: untrusted key was accepted"
+            exit 1
+          fi
+
+  # Launcher (apps/launcher): node:test suite plus the headless-browser smoke test.
+  # Plain Node, no lockfile, so no npm ci. Playwright is installed into $RUNNER_TEMP and
+  # found through NODE_PATH; without it the smoke test would skip silently.
+  launcher:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Playwright test dependency
+        run: npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+
+      - name: Launcher test suite
+        working-directory: apps/launcher
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+        run: npm test
+
+      # The smoke test calls t.skip() when it cannot launch Chromium, so fail if it skipped here.
+      - name: Launcher smoke test (headless, 390px and 320px)
+        working-directory: apps/launcher
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+          LAUNCHER_SCREENSHOT_PATH: ${{ runner.temp }}/titan-launcher-mobile.png
+        run: |
+          out=$(node --test test/smoke.playwright.test.mjs 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -Eq '^[[:space:]]*(#|ℹ)?[[:space:]]*skipped[[:space:]]+0[[:space:]]*$' || { echo "launcher smoke test was skipped"; exit 1; }

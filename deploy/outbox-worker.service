@@ -1,0 +1,45 @@
+# Titan Central outbox worker systemd unit TEMPLATE. Not installed by this repo.
+#
+# Replace every __PLACEHOLDER__ before installing, then:
+#   sudo install -m 0644 outbox-worker.service /etc/systemd/system/titan-outbox-worker.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now titan-outbox-worker
+#
+# Status / logs:            systemctl status titan-outbox-worker ; journalctl -u titan-outbox-worker -n 200
+# Stop:                     systemctl stop titan-outbox-worker  (SIGTERM: the in-flight batch finishes, then exit 0)
+# Rollback:                 point __APP_DIR__ at the previous immutable release directory, then restart.
+#
+# Configuration lives only in /etc/titan-central/outbox-worker.env (root:root, mode 0600), created from
+# deploy/outbox-worker.env.example. Route secrets are named there by environment variable and never appear here.
+
+[Unit]
+Description=Titan Central outbox worker (publishes approved cross-product events)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+Group=__SERVICE_GROUP__
+WorkingDirectory=__APP_DIR__/apps/control-api
+EnvironmentFile=/etc/titan-central/outbox-worker.env
+ExecStart=__NODE_BIN__ src/outbox-worker.mjs
+# SIGTERM stops the loop after the in-flight batch. TITAN_OUTBOX_SHUTDOWN_TIMEOUT_MS (default 30s) bounds it.
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=40
+Restart=on-failure
+RestartSec=5
+
+# Hardening: no listening socket, no write access to the code, no privilege escalation.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
