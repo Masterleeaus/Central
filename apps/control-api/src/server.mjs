@@ -12,6 +12,14 @@ import { FLAG_PRODUCTS, createFlagRegistry, createPostgresFlagStore } from '../.
 import { readServiceDecisionConfig } from './service-decision-config.mjs';
 import { createSkilledDecisionHandler } from './service-decision-handler.mjs';
 import { readLinkKeySets } from './link-key-config.mjs';
+import { createConfigDbRuntime } from './config-db-runtime.mjs';
+import { createProductionConfigRoute } from './config-production-route.mjs';
+import { assertConfigStartup } from './config-startup-guard.mjs';
+import { verifyConfigRuntimeReadiness } from './config-runtime-readiness.mjs';
+import { closeFailedStartup } from './config-runtime-cleanup.mjs';
+import { centralListenPort } from './config-listen-policy.mjs';
+import { createServiceLifecycle } from './service-lifecycle.mjs';
+import { listenCentral } from './service-startup-listener.mjs';
 const log = createJsonLogger();
 
 /** TITAN_CONFIG_READ_PRODUCTS: comma-separated products allowed to read flags. Unset means the read endpoint is not served. */
@@ -37,6 +45,7 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const linkKeySets=readLinkKeySets(env);
   // Product registry: validated at every startup, so bad product origins stop startup even with the operator plane off.
   const productRegistry=loadProductRegistry(env);
+  assertConfigStartup(env);
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
   // Feature flags (issue #38): declarations in code, PostgreSQL store on the trusted reader and writer roles.
@@ -54,17 +63,27 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   }) : undefined;
   const decisionConfig=readServiceDecisionConfig(env);
   const serviceDecisionHandler=decisionConfig?createSkilledDecisionHandler({pool,...decisionConfig,logger:auditLog}):undefined;
-  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,configHandler,serviceDecisionHandler,logger:auditLog});
+  let configRuntime, configEvaluationHandler, port;
+  try {
+    port=centralListenPort(env);
+    configRuntime=createConfigDbRuntime({env,Pool});
+    if (configRuntime) await verifyConfigRuntimeReadiness({runtime:configRuntime,env});
+    configEvaluationHandler=createProductionConfigRoute({env,runtime:configRuntime,fetcher,logger:auditLog});
+  } catch(error) {
+    await closeFailedStartup({pool,runtime:configRuntime});
+    throw Error('configuration startup failed',{cause:error});
+  }
+  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,configHandler,configEvaluationHandler,serviceDecisionHandler,logger:auditLog});
   const handler=async (req,res)=>{
     res.on('finish',()=>{try{metrics.observeResponse(res.statusCode);}catch{/* ignore */}});
     if (req.method==='GET' && pathnameOf(req)==='/metrics') return serveMetrics(req,res,metrics);
     return centralHandler(req,res);
   };
   const server=createServer(handler);
-  const port=Number(env.TITAN_CENTRAL_PORT||3102);
-  if (!Number.isInteger(port)||port<1||port>65535) throw Error('invalid port');
-  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)});
-  return {server,pool,async close(){await new Promise((resolve,reject)=>server.close(err=>err?reject(err):resolve()));await pool.end();}};
+  try{await listenCentral(server,port)}
+  catch(error){await closeFailedStartup({pool,runtime:configRuntime});throw Error('central HTTP listen failed',{cause:error})}
+  const lifecycle=createServiceLifecycle({server,pool,runtime:configRuntime});
+  return {server,pool,close:lifecycle.close};
 }
 // Closes the HTTP server and the database pool on SIGTERM/SIGINT, then exits.
 // A second signal after the first is left to the default handler (hard stop).

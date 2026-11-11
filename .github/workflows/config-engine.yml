@@ -1,0 +1,114 @@
+name: Config engine
+on:
+  push:
+    paths:
+      - 'packages/config-engine/**'
+      - 'apps/control-api/src/**'
+      - 'apps/control-api/test/**'
+      - '.github/workflows/config-engine.yml'
+  pull_request:
+    paths:
+      - 'packages/config-engine/**'
+      - 'apps/control-api/src/**'
+      - 'apps/control-api/test/**'
+      - '.github/workflows/config-engine.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: config-ci-disposable
+          POSTGRES_DB: config_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CONFIG_TEST_DATABASE_URL: postgresql://postgres:config-ci-disposable@localhost:5432/config_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test config engine
+        run: node --test packages/config-engine/test/*.test.mjs
+      - name: Syntax validation
+        run: find packages/config-engine/src packages/config-engine/test -name '*.mjs' -print0 | xargs -0 -n 1 node --check
+
+      - name: Apply and verify draft schema on disposable PostgreSQL 16
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0001_config_engine.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0002_role_grants.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0003_rls.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0004_service_grants.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/canonical_company_fixture.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0005_company_fk.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0006_grant_audit.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/company_authority_fixture.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0007_company_authority.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0008_service_login_roles.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/0009_migration_receipt_reader.sql
+          psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f packages/config-engine/sql/fixtures/e2e_config_fixture.sql
+          # These checks target the disposable compatibility fixture, not a production migration.
+          for file in packages/config-engine/sql/verify_*.sql; do
+            echo "Verifying $file"
+            psql -X -v ON_ERROR_STOP=1 "$CONFIG_TEST_DATABASE_URL" -f "$file"
+          done
+
+      - name: PostgreSQL concurrent writer verification
+        run: bash packages/config-engine/scripts/concurrency.sh "$CONFIG_TEST_DATABASE_URL"
+      - name: PostgreSQL real grant lifecycle
+        run: bash packages/config-engine/scripts/grant-lifecycle.sh "$CONFIG_TEST_DATABASE_URL"
+      - name: Verify four independently authenticated restricted PostgreSQL logins
+        run: bash packages/config-engine/scripts/check-service-logins.sh "$CONFIG_TEST_DATABASE_URL"
+      - name: End-to-end signed JWT and real PostgreSQL configuration read
+        run: |
+          npm ci --prefix apps/control-api --ignore-scripts --no-audit --no-fund
+          node packages/config-engine/scripts/e2e-config-read.mjs
+      - name: PostgreSQL real role session verification
+        run: bash packages/config-engine/scripts/roles.sh "$CONFIG_TEST_DATABASE_URL"
+
+  canonical-upstream:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: config-ci-disposable
+          POSTGRES_DB: config_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CONFIG_TEST_DATABASE_URL: postgresql://postgres:config-ci-disposable@localhost:5432/config_ci
+      CANONICAL_COMPANY_PIN: 3c026a42069d60cdb9315ddd8f7ca162a44a10c7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: config-branch
+      - uses: actions/checkout@v4
+        with:
+          ref: 3c026a42069d60cdb9315ddd8f7ca162a44a10c7
+          path: canonical-upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enable real PostgreSQL TLS on disposable canonical database
+        working-directory: config-branch
+        run: bash packages/config-engine/scripts/enable-postgres-tls-ci.sh
+      - name: Test pinned schema and live Central HTTP socket with restricted PostgreSQL
+        working-directory: config-branch
+        run: bash packages/config-engine/scripts/canonical-upstream-e2e.sh ../canonical-upstream

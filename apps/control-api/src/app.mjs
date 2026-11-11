@@ -55,7 +55,7 @@ export function accessActivityInput({organisationId, applicationId, action, deci
 
 /** No administrative mutations or user-controlled SQL. Organisation/app/action are the only request inputs.
  * logger(event, fields) receives structured decision fields only: never tokens or subject values. */
-export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, supportHandler, globalLogoutHandler, logoutLandingHandler, serviceDecisionHandler, configHandler, launcherSessionHandler, logger=()=>{}, healthQuery, activityRecorder, rateLimits=DEFAULT_RATE_LIMITS, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
+export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, supportHandler, globalLogoutHandler, logoutLandingHandler, serviceDecisionHandler, configHandler, configEvaluationHandler, launcherSessionHandler, logger=()=>{}, healthQuery, activityRecorder, rateLimits=DEFAULT_RATE_LIMITS, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
   if (!pool || !verifyToken || !issuer) throw new Error('missing Central API dependencies');
   const trust={expectedIssuer:issuer,audienceByApplication:perApplicationAudiences(audiences)};
   const ipLimiter=createRateLimiter(rateLimits.ip);
@@ -93,6 +93,11 @@ export function createCentralHandler({ pool, verifyToken, issuer, audiences, adm
       return respond(res,404,{error:'not_found'});
     }
     if (logoutLandingHandler && await logoutLandingHandler(req,res)) return;
+    if (pathname.startsWith('/v1/config/')) {
+      if (!configEvaluationHandler) return respond(res,404,{error:'not_found'});
+      if (await configEvaluationHandler(req,res)) return;
+      return respond(res,404,{error:'not_found'});
+    }
     if (pathname.startsWith('/v1/admin/')) {
       if(!adminHandler) return respond(res,404,{error:'not_found'});
       if(await adminHandler(req,res)) return;

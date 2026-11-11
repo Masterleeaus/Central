@@ -58,6 +58,8 @@ jobs:
       - name: control-plane tests
         working-directory: packages/control-plane
         run: node --test test/*.test.mjs
+      - name: configuration engine tests
+        run: node --test packages/config-engine/test/*.test.mjs
       - name: control-api tests
         working-directory: apps/control-api
         run: node --test test/*.test.mjs
@@ -121,7 +123,7 @@ jobs:
       - name: Install Playwright and Chromium for the launcher smoke test
         run: |
           npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
-          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install chromium
 
       - name: Launcher test suite
         working-directory: apps/launcher
