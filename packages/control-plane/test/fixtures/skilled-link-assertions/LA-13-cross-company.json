@@ -1,0 +1,10 @@
+{
+  "name": "cross-company",
+  "changes": {
+    "request": {
+      "companyId": "another-company"
+    },
+    "organisationAllowed": false
+  },
+  "expectedAllowed": false
+}

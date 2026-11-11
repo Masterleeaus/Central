@@ -2,7 +2,7 @@
  * This service is only for an authenticated backend. Caller MUST pass a trusted actor
  * (verified server-side, never from JSON body), and an independently implemented policy.
  */
-import type { ProvisioningCommand, ProvisioningContext } from './provisioning.js';
+import type { LinkAssertionCommand, ProvisioningCommand, ProvisioningContext } from './provisioning.js';
 import { CentralProvisioner } from './provisioning.js';
 import { LogtoManagementVerifier } from './logto-management.js';
 /** `operatorAuthorityVerified` records that the caller's Logto organisation authority was checked against the
@@ -15,14 +15,16 @@ export type AuthorizeProvisioning = (actor: TrustedActor, command: ProvisioningC
 /** Verifies the product-signed assertion carried by a link command against the Central identity and organisation.
  * `logtoSubject` and `logtoOrganisationId` are resolved by Central, never taken from the command. */
 export interface LinkCheckInput {
-    command: Extract<ProvisioningCommand, {
-        kind: 'link' | 'link_relink';
-    }>;
+    command: LinkAssertionCommand;
     logtoSubject: string;
     logtoOrganisationId: string;
 }
 export type VerifyLocalLink = (input: LinkCheckInput) => Promise<boolean>;
 export type GetCanonicalLogtoId = (type: 'identity' | 'organisation', uuid: string) => Promise<string | undefined>;
+/** Thrown when the authorisation policy refuses a command. Carries no detail beyond the refusal. */
+export declare class ProvisioningForbiddenError extends Error {
+    constructor();
+}
 export declare class TrustedProvisioningService {
     private readonly provisioner;
     private readonly logto;

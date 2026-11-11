@@ -1,0 +1,9 @@
+{
+  "name": "invalid-company",
+  "changes": {
+    "request": {
+      "companyId": "bad"
+    }
+  },
+  "expectedAllowed": false
+}

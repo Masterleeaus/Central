@@ -1,6 +1,6 @@
 # Account linking contract (issue #37)
 
-Status: contract and Central-side verifier implemented. **The product side is not implemented in this repository.** Sorted, Supercharged and LMS must add the signing described below before any link can be created in production.
+Status: contract, Central-side verifier, key configuration and operator review resolution implemented. **The product side is not implemented in this repository.** Sorted, Supercharged and LMS must add the signing described below before any link can be created in production.
 
 ## Purpose
 
@@ -82,7 +82,16 @@ Operator-controlled configuration, one key set per product:
 - Keys come from operator configuration. They are never read from a request, a product or a token header.
 - Rotation: publish the new key with `notBefore` no later than the first assertion signed with it. Products switch `kid` after that. After every assertion under the old key has expired (at least 5 minutes), set `notAfter` on the old key.
 - Compromise: set `notAfter` on the key to the current time. This stops new assertions under that key. It does not revoke links already created; review the links made in the exposure window.
-- Wiring the key configuration into a running service is not done here. The operator route answers `503 provisioning_disabled` in the default configuration (`apps/control-api/src/operator-config.mjs`).
+- Keys are loaded at startup from operator configuration. See "Operator configuration" below.
+
+## Operator configuration (names only)
+
+- `TITAN_LINK_KEYS_FILE` names a JSON file holding the key sets. `TITAN_LINK_KEYS_JSON` holds the same JSON inline. Set at most one.
+- Read once at startup. Malformed configuration fails startup, whether or not the operator plane is on. Unset means no key sets.
+- Every key must declare `"alg": "EdDSA"`.
+- Rules, each tested in `apps/control-api/test/link-key-config.test.mjs`: exactly one source; the file can be read; valid JSON; one to three entries, each a known product (`sorted`, `supercharged`, `lms`) listed once; 1 to 8 keys per product; only the documented fields, so no private member (`d` and the like); `kid` of 1 to 64 letters, digits, dots, underscores or hyphens, unique within its product; `alg` `EdDSA`; `kty` `OKP` and `crv` `Ed25519`; `x` a 32-byte base64url public key; `notBefore` an RFC 3339 time with an offset; `notAfter` optional, RFC 3339, and later than `notBefore`.
+- Errors name the variable and the rule. They never echo a value or a file path.
+- `POST /v1/admin/provision` runs trusted provisioning only when the operator plane (`TITAN_OPERATOR_*`) is on and key sets are configured. Otherwise it answers `404` (operator plane off) or `503 provisioning_disabled` (no key sets).
 
 ## Nonce store and replay
 
@@ -99,6 +108,7 @@ All writes go through `CentralProvisioner` (`packages/control-plane/src/provisio
 | `link` | Creates a verified link. `verified_at` is database time; the caller supplies no time. | `assertion` |
 | `link_relink` | Moves an existing link (verified or revoked) to a different local account. Bumps the subject's sessions for that application and organisation. | `assertion`, `expectedRevision`, matching identity and application |
 | `link_revoke` (unlink) | Sets the link to `revoked`. Bumps `titan.titan_session_revocations` for (application, subject, organisation) in the same transaction. No other application is affected. | `expectedRevision` |
+| `link_review_resolve` | Resolves an open review as `approved` or `rejected`. See "Resolving a review". | `decision`, `reason`; when approved: `assertion`, `localUserId`, `localAccountId`, and `expectedRevision` when a link exists |
 
 Every command runs in one transaction with one audit row. Locks are taken with `FOR UPDATE`, and the revision is compared before any change. A stale revision fails with `revision conflict` and changes nothing.
 
@@ -114,7 +124,30 @@ Relink to the account already linked is refused as a no-op.
 | Identity has a revoked link in this tuple on create | Plain conflict: use relink | Nothing |
 | Stale `expectedRevision` | `revision conflict` | Nothing |
 
-Migration 0014 adds a unique index on `(application_id, local_account_id)` where `state = 'verified'`. A local account is verified for at most one identity and organisation per application. Review rows are open. This build has no command that resolves them; resolution is a reviewed operator action yet to be designed.
+Migration 0014 adds a unique index on `(application_id, local_account_id)` where `state = 'verified'`. A local account is verified for at most one identity and organisation per application. Review rows are open until an operator resolves them with `link_review_resolve` (see "Resolving a review"). Nothing is resolved automatically.
+
+## Resolving a review
+
+An operator resolves a `titan.link_reviews` row with the `link_review_resolve` command, on the same route and through the same `TrustedProvisioningService` and `CentralProvisioner` as every other write. There is no second write path.
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The review ID |
+| `identityId`, `organisationId`, `applicationId` | Must match the review row, or the command is refused |
+| `decision` | `approved` or `rejected` |
+| `reason` | 1 to 500 characters, no surrounding space, no control characters. Stored on the review and in the audit row |
+| `localUserId`, `localAccountId`, `assertion` | Approval only. The assertion is verified exactly as for a link. `localAccountId` must equal the review's account |
+| `expectedRevision` | Approval, when the identity already has a link for this application. Must equal that link's current revision |
+
+Outcomes:
+
+- `approved` with no link for the identity and application creates it (`created`). With a link it relinks that row (`updated`), revokes that application's sessions for the subject, and needs a matching `expectedRevision`.
+- `rejected` records the decision only. It creates nothing and needs neither an assertion nor live Logto membership, so it can still close a review after the operator's own membership has changed.
+- An identical retry of an applied request is `replayed`. That check runs before the assertion is verified, so the spent nonce is not consumed again. A new request for an already resolved review with the same decision is also `replayed`. It is audited under its own request ID, and the first resolver stays on the review.
+- A resolved review never changes. A different decision or a different local account is refused. A database trigger refuses any update to a resolved row (migration 0018).
+- Any failure (stale `expectedRevision`, account still verified elsewhere, concurrent write, cross-tenant scope) rolls the whole transaction back. The review stays open, nothing is audited, and the route answers `503 provisioning_unavailable`. A caller without operator authority gets `403` and nothing is read or written.
+
+Each resolution writes one `provisioning_audit` row: request ID, reviewer (`actor_subject`), command kind `link_review_resolve`, `reason`, and the command digest, which holds the assertion hash only.
 
 ## Audit
 
@@ -123,7 +156,26 @@ Migration 0014 adds a unique index on `(application_id, local_account_id)` where
 ## Scope and what is not implemented
 
 - **Product side (not implemented here):** Sorted, Supercharged and LMS must hold the Ed25519 private key, issue opaque immutable local IDs, sign the assertion for each link, and never sign display names or emails.
-- Operator wiring of key configuration into the running control API.
-- Review resolution commands and UI.
-- Migrations 0010 to 0013 are not present on this branch; 0014 is applied after 0009.
-- Tests: `packages/control-plane/test/link-assertion.test.mjs` (rejection rules, replay, rotation, key validation), `link-lifecycle.test.mjs` (create, review, relink, unlink, digests), `link-trusted-flow.test.mjs` (verifier behind the trusted service, cross-tenant, cross-product, email-only), and `apps/control-api/test/session-revocation-provisioning.test.mjs` (unlink revokes one application's session). The SQL was run against PostgreSQL 16 with migrations 0001 to 0009 and 0014.
+- Review UI and a review queue listing are not implemented. Reviews are resolved only through `link_review_resolve`.
+- Migrations 0010 to 0013 are not present on this branch; 0014 is applied after 0009, and 0018 after 0014 (0015 is billing events on main).
+- Tests: `packages/control-plane/test/link-assertion.test.mjs` (rejection rules, replay, rotation, key validation), `link-lifecycle.test.mjs` (create, review, relink, unlink, digests), `link-trusted-flow.test.mjs` (verifier behind the trusted service, cross-tenant, cross-product, email-only), and `apps/control-api/test/session-revocation-provisioning.test.mjs` (unlink revokes one application's session). The lifecycle SQL was run against PostgreSQL 16 with migrations 0001 to 0009, 0014 and 0015. Resolution was verified through the built provisioner with real Ed25519 assertions: 37 checks covering approval, relink, stale revision, idempotent retry, rejection, claimed accounts, cross-tenant and non-operator refusal, the resolved-row trigger and the column grants. The existing `tests/sql/rls_two_tenant.sql` passes on the same migrations. Tests for the new behaviour: `packages/control-plane/test/link-review-resolution.test.mjs`, `apps/control-api/test/link-key-config.test.mjs`, `apps/control-api/test/link-review-route.test.mjs`.
+
+## Skilled fixture alignment (issue #71)
+
+Skilled's link-assertion fixtures are copied verbatim into `packages/control-plane/test/fixtures/skilled-link-assertions/` (LA-01 to LA-26, Skilled commit 95935bb). The issue's earlier reference to LA-01 to LA-10 was out of date. `packages/control-plane/test/skilled-link-fixtures.test.mjs` checks each one against this verifier. The canonical file `canonical-signed.json` holds the public key and one signed token per fixture with its expected Central result, for Skilled to check against.
+
+Wire compatibility, checked by that test:
+- Header `{alg: "EdDSA", typ: "titan-link+jwt", kid}` and claims `iss` (`lms`), `aud`, `sub`, `org`, `lu`, `la`, `nonce`, `iat`, `exp`. Skilled's signer and this verifier use the same names and values.
+- Identifier and nonce formats are the same (`^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$` and 22 to 128 base64url characters). Lifetime is an integer from 1 to 300 seconds.
+- Skilled signs with an Ed25519 private key. This verifier takes the matching public key as an OKP JWK.
+
+Outcomes (`OUTCOME` in the test):
+- **Rejected by Central:** LA-05 to LA-08 and LA-15 (identifiers) give `identifier_not_permitted`. LA-14 (wrong local user) gives `account_mismatch`. LA-16 (invalid kid) gives `malformed`. LA-17 to LA-19 (ttl 0, 301, 1.5) give `bad_lifetime`. LA-20 (invalid nonce) gives `malformed`. LA-21 (wrong key) gives `bad_signature`.
+- **Accepted by Central, refused by Skilled before signing:** LA-09 to LA-13 and LA-22 to LA-26 (account, organisation, member and company checks). Central cannot see Skilled's authority state, so a well-formed token that Central's own records match is accepted. Skilled's signing refusals are the only control for these cases. **Owner decision:** whether Central should require more evidence for product-side authority, or accept the product signature as sufficient. This is not changed here.
+
+Differences to resolve:
+1. **companyId.** Skilled uses an internal `companyId` in its authority checks. It is not on the wire and not a Central concept. Central identifies the organisation only by `org` (the Logto organisation ID). Skilled must keep its mapping from `org` to `companyId` on its own side.
+2. **Skilled has no verifier.** Its test only checks its own signatures. Checking Skilled's signer against the canonical file requires a Skilled-side test that signs the same claims and compares them to `canonical-signed.json`. That is not done here, because Skilled was not edited.
+3. **Key configuration.** The `lms` key set in Central must include kid `skilled-key-2026` (or whichever kid Skilled uses in production) with the public key that matches Skilled's signing key. Keys are operator-provisioned. No key is committed.
+
+The test signs with a fixed test key, derived from a hash of a fixed label. It is not a secret. `WRITE_CANONICAL=1 node --test test/skilled-link-fixtures.test.mjs` regenerates the canonical file. Without that variable, the test fails if the committed file differs from the generator.

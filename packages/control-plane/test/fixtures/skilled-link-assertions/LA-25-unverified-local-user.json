@@ -1,0 +1,7 @@
+{
+  "name": "unverified-local-user",
+  "changes": {
+    "memberAllowed": false
+  },
+  "expectedAllowed": false
+}

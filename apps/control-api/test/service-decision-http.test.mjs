@@ -36,3 +36,9 @@ test('read error fails closed without leaking details',async()=>{
  const r=await call({decide:async()=>{throw Error('DB credential leaked')}});assert.equal(r.status,503);
  assert.equal(JSON.stringify(r.body).includes('DB credential'),false);
 });
+test('expiry is derived from the injected issue clock, not request receipt time',async()=>{
+ const issuedAt=Date.parse('2030-01-01T00:00:00.000Z');
+ const r=await call({clock:()=>issuedAt});
+ assert.equal(r.status,200);
+ assert.equal(r.body.decision.expiresAt,'2030-01-01T00:05:00.000Z');
+});

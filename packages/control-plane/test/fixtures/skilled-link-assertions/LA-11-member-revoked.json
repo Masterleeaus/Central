@@ -1,0 +1,7 @@
+{
+  "name": "member-revoked",
+  "changes": {
+    "memberAllowed": false
+  },
+  "expectedAllowed": false
+}

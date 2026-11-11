@@ -32,10 +32,15 @@ const REQUIRED_CLAIMS = ['iss', 'aud', 'sub', 'org', 'lu', 'la', 'nonce', 'iat',
 /** Any of these in the claims is a rejection, even alongside valid identifiers. */
 const FORBIDDEN_CLAIMS = ['email', 'email_verified', 'name', 'given_name', 'family_name', 'display_name', 'displayName', 'preferred_username', 'username', 'nickname', 'phone_number'];
 
+/** RFC 3339 date-time with an explicit offset. Key windows are compared as instants, so the offset is required. */
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+
 export interface LinkPublicJwk { kty: 'OKP'; crv: 'Ed25519'; x: string; }
 export interface LinkKeyConfig {
   /** Key ID carried in the JWS header. Unique within its product. */
   kid: string;
+  /** Signing algorithm the key is for. Only 'EdDSA' is accepted; omitted means EdDSA. */
+  alg?: 'EdDSA';
   jwk: LinkPublicJwk;
   /** Key accepted from this instant (ISO 8601). Rotation: publish the new key before products switch to it. */
   notBefore: string;
@@ -89,6 +94,9 @@ function indexKeySets(sets: readonly ProductLinkKeySet[]): Map<ProductId, Map<st
       if (!jwk || jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || typeof jwk.x !== 'string' || !B64URL.test(jwk.x) || Buffer.from(jwk.x, 'base64url').length !== 32 || Object.keys(jwk).some(f => !['kty', 'crv', 'x'].includes(f)))
         throw new TypeError('link key must be a public Ed25519 OKP JWK');
       const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: jwk.x }, format: 'jwk' });
+      if (k.alg !== undefined && k.alg !== 'EdDSA') throw new TypeError('link key algorithm must be EdDSA');
+      if (typeof k.notBefore !== 'string' || !RFC3339.test(k.notBefore)) throw new TypeError('invalid link key validity window');
+      if (k.notAfter !== undefined && (typeof k.notAfter !== 'string' || !RFC3339.test(k.notAfter))) throw new TypeError('invalid link key validity window');
       const notBefore = Date.parse(k.notBefore);
       const notAfter = k.notAfter === undefined ? undefined : Date.parse(k.notAfter);
       if (!Number.isFinite(notBefore) || (notAfter !== undefined && (!Number.isFinite(notAfter) || notAfter <= notBefore))) throw new TypeError('invalid link key validity window');

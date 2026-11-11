@@ -2,7 +2,12 @@
  * Off unless TITAN_OPERATOR_ORGANISATION_ID and TITAN_OPERATOR_ROLE_IDS are both set. Once either is set,
  * every operator setting must be valid or startup throws. Error messages name variables, never values. */
 import { createLogtoManagementTokenSupplier, LogtoManagementVerifier, createTitanOidcRegistrationPlans, buildProductRegistry, originsForLegacyIds } from '../../../packages/control-plane/dist/index.js';
-import { createAdminHandler, createLogtoOperatorAuthoriser } from './admin.mjs';
+import {
+  CentralProvisioner, LinkAssertionVerifier, TrustedProvisioningService, verifyLinkCommand,
+  createPostgresLinkNonceStore, createPostgresCanonicalResolver,
+} from '../../../packages/control-plane/dist/index.js';
+import { createAdminHandler, createLogtoOperatorAuthoriser, OPERATOR_COMMAND_KINDS } from './admin.mjs';
+import { readOrganisationAccess } from '../../../packages/control-plane/dist/administration.js';
 import { timedFetch } from './metrics.mjs';
 import { createFlagChangeHandler } from './config-admin.mjs';
 
@@ -82,9 +87,22 @@ export function loadProductRegistry(env) {
   }
 }
 
+/** The only write path for operator commands: TrustedProvisioningService, which checks authority, Logto membership,
+ * canonical IDs and the link assertion before CentralProvisioner runs. Built only when link keys are configured. */
+export function createOperatorProvisioning({ pool, logto, linkKeySets }) {
+  const assertionVerifier = new LinkAssertionVerifier(linkKeySets, createPostgresLinkNonceStore(pool));
+  const authorize = async (actor, command) => actor?.operatorAuthorityVerified === true && OPERATOR_COMMAND_KINDS.includes(command?.kind);
+  const service = new TrustedProvisioningService(
+    new CentralProvisioner(pool), logto, authorize, createPostgresCanonicalResolver(pool), verifyLinkCommand(assertionVerifier),
+  );
+  return (actor, context, command) => service.apply(actor, context, command);
+}
+
 /** Builds the /v1/admin/ handler when the operator plane is on, otherwise returns null (route stays 404).
- * flags = { registry, store } is required only for the flag-change route. fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch. */
-export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher, flags, productRegistry = loadProductRegistry(env) }) {
+ * flags = { registry, store } is required only for the flag-change route. fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch.
+ * Provisioning is wired only when both a database pool and link key sets are supplied; otherwise POST
+ * /v1/admin/provision answers 503 provisioning_disabled, as it does by default. */
+export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => {}, fetcher, flags, pool, linkKeySets = null, productRegistry = loadProductRegistry(env) }) {
   const operator = readOperatorConfig(env);
   if (!operator) return null;
   const flagChanges = readFlagChangeSetting(env);
@@ -115,6 +133,8 @@ export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => 
   }
   const verifier = new LogtoManagementVerifier({ origin: logtoOrigin, accessToken: supplier.accessToken, fetcher: timedFetch(fetcher ?? fetch, metrics) });
   const authoriseOperator = createLogtoOperatorAuthoriser({ verifier, operatorOrganisationId: operator.organisationId, administrativeRoleIds: operator.roleIds });
-  // provision is intentionally not wired here: POST /v1/admin/provision answers 503 provisioning_disabled.
-  return createAdminHandler({ verifyToken, authoriseOperator, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
+  // Provisioning is wired only when a database pool and link key sets are both supplied.
+  const provision = pool && linkKeySets && linkKeySets.length > 0 ? createOperatorProvisioning({ pool, logto: verifier, linkKeySets }) : undefined;
+  const readOrganisation = pool ? (organisationId) => readOrganisationAccess(pool, organisationId) : undefined;
+  return createAdminHandler({ verifyToken, authoriseOperator, provision, readOrganisation, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
 }
