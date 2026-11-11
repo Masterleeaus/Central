@@ -3,11 +3,11 @@
 -- tenant scoping is enforced by an opaque 256-bit token digest and an isolated
 -- NOLOGIN database role rather than a user-supplied company setting.
 BEGIN;
-DO $ BEGIN
+DO $central_role$ BEGIN
  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='titan_central_sessions') THEN
   CREATE ROLE titan_central_sessions NOLOGIN NOINHERIT;
  END IF;
-END $;
+END $central_role$;
 -- The NOINHERIT service login can SET LOCAL ROLE only after explicit membership.
 GRANT titan_central_sessions TO titan_central_app;
 CREATE TABLE titan.central_browser_sessions (
