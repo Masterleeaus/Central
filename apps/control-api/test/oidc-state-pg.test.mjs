@@ -31,3 +31,36 @@ test('pruneExpired drains full batches until a short batch remains',async()=>{co
 test('pruneExpired with nothing expired returns zero',async()=>{const pool=txPool(async()=>({rowCount:0}));assert.equal(await pruneExpired(pool,clock),0);});
 test('pruneExpired rejects invalid configuration',async()=>{await assert.rejects(pruneExpired({},clock),/invalid/);await assert.rejects(pruneExpired({query:async()=>({rowCount:0})},clock),/invalid/);await assert.rejects(pruneExpired(txPool(async()=>({rowCount:0})),clock,{batchSize:0}),/invalid/);});
 test('expired-but-unpruned row is not returned by consume',async()=>{let sql;const pool=txPool(async(q)=>{sql=q;return {rows:[]}});await createPostgresOidcStateStore({pool,applicationId:'desk',clock,sealer:sealer()}).consume(state);assert.match(sql,/expires_at > to_timestamp/);});
+
+test('OIDC state store never executes queries through the unprivileged pool facade',async()=>{
+ const log=[];
+ const pool=txPool(async()=>({rows:[],rowCount:0}),log);
+ pool.query=async()=>{throw Error('unscoped pool.query must not be used');};
+ const store=createPostgresOidcStateStore({pool,applicationId:'desk',clock,sealer:sealer()});
+ await store.save(state,record);
+ assert.equal(await store.consume(state),null);
+ assert.equal(await pruneExpired(pool,clock,{batchSize:1}),0);
+ assert.equal(log.filter(x=>x==='SET LOCAL ROLE titan_trusted_writer').length,3);
+});
+test('OIDC state isolation binds all queries to the requested application',async()=>{
+ const seen=[];
+ const pool=txPool(async(sql,values)=>{seen.push([sql,values]);return {rows:[],rowCount:0}});
+ const store=createPostgresOidcStateStore({pool,applicationId:'academy',clock,sealer:sealer()});
+ await store.save(state,record);
+ await store.consume(state);
+ assert.equal(seen.length,2);
+ for(const [,values] of seen)assert.equal(values[0],'academy');
+});
+test('OIDC state failed write rolls back without committing or leaking its connection',async()=>{
+ const log=[];
+ const pool=txPool(async()=>{throw Error('write failure')},log);
+ const store=createPostgresOidcStateStore({pool,applicationId:'field',clock,sealer:sealer()});
+ await assert.rejects(store.save(state,record),/write failure/);
+ assert.equal(log.includes('COMMIT'),false);
+ assert.equal(log.filter(x=>x==='ROLLBACK').length,1);
+ assert.equal(log.at(-1),'RELEASE');
+});
+test('OIDC state rejects central application until the login-state schema is explicitly migrated',()=>{
+ const pool=txPool(async()=>({rows:[]}));
+ assert.throws(()=>createPostgresOidcStateStore({pool,applicationId:'central',sealer:sealer()}),/invalid OIDC state store configuration/);
+});
