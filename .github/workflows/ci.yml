@@ -35,11 +35,7 @@ jobs:
           python-version: '3.13'
 
       # Dependencies come only from the committed lockfiles.
-      - name: Install control-api dependencies
-        working-directory: apps/control-api
-        run: npm ci
-      - name: Install control-plane dependencies
-        working-directory: packages/control-plane
+      - name: Install locked root workspace dependencies
         run: npm ci
 
       # Build to a scratch directory and fail if the committed dist/ differs.
@@ -54,6 +50,9 @@ jobs:
             echo "packages/control-plane/dist does not match a fresh build. Run: cd packages/control-plane && npx tsc -p tsconfig.json"
             exit 1
           fi
+
+      - name: Verify root workspace package export
+        run: node --input-type=module -e "const m=await import('@titan-central/control-plane'); if(typeof m.CentralAccessService!=='function')throw Error('missing workspace export')"
 
       - name: control-plane tests
         working-directory: packages/control-plane

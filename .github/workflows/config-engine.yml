@@ -2,12 +2,16 @@ name: Config engine
 on:
   push:
     paths:
+      - 'package.json'
+      - 'package-lock.json'
       - 'packages/config-engine/**'
       - 'apps/control-api/src/**'
       - 'apps/control-api/test/**'
       - '.github/workflows/config-engine.yml'
   pull_request:
     paths:
+      - 'package.json'
+      - 'package-lock.json'
       - 'packages/config-engine/**'
       - 'apps/control-api/src/**'
       - 'apps/control-api/test/**'
@@ -71,7 +75,7 @@ jobs:
         run: bash packages/config-engine/scripts/check-service-logins.sh "$CONFIG_TEST_DATABASE_URL"
       - name: End-to-end signed JWT and real PostgreSQL configuration read
         run: |
-          npm ci --prefix apps/control-api --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
           node packages/config-engine/scripts/e2e-config-read.mjs
       - name: PostgreSQL real role session verification
         run: bash packages/config-engine/scripts/roles.sh "$CONFIG_TEST_DATABASE_URL"

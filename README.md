@@ -21,9 +21,11 @@ Status: pre-deployment. The migrations are reviewed drafts, the HTTP service is 
 Requirements: Node.js 22 or later, Python 3.13 (3.10 or later should work), and `psql` for database steps.
 
 ```bash
-# Dependencies come from the committed lockfiles.
-(cd apps/control-api && npm ci && node --test test/*.test.mjs)
-(cd packages/control-plane && npm ci && npx tsc -p tsconfig.json && node --test test/*.test.mjs)
+# One locked workspace: API, control-plane and launcher.
+npm ci
+npm run build
+npm test
+npm run test:preflight
 
 # Python
 python3 -m unittest discover -s deploy/tests -p 'test_*.py'
@@ -135,3 +137,7 @@ cd apps/control-api && npm start   # requires the control-api variables above
 - [PASS15_DEPLOYMENT_RUNBOOK.md](docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md): integration and production go/no-go gates.
 - [deploy/OPERATIONS.md](deploy/OPERATIONS.md): systemd template installation, secret storage, service operations and rollback.
 - [packages/control-plane/README.md](packages/control-plane/README.md): the authorization library's trust boundaries.
+
+## Workspace consolidation
+
+The root npm workspace includes `apps/control-api`, `packages/control-plane` and `apps/launcher`. The configuration engine remains a dependency-free ESM source package tested by `npm test`. Logto remains an external identity runtime. Current historical reports stay under `docs/records/pass`, without duplicate archives. See [contributor guidance](CONTRIBUTING.md) and the [reconciliation record](docs/central-brand-workspace-reconciliation.md).

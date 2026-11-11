@@ -1,0 +1,20 @@
+{
+  "name": "titan-central",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Titan Central identity and product access workspace",
+  "workspaces": [
+    "apps/control-api",
+    "packages/control-plane",
+    "apps/launcher"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspace=@titan-central/control-plane && npm run build --workspace=@titan-central/launcher",
+    "test": "npm run build && npm run test --workspace=@titan-central/control-plane && npm run test --workspace=@titan-central/control-api && npm run test --workspace=@titan-central/launcher && node --test packages/config-engine/test/*.test.mjs",
+    "test:preflight": "python3 -m unittest discover -s deploy/tests",
+    "start": "npm run start --workspace=@titan-central/control-api"
+  }
+}
