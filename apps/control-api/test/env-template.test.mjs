@@ -29,8 +29,9 @@ const codeNames = new Set();
 for (const file of readdirSync(fileURLToPath(srcDir))) {
   if (!file.endsWith('.mjs')) continue;
   const text = readFileSync(new URL(file, srcDir), 'utf8');
-  // The lookahead skips wildcard prefixes such as "TITAN_OPERATOR_*" in comments.
-  for (const match of text.matchAll(/TITAN_[A-Z0-9_]*[A-Z0-9](?![A-Z0-9_])/g)) codeNames.add(match[0]);
+  // Ignore comment-only mentions of proposed configuration variables.
+  const sourceLines = text.split('\n').filter((line) => !/^\s*\/\//.test(line)).join('\n');
+  for (const match of sourceLines.matchAll(/TITAN_[A-Z0-9_]*[A-Z0-9](?![A-Z0-9_])/g)) codeNames.add(match[0]);
 }
 
 test('the table has one row per variable and every row names a known location and owner', () => {
