@@ -1,6 +1,6 @@
 # Titan Central deployment operations
 
-This guide documents how to operate the checked-in systemd template and secret template. It does not mean a live server, Logto tenant, database, DNS, or application integration has been configured or verified. Complete the gates in [PASS15_DEPLOYMENT_RUNBOOK.md](../PASS15_DEPLOYMENT_RUNBOOK.md) before installing the service.
+This guide documents how to operate the checked-in systemd template and secret template. It does not mean a live server, Logto tenant, database, DNS, or application integration has been configured or verified. Complete the gates in [PASS15_DEPLOYMENT_RUNBOOK.md](../docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md) before installing the service.
 
 Use a dedicated service account and an isolated Central database. Do not install this service into Sorted, Supercharged, LMS, or another product's directory or database.
 
