@@ -135,4 +135,5 @@ jobs:
         run: |
           out=$(node --test test/smoke.playwright.test.mjs 2>&1) || { echo "$out"; exit 1; }
           echo "$out"
-          echo "$out" | grep -q '^# skipped 0$' || { echo "launcher smoke test was skipped"; exit 1; }
+          echo "$out" | grep -Eq '^[[:space:]]*(ℹ[[:space:]]*)?skipped[[:space:]]+0
+ || { echo "launcher smoke test was skipped"; exit 1; }
