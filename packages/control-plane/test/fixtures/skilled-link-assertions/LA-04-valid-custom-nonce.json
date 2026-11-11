@@ -1,0 +1,7 @@
+{
+  "name": "valid-custom-nonce",
+  "changes": {
+    "nonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "expectedAllowed": true
+}

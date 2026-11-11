@@ -77,11 +77,16 @@ export function loadConfig(raw) {
     for (const id of Object.keys(PRODUCT_TO_LEGACY)) if (!seen.has(id)) problems.push(`missing product ${id}`);
   }
 
+  // Off by default: the launcher stays signed out until Central's launcher session route is live (issue #72).
+  const sessionExchange = raw.sessionExchange ?? false;
+  if (typeof sessionExchange !== 'boolean') problems.push('sessionExchange must be true or false');
+
   if (problems.length > 0) throw new ConfigError(problems);
   return Object.freeze({
     centralOrigin,
     signIn: Object.freeze({ applicationId }),
     organisationSwitch,
+    sessionExchange,
     timeoutMs,
     products: Object.freeze(products),
   });

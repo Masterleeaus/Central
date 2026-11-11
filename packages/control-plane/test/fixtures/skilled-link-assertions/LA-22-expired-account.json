@@ -1,0 +1,7 @@
+{
+  "name": "expired-account",
+  "changes": {
+    "memberAllowed": false
+  },
+  "expectedAllowed": false
+}

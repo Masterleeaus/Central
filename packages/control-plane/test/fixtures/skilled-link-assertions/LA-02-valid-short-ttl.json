@@ -1,0 +1,7 @@
+{
+  "name": "valid-short-ttl",
+  "changes": {
+    "ttlSeconds": 1
+  },
+  "expectedAllowed": true
+}

@@ -1,0 +1,9 @@
+{
+  "name": "email-subject",
+  "changes": {
+    "request": {
+      "logtoSubject": "person@example.net"
+    }
+  },
+  "expectedAllowed": false
+}

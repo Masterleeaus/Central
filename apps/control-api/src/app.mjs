@@ -55,7 +55,7 @@ export function accessActivityInput({organisationId, applicationId, action, deci
 
 /** No administrative mutations or user-controlled SQL. Organisation/app/action are the only request inputs.
  * logger(event, fields) receives structured decision fields only: never tokens or subject values. */
-export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, supportHandler, globalLogoutHandler, logoutLandingHandler, serviceDecisionHandler, configHandler, logger=()=>{}, healthQuery, activityRecorder, rateLimits=DEFAULT_RATE_LIMITS, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
+export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, supportHandler, globalLogoutHandler, logoutLandingHandler, serviceDecisionHandler, configHandler, launcherSessionHandler, logger=()=>{}, healthQuery, activityRecorder, rateLimits=DEFAULT_RATE_LIMITS, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
   if (!pool || !verifyToken || !issuer) throw new Error('missing Central API dependencies');
   const trust={expectedIssuer:issuer,audienceByApplication:perApplicationAudiences(audiences)};
   const ipLimiter=createRateLimiter(rateLimits.ip);
@@ -77,6 +77,7 @@ export function createCentralHandler({ pool, verifyToken, issuer, audiences, adm
       catch {audit('healthz_database_unavailable');return respond(res,503,{status:'unavailable'});}
     }
     if (serviceDecisionHandler && await serviceDecisionHandler(req,res)) return;
+    if (launcherSessionHandler && await launcherSessionHandler(req,res)) return;
     if (globalLogoutHandler && await globalLogoutHandler(req,res)) return;
     // Server-to-server config read (docs/CONFIG.md section 4). Off unless configHandler is given. Shares the per-IP limiter.
     if (pathname.startsWith('/internal/v1/config/')) {
