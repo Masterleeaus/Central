@@ -2,7 +2,7 @@
 
 Titan Central is the central identity and access-control service for Sorted, Supercharged and LMS. It keeps the identity, organisation, entitlement, verified account-link and session-revocation facts these products share. Logto remains the identity provider. The repository still uses the legacy application identifiers field, desk and academy in compatibility-sensitive interfaces; they map to Sorted, Supercharged and LMS, respectively. Tenant data stays in each application.
 
-Status: pre-deployment. The migrations are reviewed drafts, the HTTP service is not deployed, and nothing in this repository has been applied to a live environment. Read [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md) for the decisions and [PASS15_DEPLOYMENT_RUNBOOK.md](PASS15_DEPLOYMENT_RUNBOOK.md) for the gates that must pass before any deployment.
+Status: pre-deployment. The migrations are reviewed drafts, the HTTP service is not deployed, and nothing in this repository has been applied to a live environment. Read [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md) for the decisions and [PASS15_DEPLOYMENT_RUNBOOK.md](docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md) for the gates that must pass before any deployment.
 
 ## Components
 
@@ -132,6 +132,6 @@ cd apps/control-api && npm start   # requires the control-api variables above
 ## Further reading
 
 - [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md): architecture decisions ADR-001 to ADR-007.
-- [PASS15_DEPLOYMENT_RUNBOOK.md](PASS15_DEPLOYMENT_RUNBOOK.md): integration and production go/no-go gates.
+- [PASS15_DEPLOYMENT_RUNBOOK.md](docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md): integration and production go/no-go gates.
 - [deploy/OPERATIONS.md](deploy/OPERATIONS.md): systemd template installation, secret storage, service operations and rollback.
 - [packages/control-plane/README.md](packages/control-plane/README.md): the authorization library's trust boundaries.

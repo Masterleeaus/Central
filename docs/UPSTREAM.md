@@ -4,7 +4,7 @@ Status: Logto is the upstream identity service. Its source is **not vendored** i
 
 ## What the audit recorded
 
-Source: `PASS01_SOURCE_AUDIT.md`, `PASS15_DEPLOYMENT_RUNBOOK.md`.
+Source: `docs/records/pass/PASS01_SOURCE_AUDIT.md`, `docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md`.
 
 | Item | Recorded value |
 | --- | --- |
@@ -40,7 +40,7 @@ The pinned commit above is the only result recorded. Re-run the comparison when 
 
 ## PostgreSQL requirement
 
-- The live server runs PostgreSQL **13.23**. `PASS15_DEPLOYMENT_RUNBOOK.md` treats it as **not a supported foundation** for current Logto. Do not run Logto or Titan Central against it, and do not migrate it in place.
+- The live server runs PostgreSQL **13.23**. `docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md` treats it as **not a supported foundation** for current Logto. Do not run Logto or Titan Central against it, and do not migrate it in place.
 - The example Compose file in the upstream tree uses `postgres:17-alpine`. It is marked demonstration only. Its version alone is not a proven minimum.
 - The exact minimum supported version must be confirmed against the upstream documentation and database constraints for the pinned release. Then test Logto migrations in an isolated instance.
 - Logto and `titan_central` must use separate databases with restricted service roles (ADR-003). No cross-database foreign keys.

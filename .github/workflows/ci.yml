@@ -58,6 +58,8 @@ jobs:
       - name: control-plane tests
         working-directory: packages/control-plane
         run: node --test test/*.test.mjs
+      - name: configuration engine tests
+        run: node --test packages/config-engine/test/*.test.mjs
       - name: control-api tests
         working-directory: apps/control-api
         run: node --test test/*.test.mjs
@@ -114,8 +116,19 @@ jobs:
           TITAN_REQUIRE_DB_TESTS: '1'
         run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
 
-  # Use the Playwright image with Chromium and Linux browser dependencies already installed.
-  # Avoid apt-get browser dependency installation, which has repeatedly failed on runner DNS.
+
+      # The draft shared-schema chain is a separate clean-install path until #43 reconciles it.
+      - name: Shared company core clean-install checks
+        env:
+          PGPASSWORD: ci-only-throwaway
+        run: |
+          createdb -h localhost -U postgres titan_shared_core_ci
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d titan_shared_core_ci -f database/migrations/0001_shared_company_core.sql
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d titan_shared_core_ci -f tests/sql/shared_company_core.sql
+
+  # Launcher (apps/launcher): node:test suite plus the headless-browser smoke test.
+  # Plain Node, no lockfile, so no npm ci. Playwright is installed into $RUNNER_TEMP and
+  # found through NODE_PATH; without it the smoke test would skip silently.
   launcher:
     runs-on: ubuntu-24.04
     container:
@@ -124,11 +137,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install pinned Playwright test dependency
         run: npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+
       - name: Launcher test suite
         working-directory: apps/launcher
         env:
           NODE_PATH: ${{ runner.temp }}/pw/node_modules
         run: npm test
+
+      # The smoke test calls t.skip() when it cannot launch Chromium, so fail if it skipped here.
       - name: Launcher smoke test (headless, 390px and 320px)
         working-directory: apps/launcher
         env:
@@ -137,4 +153,5 @@ jobs:
         run: |
           out=$(node --test test/smoke.playwright.test.mjs 2>&1) || { echo "$out"; exit 1; }
           echo "$out"
-          echo "$out" | grep -Eq '^[[:space:]]*(ℹ[[:space:]]*)?skipped[[:space:]]+0$' || { echo "launcher smoke test was skipped"; exit 1; }
+          echo "$out" | grep -Eq '^[[:space:]]*(ℹ[[:space:]]*)?skipped[[:space:]]+0 || { echo "launcher smoke test was skipped"; exit 1; }
+ || { echo "launcher smoke test was skipped"; exit 1; }
