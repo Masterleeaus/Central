@@ -57,5 +57,40 @@ BEGIN
   IF NOT rejected THEN RAISE EXCEPTION 'Unknown user-link product accepted'; END IF;
 END $tag$;
 
+-- Verify the migration's actual catalog constraints, not only its fixture inserts.
+-- Every canonical registration table must have a validated CHECK mentioning Scheduled,
+-- and legacy identifiers must remain accepted by the original contract.
+DO $contract$
+DECLARE
+  table_name text;
+  constraint_name text;
+  expression text;
+  validated boolean;
+BEGIN
+  FOREACH table_name IN ARRAY ARRAY[
+    'application_entitlements', 'application_company_links', 'application_user_links'
+  ] LOOP
+    constraint_name := table_name || '_application_id_check';
+    SELECT pg_get_constraintdef(c.oid), c.convalidated
+      INTO expression, validated
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+     WHERE n.nspname = 'titan'
+       AND t.relname = table_name
+       AND c.conname = constraint_name
+       AND c.contype = 'c';
+    IF expression IS NULL OR NOT validated THEN
+      RAISE EXCEPTION 'Missing or unvalidated product constraint on %', table_name;
+    END IF;
+    IF position('scheduled' in expression) = 0
+       OR position('sorted' in expression) = 0
+       OR position('lms' in expression) = 0
+       OR position('supercharged' in expression) = 0 THEN
+      RAISE EXCEPTION 'Product constraint on % lost a required product: %', table_name, expression;
+    END IF;
+  END LOOP;
+END $contract$;
+
 ROLLBACK;
 \echo scheduled shared product registration checks passed
