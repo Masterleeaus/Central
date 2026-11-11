@@ -113,3 +113,26 @@ jobs:
           TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
           TITAN_REQUIRE_DB_TESTS: '1'
         run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
+
+  # Use the Playwright image with Chromium and Linux browser dependencies already installed.
+  # Avoid apt-get browser dependency installation, which has repeatedly failed on runner DNS.
+  launcher:
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Playwright test dependency
+        run: npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+      - name: Launcher test suite
+        working-directory: apps/launcher
+        run: npm test
+      - name: Launcher smoke test (headless, 390px and 320px)
+        working-directory: apps/launcher
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+          LAUNCHER_SCREENSHOT_PATH: ${{ runner.temp }}/titan-launcher-mobile.png
+        run: |
+          out=$(node --test test/smoke.playwright.test.mjs 2>&1) || { echo "$out"; exit 1; }
+          echo "$out"
+          echo "$out" | grep -q '^# skipped 0$' || { echo "launcher smoke test was skipped"; exit 1; }
