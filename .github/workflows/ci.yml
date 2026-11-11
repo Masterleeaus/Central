@@ -128,6 +128,14 @@ jobs:
         with:
           node-version: 22
 
+      - name: Use Ubuntu archive mirror for browser dependencies
+        run: |
+          for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [ -f "$source" ]; then
+              sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' "$source"
+            fi
+          done
+
       - name: Install Playwright and Chromium for the launcher smoke test
         run: |
           npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
