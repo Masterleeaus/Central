@@ -126,6 +126,8 @@ jobs:
         run: npm install --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
       - name: Launcher test suite
         working-directory: apps/launcher
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
         run: npm test
       - name: Launcher smoke test (headless, 390px and 320px)
         working-directory: apps/launcher
