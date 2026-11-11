@@ -74,6 +74,7 @@ function query(s, sql, p = []) {
     return { rowCount: 1, rows: [] };
   }
   if (q.startsWith('INSERT INTO titan.titan_session_revocations')) { s.bumps.push(p); return { rows: [{ generation: 1 }], rowCount: 1 }; }
+  if (q.startsWith('INSERT INTO titan.activity_events')) { (s.activity ??= []).push(p); return { rowCount: 1, rows: [] }; }
   if (q.startsWith('INSERT INTO titan.provisioning_audit')) {
     s.audit.push({ request_id: p[0], actor_subject: p[1], authority_reference: p[2], command_kind: p[3], command_digest: p[4], subject_id: p[5], reason: p[6] ?? null });
     return { rowCount: 1, rows: [] };

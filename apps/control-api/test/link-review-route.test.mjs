@@ -142,6 +142,7 @@ const OPERATOR = {
   TITAN_LOGTO_MANAGEMENT_ORIGIN: 'https://logto.example.test', TITAN_LOGTO_M2M_CLIENT_ID: 'm2m-client-1',
   TITAN_LOGTO_M2M_CLIENT_SECRET: SECRET, TITAN_LOGTO_MANAGEMENT_RESOURCE: 'https://logto.example.test/api', TITAN_LOGTO_MANAGEMENT_SCOPE: 'all',
   TITAN_DESK_ORIGIN: ORIGINS.desk, TITAN_FIELD_ORIGIN: ORIGINS.field, TITAN_ACADEMY_ORIGIN: ORIGINS.academy,
+  TITAN_PRODUCT_TRUSTED_ORIGINS: [ORIGINS.field, ORIGINS.desk, ORIGINS.academy].join(','),
 };
 const ok = (value) => ({ ok: true, status: 200, json: async () => value });
 
