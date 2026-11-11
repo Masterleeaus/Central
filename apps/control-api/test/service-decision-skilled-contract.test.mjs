@@ -35,11 +35,14 @@ function exactKeys(value, fields) {
 function skilledBoundedDecision(value) {
  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
  return exactKeys(value, ['allowed', 'applicationId', 'organisationId', 'localUserId', 'localAccountId',
-   'membershipRevision', 'entitlementRevision', 'linkRevision']) &&
+   'membershipRevision', 'entitlementRevision', 'linkRevision', ...(Object.hasOwn(value,'expiresAt') ? ['expiresAt'] : [])]) &&
   value.allowed === true && value.applicationId === 'academy' &&
   [value.organisationId, value.localUserId, value.localAccountId].every(v => typeof v === 'string' && SKILLED_ID.test(v)) &&
   [value.membershipRevision, value.entitlementRevision, value.linkRevision].every(v =>
-   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0);
+   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0) &&
+  (!Object.hasOwn(value,'expiresAt') || (typeof value.expiresAt === 'string' &&
+   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.expiresAt) &&
+   Date.parse(value.expiresAt) > Date.now() && Date.parse(value.expiresAt) - Date.now() <= 300_000));
 }
 /** Returns true when Skilled's client would accept this response for this request. */
 function skilledAccepts(response, requestBody) {
@@ -84,7 +87,9 @@ test('Skilled fixture decision passes Skilled acceptance rules when Central retu
  const r = await callCentral({ body });
  assert.equal(r.status, 200);
  assert.ok(skilledAccepts(r, body), JSON.stringify(r));
- assert.deepEqual(r.body.decision, SKILLED.decision);
+ const {expiresAt,...decision} = r.body.decision;
+ if (expiresAt !== undefined) assert.match(expiresAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+ assert.deepEqual(decision, SKILLED.decision);
 });
 
 test('Skilled acceptance rules reject a response whose requestId or subject does not echo the request', async () => {
