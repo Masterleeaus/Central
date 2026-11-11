@@ -19,7 +19,7 @@ function fixture(){
     verifyIdToken:async()=>({sub:'subject-123',nonce:storedNonce,iss:'https://issuer.example',aud:'central-client',exp:Math.floor(NOW/1000)+120}),
     listEligibleCompanies:async identity=>{trace.push(['eligible',identity]);return [{companyId:ORG,authorised:true}]},
     recheckCompany:async identity=>{trace.push(['recheck',identity]);return true},
-    fetcher:async()=>({ok:true,json:async()=>({id_token:'signed-token-placeholder',access_token:'access-token-placeholder',token_type:'Bearer'})}),
+    fetcher:async(url)=>String(url).includes('.well-known')?{ok:true,text:async()=>JSON.stringify({issuer:'https://issuer.example',authorization_endpoint:'https://issuer.example/authorize',token_endpoint:'https://issuer.example/token'})}:{ok:true,json:async()=>({id_token:'signed-token-placeholder',access_token:'access-token-placeholder',token_type:'Bearer'})},
     stateStore,clock:()=>NOW
   });
   return {service,state,trace};
