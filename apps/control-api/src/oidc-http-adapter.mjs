@@ -20,6 +20,7 @@ import { oidcStartPath, oidcCallbackPath } from '../../../packages/control-plane
 import { bindingCookiePolicy, appSessionCookiePolicy, buildPolicyCookie, buildClearCookie, isPolicySetCookie } from './oidc-cookie-policy.mjs';
 import { insecureLocalhostAllowed, isSecureEndpoint } from './endpoint-policy.mjs';
 import { createRateLimiter } from './rate-limit.mjs';
+import { createConcurrencyLimiter } from './concurrency-limit.mjs';
 
 const allowedApps = new Set(['desk', 'field', 'academy']);
 const token = () => randomBytes(32).toString('base64url');
@@ -76,12 +77,14 @@ const validLocal = local => local && local.authorised===true && typeof local.loc
  */
 export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdentity,establishSession,afterLogin='/',logger=()=>{},
   allowInsecureLocalhost=insecureLocalhostAllowed(),rateLimits=DEFAULT_RATE_LIMITS,clientIp=(req)=>req.socket?.remoteAddress??'unknown',
-  idTokenVault=null,storeIdToken=null,organisationSelection=null,clock=()=>Date.now()}={}) {
+  idTokenVault=null,storeIdToken=null,organisationSelection=null,clock=()=>Date.now(),selectionFlow,concurrencyLimits={perKey:3,globalLimit:48}}={}) {
   if(!allowedApps.has(applicationId)||!oidcLogin?.begin||!oidcLogin?.complete||typeof resolveLocalIdentity!=='function'||typeof establishSession!=='function'||typeof afterLogin!=='string'||!afterLogin.startsWith('/')||afterLogin.startsWith('//')||/[\r\n]/.test(afterLogin))throw new TypeError('invalid OIDC route adapter configuration');
   if((idTokenVault===null)!==(storeIdToken===null)||(idTokenVault!==null&&(typeof idTokenVault.seal!=='function'||typeof idTokenVault.open!=='function'||typeof storeIdToken!=='function')))throw new TypeError('invalid id token storage configuration');
   if(organisationSelection!==null&&(typeof organisationSelection.store?.save!=='function'||typeof organisationSelection.store?.consume!=='function'||typeof organisationSelection.resolveOrganisation!=='function'))throw new TypeError('invalid organisation selection configuration');
+  if(selectionFlow!==undefined && (organisationSelection!==null || typeof selectionFlow?.begin!=='function' || typeof selectionFlow?.handle!=='function'))throw new TypeError('trusted exclusive product selection flow required');
   const ipLimiter=createRateLimiter(rateLimits.ip);
   const subjectLimiter=createRateLimiter(rateLimits.subject);
+  const concurrent=createConcurrencyLimiter(concurrencyLimits);
   const audit=(event,fields={})=>{try{logger(event,{application:applicationId,...fields});}catch{/* logging never alters the outcome */}};
   const bindingPolicy=bindingCookiePolicy(applicationId);
   const sessionPolicy=appSessionCookiePolicy(applicationId);
@@ -161,13 +164,18 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
     // Exact match on the raw request target: near-matches (trailing slash, case, encoded slash, dot segments) are not routes.
     const rawPath=(req.url??'/').split('?')[0];
     const routes=[expectedStart,expectedCallback,expectedSelect];
-    if(!routes.includes(url.pathname)||!routes.includes(rawPath))return false;
+    if(!routes.includes(url.pathname)||!routes.includes(rawPath)){
+      if(selectionFlow && rawPath===url.pathname)return selectionFlow.handle(req,res);
+      return false;
+    }
     if(url.pathname===expectedSelect){
       if(url.search){reply(res,400,{error:'unexpected_selection_parameters'});return true;}
       return handleSelection(req,res);
     }
     if(req.method!=='GET'){reply(res,405,{error:'method_not_allowed'});return true;}
     if(url.pathname===expectedStart){
+      const startLimit=ipLimiter.take(clientIp(req));
+      if(!startLimit.allowed){audit('login_rate_limited',{scope:'ip'});reply(res,429,{error:'rate_limited'},{'retry-after':String(startLimit.retryAfterSeconds)});return true;}
       if(url.search){reply(res,400,{error:'unexpected_login_parameters'});return true;}
       try {
         const binding=token();
@@ -191,6 +199,13 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
       // Per-subject limit once the verified subject is known. The subject is used only as an in-memory key.
       const subjectDecision=subjectLimiter.take(verified.subject);
       if(!subjectDecision.allowed){audit('login_rate_limited',{scope:'subject'});fail(429,'rate_limited',{'retry-after':String(subjectDecision.retryAfterSeconds)});return true;}
+      // A product may require explicit company choice. The previously
+      // verified OIDC browser binding persists until a one-use selection
+      // POST; it is never resolved from an arbitrary callback query ID.
+      if(selectionFlow){
+        await selectionFlow.begin({issuer:verified.issuer,subject:verified.subject,browserBinding:binding},res);
+        return true;
+      }
       // MUST recheck current account/membership/entitlement in the application adapter.
       const local=await resolveLocalIdentity({issuer:verified.issuer,subject:verified.subject,applicationId});
       if (local?.selectionRequired) {
@@ -212,12 +227,15 @@ export function createOidcHttpAdapter({applicationId,oidcLogin,resolveLocalIdent
   }
 
   return async function oidcHttpHandler(req,res) {
+    const guarded=req.url?.startsWith('/auth/titan/'+applicationId+'/');
+    const release=guarded?concurrent.acquire(clientIp(req)):()=>{};
+    if(!release){audit('login_rate_limited',{scope:'concurrent'});reply(res,429,{error:'rate_limited'},{'retry-after':'1'});return true;}
     try {return await handle(req,res);}
     catch(error){
       audit('oidc_route_failed',{error_class:errorClass(error)});
       if(!res.headersSent) reply(res,500,{error:'internal_error'});
       else try {res.end();} catch { /* socket already closed */ }
       return true;
-    }
+    } finally {release();}
   };
 }

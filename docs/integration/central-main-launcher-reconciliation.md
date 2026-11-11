@@ -1,29 +1,31 @@
-# Central main / launcher integration — reconciliation ledger
+# Central launcher integration
 
-This branch starts from current `main`. It is intentionally **not** a merge of PR #49: GitHub reports PR #49 as non-mergeable, with 353 feature-side and 100 main-side commits since the merge base `be6544f880b5a8858ce022a991a170ec294ebe2c` (measured 2026-11-12). No feature-branch source may overwrite current `main` wholesale.
+The reconciled source combines PR #49 with current main, including merged PRs #50, #46 and #91. Existing operator, flag-read, configuration-engine, service-decision and activity-recording behavior is retained. Browser routes remain explicitly disabled by default.
 
-## Security-critical conflict: OIDC login state
+## Authentication and resource ownership
 
-`apps/control-api/src/oidc-state-pg.mjs` on `main` executes save, consume and pruning via `withRoleTransaction(pool, 'titan_trusted_writer', ...)`, using `pool.connect()`. The PR #49 version uses direct `pool.query()` and accepts an additional `central` application ID. **Required merge:** preserve the trusted-writer role transaction for every query, then add `central` only after confirming its schema CHECK and authorization tests. Do not restore direct login-role writes.
+- Product and Central OIDC state operations retain transaction-local, least-privilege database roles and one-use encrypted state. Central uses the isolated `titan_central_oidc` namespace; product state remains inaccessible to that role.
+- Both existing organization-selection and optional product-selection coordinators are retained; the HTTP adapter refuses conflicting simultaneous selection configurations.
+- Selected-company resolution repeats current membership, entitlement and local account checks.
+- Browser startup retains product registry validation, link keys, operator configuration, distinct audiences and configuration-engine readiness checks.
+- Shared company-name and configuration pools close on startup failure and shutdown. Regression tests cover the real HTTP route composition and closing both pools when the browser factory fails and a close operation rejects.
+- Connection limits and HTTP deadlines from the launcher branch are retained.
 
-## Runtime conflict: service entrypoint
+## Migration numbering
 
-`apps/control-api/src/server.mjs` on `main` initializes the validated product registry, link assertion key sets, PostgreSQL flag store, service config reads, Skilled decision handler and operator plane. PR #49 initializes a browser router and canonical company resolver with a second pool. **Required merge:** retain all existing initialization, inject the browser router behind its explicit flag, close both pools on startup failure and shutdown, and retain the feature branch's HTTP connection/timeouts. Add regression tests for disabled-browser behavior and every existing route.
+Existing main migrations 0001–0021 are preserved. Duplicate, weaker browser drafts 0010–0012 from #49 are superseded by the role-hardened 0019–0021 already integrated through #91. Remaining unapplied launcher migrations move to unoccupied numbers:
 
-## Runtime conflict: central handler
+| Draft name | Integrated version |
+| --- | --- |
+| 0013 central company selection | 0022 |
+| 0014 Central session access revocation | 0023 |
+| 0015 authorized Central session issuance | 0024 |
+| 0016 product account proof nonces | 0025 |
+| 0017 product company selection | 0026 |
+| 0018 product selection role isolation | 0027 |
 
-`apps/control-api/src/app.mjs` on `main` records activity in a separate transaction and generates UUIDs. PR #49 adds a concurrency limiter. **Required merge:** keep audit/activity persistence and apply concurrency controls without altering existing response contracts.
+The independent `database/migrations` canonical chain remains separate from legacy `migrations`. CI exercises both on separate disposable databases, along with checksum drift, role/RLS isolation, replay rejection, rollback rehearsals and blocked production cutover without external approval evidence. No live migration or deployment is performed by this merge.
 
-## Shared migration topology
+## Verification
 
-PR #49's canonical `database/migrations/0001..0013` chain (including merged PR #84 Scheduled registration) must be reconciled with the existing `migrations/` chain on `main`. Never run both blindly against the same database. Confirm the target topology, upgrade sequence, role grants and rollback/restore procedure before enabling migration deployment.
-
-## Acceptance gates
-
-1. Reconcile the complete overlapping-file inventory against the actual merge base, preserving `main`'s newer functionality.
-2. Run unit and API regression tests for OIDC, admin/operator, config read, decision service, launcher and browser routes.
-3. Run both migration suites against disposable PostgreSQL with a representative pre-upgrade snapshot.
-4. Prove least-privilege roles, RLS company switching, session replay rejection, and startup/shutdown pool cleanup.
-5. Only then open a merge-ready PR to `main`, merge with an expected-head SHA and delete branches proven merged.
-
-No production migration, PR #49 merge or branch deletion is authorized by this ledger.
+Local combined JavaScript suites: 1,572 passed, 10 existing TODO cases, zero failed. Python runner/tool suite: 74 tests, one database-dependent skip. Deployment checks: 111 tests passed. GitHub PostgreSQL and browser verification is required for the final reconciled head before merge.

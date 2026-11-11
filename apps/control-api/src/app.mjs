@@ -1,6 +1,7 @@
 import { CentralAccessService, withCentralReadSnapshot, recordActivityInOwnTransaction } from '../../../packages/control-plane/dist/index.js';
 import { randomUUID } from 'node:crypto';
 import { createRateLimiter } from './rate-limit.mjs';
+import { createConcurrencyLimiter } from './concurrency-limit.mjs';
 
 const apps=new Set(['field','desk','academy']);
 const noStore={ 'cache-control':'no-store', 'content-type':'application/json; charset=utf-8', 'x-content-type-options':'nosniff' };
@@ -55,11 +56,12 @@ export function accessActivityInput({organisationId, applicationId, action, deci
 
 /** No administrative mutations or user-controlled SQL. Organisation/app/action are the only request inputs.
  * logger(event, fields) receives structured decision fields only: never tokens or subject values. */
-export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, supportHandler, globalLogoutHandler, logoutLandingHandler, serviceDecisionHandler, configHandler, configEvaluationHandler, launcherSessionHandler, logger=()=>{}, healthQuery, activityRecorder, rateLimits=DEFAULT_RATE_LIMITS, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
+export function createCentralHandler({ pool, verifyToken, issuer, audiences, adminHandler, supportHandler, globalLogoutHandler, logoutLandingHandler, serviceDecisionHandler, configHandler, configEvaluationHandler, launcherSessionHandler, logger=()=>{}, healthQuery, activityRecorder, rateLimits=DEFAULT_RATE_LIMITS, concurrencyLimits={perKey:8,globalLimit:96}, clientIp=(req)=>req.socket?.remoteAddress??'unknown' }) {
   if (!pool || !verifyToken || !issuer) throw new Error('missing Central API dependencies');
   const trust={expectedIssuer:issuer,audienceByApplication:perApplicationAudiences(audiences)};
   const ipLimiter=createRateLimiter(rateLimits.ip);
   const subjectLimiter=createRateLimiter(rateLimits.subject);
+  const concurrent=createConcurrencyLimiter(concurrencyLimits);
   const audit=(event,fields={})=>{try{logger(event,fields);}catch{/* logging never alters the outcome */}};
   const runHealthQuery=healthQuery??((sql)=>pool.query(sql));
   const recordActivity=activityRecorder??((input)=>recordActivityInOwnTransaction(pool,input));
@@ -133,6 +135,9 @@ export function createCentralHandler({ pool, verifyToken, issuer, audiences, adm
     } catch (e) {audit('access_error',{error_class:e?.name});return respond(res,503,{error:'access_unavailable'});}
   };
   return async (req,res)=>{
+    const expensive=req.url?.startsWith('/v1/access/check');
+    const release=expensive?concurrent.acquire(clientIp(req)):()=>{};
+    if(!release){audit('access_rate_limited',{scope:'concurrent'});return respond(res,429,{error:'rate_limited'},{'retry-after':'1'});}
     try {await route(req,res);}
     catch (error) {
       audit('request_failed',{error_class:error?.name});
@@ -140,6 +145,6 @@ export function createCentralHandler({ pool, verifyToken, issuer, audiences, adm
         if (!res.headersSent) respond(res,500,{error:'internal_error'});
         else res.end();
       } catch { /* socket already gone; the process must keep serving */ }
-    }
+    } finally {release();}
   };
 }

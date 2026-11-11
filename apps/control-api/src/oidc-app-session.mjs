@@ -42,7 +42,8 @@ export function createVerifiedIdentityResolver({applicationId, issuer, audience,
       typeof findOrganisationIds!=='function' || typeof authorise!=='function' || typeof localAccountActive!=='function') throw new TypeError('invalid resolver dependencies');
   const principalFor = (subject, verifiedIssuer) => ({logtoSubject:subject,issuer:verifiedIssuer,audience,verifiedAt:clock()});
 
-  async function resolveIdentity({issuer:verifiedIssuer, subject, applicationId:requestedApp}) {
+  async function resolveIdentity({issuer:verifiedIssuer, subject, applicationId:requestedApp, organisationId:selectedOrganisationId}) {
+    if(selectedOrganisationId!==undefined)return resolveOrganisation({issuer:verifiedIssuer,subject,applicationId:requestedApp,organisationId:selectedOrganisationId});
     if (requestedApp !== applicationId || verifiedIssuer !== issuer || !valid(subject)) return {authorised:false};
     try {
       const ids = await findOrganisationIds({issuer:verifiedIssuer,subject});

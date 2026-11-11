@@ -88,3 +88,44 @@ The operator (admin) plane stays off until `TITAN_OPERATOR_ORGANISATION_ID` or `
 5. Restart the service and confirm the health check (step 3 of "Install and operate the service").
 
 Tenant-administrator role IDs (for the mutation routes in issue #34) are not yet configured. They are owner-provided values and have no configuration key in the code yet.
+## Authentication overload and rate-limit operations
+
+Before enabling browser rollout, confirm the public reverse proxy applies
+IP-keyed `limit_req` and `limit_conn` (or equivalently tested Apache
+enforcement) to `/v1/access/check`, product OIDC start/callback,
+Central OIDC start/callback and company-selection POST. Confirm the
+proxy rewrites forwarding headers from the actual client socket.
+
+Run `python3 -I deploy/proxy/validate_templates.py` and test the real
+proxy configuration (`nginx -t` or `apachectl -t`) before reload.
+Load-test from an isolated test IP with synthetic requests only.
+Expected rejection: HTTP 429; verify no OIDC token exchange or
+membership query occurs for rejected requests and legitimate traffic
+recovers after the concurrency permit is released. Check structured
+`access_rate_limited` and `login_rate_limited` metrics without
+logging token, subject, state or authorization code values.
+
+Limits in Node are per-process; scaling workers requires the external
+proxy limit. A global in-process cap is a backstop, not a replacement.
+A reverse-proxy reload or service restart may reset rate windows.
+
+## Product OIDC company choice deployment gate
+
+Required preflight for Sorted, Supercharged and LMS product hosts:
+
+1. Verify each product's own trusted membership discovery and local
+   account mapping returns company-scoped, account-scoped identifiers.
+2. Verify the product's session rotation invalidates the old session
+   and persists a revocable session scoped to the selected company.
+3. Mount the product-specific `/auth/titan/<app>/select` handler
+   behind the exact product vhost. Restrict its POST body to 4 KiB.
+4. Deploy and validate per-app PostgreSQL selection roles, RLS and
+   nonce migration 0017/0018, with independent least-privilege login
+   grants; test that one product cannot access another's selections.
+5. Verify switching companies never keeps access to the prior
+   company's local jobs, invoices or learning records.
+6. Verify expiry, replay, changed membership and removed account
+   link all deny session creation while keeping native login intact.
+
+These steps are mandatory before marking #32 or any product adapter
+as deployed. This repository's CI only proves synthetic test fixtures.
