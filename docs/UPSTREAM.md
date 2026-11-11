@@ -28,9 +28,15 @@ Do this before any production maintenance. Record each result in the table below
 
 | Field | Value |
 | --- | --- |
-| Release tag | _not yet recorded_ |
-| Commit SHA (full) | _not yet recorded_ |
-| Verified by / date | _not yet recorded_ |
+| Release tag | `v1.45.0` |
+| Commit SHA (full) | `94c088f9e4f87ba93df1f72ed20edf16ce364f61` |
+| Verified by / date | Tag resolved from `logto-io/logto` by a shallow clone into a scratch directory outside this repository, 2026-11-11. `packages/core/package.json` at that commit reports `1.45.0`. Tree comparison not run (see below). |
+
+### Tree comparison against the vendored tree
+
+Result: **not run. The vendored Logto tree is absent.** This repository has no vendored Logto tree: no `logto-master/` directory and no tracked files under it. The step 3 comparison therefore has no input, and no differing paths are listed. The Logto-named files in the repository (`packages/control-plane/src/logto-*.ts`, `tools/verify_logto_source.py`) are Titan code or tooling that checks a source ZIP, not upstream source.
+
+The pinned commit above is the only result recorded. Re-run the comparison when a vendored tree exists at a path that this document names.
 
 ## PostgreSQL requirement
 
