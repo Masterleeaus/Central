@@ -46,7 +46,7 @@ export async function pruneExpired(pool,clock=()=>Date.now(),{batchSize=1000}={}
   if(typeof pool?.connect!=='function' || typeof clock!=='function' || !Number.isSafeInteger(batchSize) || batchSize<1 || batchSize>10_000) throw new TypeError('invalid prune configuration');
   let total=0;
   for(;;){
-    const result=await withRoleTransaction(pool,role,conn=>conn.query(`DELETE FROM titan.titan_oidc_login_states WHERE (application_id,state_digest) IN (SELECT application_id,state_digest FROM titan.titan_oidc_login_states WHERE expires_at <= to_timestamp($1::double precision / 1000) LIMIT $2)`,[clock(),batchSize]));
+    const result=await withRoleTransaction(pool,WRITER,conn=>conn.query(`DELETE FROM titan.titan_oidc_login_states WHERE (application_id,state_digest) IN (SELECT application_id,state_digest FROM titan.titan_oidc_login_states WHERE expires_at <= to_timestamp($1::double precision / 1000) LIMIT $2)`,[clock(),batchSize]));
     const removed=Number(result?.rowCount??0);
     total+=removed;
     if(removed<batchSize) return total;
