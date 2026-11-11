@@ -51,7 +51,7 @@ def write_dir(files):
 class RealMigrationsTests(unittest.TestCase):
     def test_all_repository_migrations_are_one_transaction(self):
         found = migrate.discover(ROOT / 'migrations')
-        self.assertEqual([m.version for m in found], list(range(1, 21)))
+        self.assertEqual([m.version for m in found], list(range(1, 22)))
         for m in found:
             self.assertIn('COMMIT;', m.text, m.name)
 
@@ -65,9 +65,9 @@ class RealMigrationsTests(unittest.TestCase):
 
     def test_repository_migrations_apply_in_order_then_are_noop(self):
         client = FakeClient()
-        self.assertEqual(migrate.run(client, ROOT / 'migrations'), list(range(1, 21)))
+        self.assertEqual(migrate.run(client, ROOT / 'migrations'), list(range(1, 22)))
         self.assertEqual(migrate.run(client, ROOT / 'migrations'), [])
-        self.assertEqual(len(client.executed), 20)
+        self.assertEqual(len(client.executed), 21)
 
     def test_migration_0016_grants_only_to_the_trusted_writer(self):
         text = (ROOT / 'migrations' / '0016_organisation_selection.sql').read_text(encoding='utf-8')
