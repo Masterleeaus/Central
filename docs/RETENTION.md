@@ -3,7 +3,7 @@
 Status: PARTLY DECIDED. The owner has decided a retention period of **1 year** for audit rows (section 1)
 and for activity history (section 6). Nothing else in this document is settled policy. Items marked **TO DECIDE**
 need a legal, privacy or owner decision before they are implemented or relied on. Items marked **CURRENT** describe
-behaviour that the code already has. No retention job is implemented in code.
+behaviour that the code already has. A purge job exists (`tools/retention_purge.py`, migration 0028, issue #16). It is dry-run by default, uses a 90-day cutoff by default, and has not been run against any database.
 
 ## Scope
 
@@ -95,6 +95,17 @@ are still in the service log (section 3). Their retention period is the same as 
   from which the year is counted; that detail is still open.
 - **TO DECIDE (owner):** whether activity export is needed (for example to a customer's own store) and in what format. The current reader returns one organisation's events, newest first, in pages of 100, and is the basis for any export.
 - **TO DECIDE (owner):** which roles may read activity. Tenant users should see events their role permits. Support operators should see only what their role permits, and each read should be audited. No operator read path exists yet.
+
+## 7. Purge job (issue #16)
+
+- **CURRENT (implemented, not run):** `tools/retention_purge.py` deletes `titan.activity_events` and `titan.provisioning_audit`
+  rows older than `--retention-days` (default **90**). It is a dry run unless `--execute` is passed. Each batch is one
+  transaction, run as `titan_retention_purger`, bounded by the same cutoff in the database (migration 0028).
+- **Conflict to resolve:** the 90-day default comes from the repository owner's instruction for issue #16. Section 1 and
+  section 6 above record a DECIDED 1-year period. Until the owner confirms which applies, set `--retention-days 365` before any
+  `--execute` run, or change the default in the tool.
+- **Gap:** the migration 0028 carve-out has no PostgreSQL test yet. Review it, and apply the migration only after that review.
+- Rollback for the migration: `database/retention/rollback_0028.sql`.
 
 ## Open items summary
 

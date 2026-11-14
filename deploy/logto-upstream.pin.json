@@ -1,0 +1,8 @@
+{
+  "upstream": "logto-io/logto",
+  "release_tag": "v1.45.0",
+  "commit_sha": "94c088f9e4f87ba93df1f72ed20edf16ce364f61",
+  "core_version": "1.45.0",
+  "license": "MPL-2.0",
+  "note": "Pinned for issue #24. Upstream source is not vendored here. Matches docs/UPSTREAM.md. Do not float this to a tag or branch."
+}
