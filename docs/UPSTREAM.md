@@ -38,6 +38,8 @@ Result: **not run. The vendored Logto tree is absent.** This repository has no v
 
 The pinned commit above is the only result recorded. Re-run the comparison when a vendored tree exists at a path that this document names.
 
+The same pin is recorded machine-readably in `deploy/logto-upstream.pin.json`. `tests/test_upstream_pin.py` checks that the two agree.
+
 ## PostgreSQL requirement
 
 - The live server runs PostgreSQL **13.23**. `docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md` treats it as **not a supported foundation** for current Logto. Do not run Logto or Titan Central against it, and do not migrate it in place.
