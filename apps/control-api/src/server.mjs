@@ -21,6 +21,7 @@ import { centralListenPort } from './config-listen-policy.mjs';
 import { createServiceLifecycle } from './service-lifecycle.mjs';
 import { listenCentral } from './service-startup-listener.mjs';
 import { createCentralBrowserRouter } from './central-browser-router.mjs';
+import { createGlobalLogoutMount } from './global-logout-mount.mjs';
 import { createCanonicalCompanySource } from './central-shared-bootstrap.mjs';
 const log = createJsonLogger();
 
@@ -96,7 +97,9 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
     nameProvider=canonical.getCompanyName;
   }
   browserRouter=createBrowserRouter({env,pool,getCompanyName:nameProvider,fetcher,logger:auditLog});
-  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,configHandler,configEvaluationHandler,serviceDecisionHandler,logger:auditLog});
+  // Global logout (issue #6): off unless TITAN_GLOBAL_LOGOUT_ENABLED=1. No app session loader exists yet, so an enabled gate fails startup here.
+  const globalLogout=createGlobalLogoutMount({env,pool,authenticateSession:undefined,logger:auditLog});
+  const centralHandler=createCentralHandler({pool,verifyToken,issuer:TITAN_OIDC_ISSUER,audiences,adminHandler:adminHandler??undefined,configHandler,configEvaluationHandler,serviceDecisionHandler,globalLogoutHandler:globalLogout?.logoutHandler,logoutLandingHandler:globalLogout?.landingHandler,logger:auditLog});
   const handler=async (req,res)=>{
     res.on('finish',()=>{try{metrics.observeResponse(res.statusCode);}catch{/* ignore */}});
     if (req.method==='GET' && pathnameOf(req)==='/metrics') return serveMetrics(req,res,metrics);
