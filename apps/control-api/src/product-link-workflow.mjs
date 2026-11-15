@@ -2,8 +2,9 @@
  *
  * Not an HTTP route. Caller authenticates the operator on the server and
  * supplies authorisation callbacks and a TrustedProvisioningService. The
- * product proof is checked independently of Logto membership and must be
- * consumed once before any write. Both command and linked record are
+ * product proof is the signed assertion from docs/LINKING.md, checked
+ * independently of Logto membership (see product-link-assertion-check.mjs).
+ * Its nonce is spent once, by the provisioner, before any write. Both command and linked record are
  * checked for expected company, identity and revision. All durable account
  * changes and revocation generations remain owned by CentralProvisioner.
  */
@@ -32,9 +33,11 @@ export function createProductAccountLinkWorkflow({
    // resolution; never silently overwrite a different product account.
    const current=await resolveLink({id:command.id,organisationId:command.organisationId});
    if(current!==null&&current!==undefined)throw Error('existing account link requires review');
+   // proofVerifier checks the signed assertion without spending its nonce. The write below carries the
+   // assertion, and the provisioner verifyLinkCommand spends it exactly once, before the link write (LINKING.md, nonce store).
    if(await proofVerifier.verify({proof,command})!==true)
     throw Error('product account control not proven');
-   return trustedProvisioning.apply(actor,context,command);
+   return trustedProvisioning.apply(actor,context,{...command,assertion:proof});
   },
   async unlink(actor,context,command){
    if(!actorValid(actor,context)||command?.kind!=='link_revoke'||

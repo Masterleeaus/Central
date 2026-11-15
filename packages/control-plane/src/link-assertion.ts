@@ -124,6 +124,18 @@ export class LinkAssertionVerifier {
 
   /** Throws LinkAssertionRejected with a fixed code. Nonce is consumed only after every other check passes. */
   async verify(token: unknown, expected: LinkAssertionExpectation): Promise<LinkAssertionResult> {
+    const { result, now } = await this.inspect(token, expected);
+    if (!(await this.nonces.consume(result.productId, result.nonce, result.expiresAt, now))) fail('replayed');
+    return result;
+  }
+
+  /** Every check in `verify` except the nonce. It spends nothing, so a caller can reject a bad assertion before
+   * an authorised write. The write must still call `verify`, which is the only step that spends the nonce. */
+  async check(token: unknown, expected: LinkAssertionExpectation): Promise<LinkAssertionResult> {
+    return (await this.inspect(token, expected)).result;
+  }
+
+  private async inspect(token: unknown, expected: LinkAssertionExpectation): Promise<{ result: LinkAssertionResult; now: string }> {
     const now = this.clock();
     const nowMs = Date.parse(now);
     if (!Number.isFinite(nowMs)) throw new TypeError('invalid verifier clock');
@@ -168,8 +180,7 @@ export class LinkAssertionVerifier {
     if (claims.lu !== expected.localUserId || claims.la !== expected.localAccountId) fail('account_mismatch');
 
     const expiresAt = new Date((exp as number) * 1000).toISOString();
-    if (!(await this.nonces.consume(productId, claims.nonce, expiresAt, now))) fail('replayed');
-    return { productId, nonce: claims.nonce, issuedAt: new Date((iat as number) * 1000).toISOString(), expiresAt };
+    return { now, result: { productId, nonce: claims.nonce, issuedAt: new Date((iat as number) * 1000).toISOString(), expiresAt } };
   }
 }
 
