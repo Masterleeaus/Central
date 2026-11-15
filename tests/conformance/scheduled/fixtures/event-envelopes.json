@@ -6,7 +6,7 @@
     "consumer": "scheduled-inbox",
     "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
     "eventTypes": [
-      "booking_confirmed"
+      "booking_created"
     ],
     "secret": "titan-central conformance scheduled events secret, test only, not a credential"
   },
@@ -18,16 +18,16 @@
         "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
         "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
         "sourceProduct": "scheduled",
-        "eventType": "booking_confirmed",
+        "eventType": "booking_created",
         "schemaVersion": 1,
         "correlationId": "corr-scheduled-0001",
-        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "idempotencyKey": "scheduled:booking:bk-0001:created",
         "occurredAt": "2026-11-15T09:55:00.000Z",
         "payload": {
           "bookingRef": "bk-0001",
           "status": "confirmed"
         },
-        "signature": "e0efe4eed5e18c383e0f47e2cd999fa29e80f3bd869d05786203e2c526c103d4"
+        "signature": "6275e3c7da4b67c6373bd3f5cfba71812c5ae01e8333ceba8b07f09cb4230b78"
       },
       "scheduledVerdict": {
         "accepted": true
@@ -41,16 +41,16 @@
         "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
         "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
         "sourceProduct": "scheduled",
-        "eventType": "booking_confirmed",
+        "eventType": "booking_created",
         "schemaVersion": 1,
         "correlationId": "corr-scheduled-0001",
-        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "idempotencyKey": "scheduled:booking:bk-0001:created",
         "occurredAt": "2026-11-15T09:55:00.000Z",
         "payload": {
           "bookingRef": "bk-0001",
           "status": "cancelled"
         },
-        "signature": "e0efe4eed5e18c383e0f47e2cd999fa29e80f3bd869d05786203e2c526c103d4"
+        "signature": "6275e3c7da4b67c6373bd3f5cfba71812c5ae01e8333ceba8b07f09cb4230b78"
       },
       "scheduledVerdict": {
         "accepted": false,
@@ -65,16 +65,16 @@
         "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
         "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
         "sourceProduct": "scheduled",
-        "eventType": "booking_confirmed",
+        "eventType": "booking_created",
         "schemaVersion": 1,
         "correlationId": "corr-scheduled-0001",
-        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "idempotencyKey": "scheduled:booking:bk-0001:created",
         "occurredAt": "2026-11-15T09:55:00.000Z",
         "payload": {
           "bookingRef": "bk-0001",
           "status": "confirmed"
         },
-        "signature": "0c46529e8c9aca2886ac77c43991ac8c4b1b5ab66f4656d7df87aa1d647a3f0a"
+        "signature": "a72f246e083eb1e9f5e6f49aa8dd74c9baabf3a228d2a3444f0f52f5315beb84"
       },
       "scheduledVerdict": {
         "accepted": false,
@@ -89,16 +89,16 @@
         "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
         "organisationId": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
         "sourceProduct": "scheduled",
-        "eventType": "booking_confirmed",
+        "eventType": "booking_created",
         "schemaVersion": 1,
         "correlationId": "corr-scheduled-0001",
-        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "idempotencyKey": "scheduled:booking:bk-0001:created",
         "occurredAt": "2026-11-15T09:55:00.000Z",
         "payload": {
           "bookingRef": "bk-0001",
           "status": "confirmed"
         },
-        "signature": "e872ba35ae44d6c83247c24308ce5652c7743238b84f5c81db374113144cf10e"
+        "signature": "4e57a2e8d81e2679f11ec0eda952d764c4473e9bc96eeb4dc9e11ad988498783"
       },
       "scheduledVerdict": {
         "accepted": true
@@ -115,13 +115,13 @@
         "eventType": "booking_cancelled",
         "schemaVersion": 1,
         "correlationId": "corr-scheduled-0001",
-        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "idempotencyKey": "scheduled:booking:bk-0001:created",
         "occurredAt": "2026-11-15T09:55:00.000Z",
         "payload": {
           "bookingRef": "bk-0001",
           "status": "confirmed"
         },
-        "signature": "dca5d8eb5ac80598cf6d98f89eb994a7ba841e3f68332e6f8c8067e8748965e3"
+        "signature": "8279785f8b4ea2ab3650213800495f7dc0f5894129ff8374e2678727e7714397"
       },
       "scheduledVerdict": {
         "accepted": true
@@ -135,10 +135,10 @@
         "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
         "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
         "sourceProduct": "scheduled",
-        "eventType": "booking_confirmed",
+        "eventType": "booking_created",
         "schemaVersion": 1,
         "correlationId": "corr-scheduled-0001",
-        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "idempotencyKey": "scheduled:booking:bk-0001:created",
         "occurredAt": "2026-11-15T09:55:00.000Z",
         "payload": {
           "bookingRef": "bk-0001",
@@ -158,16 +158,16 @@
         "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
         "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
         "sourceProduct": "scheduled",
-        "eventType": "booking_confirmed",
+        "eventType": "booking_created",
         "schemaVersion": 1,
         "correlationId": "corr-scheduled-0001",
-        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "idempotencyKey": "scheduled:booking:bk-0001:created",
         "occurredAt": "2026-11-13T10:00:00.000Z",
         "payload": {
           "bookingRef": "bk-0001",
           "status": "confirmed"
         },
-        "signature": "08910a73a2b70d283a0ef8063e2f737b22a03133ab52f952d9c61fda36443ae8"
+        "signature": "8193c47665a57a52de3a64ec0c6c4935c81b76aa0d088de1fe889bcf6ac0390f"
       },
       "scheduledVerdict": {
         "accepted": false,
@@ -183,16 +183,16 @@
         "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
         "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
         "sourceProduct": "scheduled",
-        "eventType": "booking_confirmed",
+        "eventType": "booking_created",
         "schemaVersion": 1,
         "correlationId": "corr-scheduled-0001",
-        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "idempotencyKey": "scheduled:booking:bk-0001:created",
         "occurredAt": "2026-11-15T11:00:00.000Z",
         "payload": {
           "bookingRef": "bk-0001",
           "status": "confirmed"
         },
-        "signature": "dc76b3d548709115ff40539814ebf0aa3e9cde2f906e51a6d80741b96a59679c"
+        "signature": "1faaee776de6387de98d94f25c2e5df1fafe17de7a6816410c87ae577c932997"
       },
       "scheduledVerdict": {
         "accepted": false,
@@ -208,16 +208,16 @@
         "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
         "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
         "sourceProduct": "scheduled",
-        "eventType": "booking_confirmed",
+        "eventType": "booking_created",
         "schemaVersion": 0,
         "correlationId": "corr-scheduled-0001",
-        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "idempotencyKey": "scheduled:booking:bk-0001:created",
         "occurredAt": "2026-11-15T09:55:00.000Z",
         "payload": {
           "bookingRef": "bk-0001",
           "status": "confirmed"
         },
-        "signature": "b2749ad758c8f53879ca183552ea52314255f23c0cfcb0ef14e4a735b7c2b1a3"
+        "signature": "410f6941bc3d5c38aecf008594a8faf39a0371239fe1289edb70f702e5b5d8ee"
       },
       "scheduledVerdict": {
         "accepted": false,
