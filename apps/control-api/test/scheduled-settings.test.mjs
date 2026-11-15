@@ -48,7 +48,8 @@ test('the audience must not be a placeholder, too long, padded, the link audienc
 
 test('error messages name variables and never echo a configured value', () => {
   const secretish = 'https://scheduled.example.test/leak-me';
-  try { readScheduledSettings(base({ TITAN_SCHEDULED_ORIGIN: secretish })); assert.fail('expected rejection'); } catch (e) {
-    assert.ok(!e.message.includes('leak-me'));
-  }
+  let error = null;
+  try { readScheduledSettings(base({ TITAN_SCHEDULED_ORIGIN: secretish })); } catch (e) { error = e; }
+  assert.ok(error, 'expected rejection: a bad origin must not be accepted');
+  assert.ok(!error.message.includes('leak-me'));
 });
