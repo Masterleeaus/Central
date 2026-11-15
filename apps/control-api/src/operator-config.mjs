@@ -75,20 +75,22 @@ export function readFlagChangeSetting(env) {
  *   TITAN_PRODUCT_TRUSTED_ORIGINS: comma-separated operator allowlist. Required whenever an origin is set.
  * With nothing set, the registry is returned with no origins and nothing is validated against the network.
  */
-export const PRODUCT_ORIGIN_VARIABLES = Object.freeze({ sorted: 'TITAN_FIELD_ORIGIN', supercharged: 'TITAN_DESK_ORIGIN', lms: 'TITAN_ACADEMY_ORIGIN' });
+export const PRODUCT_ORIGIN_VARIABLES = Object.freeze({ sorted: 'TITAN_FIELD_ORIGIN', supercharged: 'TITAN_DESK_ORIGIN', lms: 'TITAN_ACADEMY_ORIGIN', scheduled: 'TITAN_SCHEDULED_ORIGIN' });
 export const PRODUCT_TRUSTED_ORIGINS_VARIABLE = 'TITAN_PRODUCT_TRUSTED_ORIGINS';
-const PRODUCT_ORIGIN_NAMES = Object.values(PRODUCT_ORIGIN_VARIABLES);
+// The three historical OIDC plans remain an atomic group. Scheduled is optional and never enters their legacy plan lookup.
+const LEGACY_ORIGIN_NAMES = [PRODUCT_ORIGIN_VARIABLES.sorted, PRODUCT_ORIGIN_VARIABLES.supercharged, PRODUCT_ORIGIN_VARIABLES.lms];
 
 export function loadProductRegistry(env) {
   const serviceOrigins = {};
   for (const [productId, name] of Object.entries(PRODUCT_ORIGIN_VARIABLES)) {
     if (present(env[name])) serviceOrigins[productId] = env[name];
   }
+  const legacyOriginCount = ['sorted', 'supercharged', 'lms'].filter(id => Object.hasOwn(serviceOrigins, id)).length;
   const originCount = Object.keys(serviceOrigins).length;
   const trustedRaw = env[PRODUCT_TRUSTED_ORIGINS_VARIABLE];
   if (originCount === 0 && !present(trustedRaw)) return buildProductRegistry({ serviceOrigins: {}, trustedOrigins: [] });
-  if (originCount !== 0 && originCount !== PRODUCT_ORIGIN_NAMES.length) {
-    throw new Error(`${PRODUCT_ORIGIN_NAMES.join(', ')} must be set together`);
+  if (legacyOriginCount !== 0 && legacyOriginCount !== LEGACY_ORIGIN_NAMES.length) {
+    throw new Error(`${LEGACY_ORIGIN_NAMES.join(', ')} must be set together`);
   }
   if (!present(trustedRaw)) throw new Error(`${PRODUCT_TRUSTED_ORIGINS_VARIABLE} must be set when product origins are configured`);
   if (typeof trustedRaw !== 'string') throw new Error(`invalid ${PRODUCT_TRUSTED_ORIGINS_VARIABLE}`);
