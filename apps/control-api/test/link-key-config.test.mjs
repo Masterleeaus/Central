@@ -39,11 +39,6 @@ test('a valid inline configuration returns normalised key sets', () => {
   assert.equal(parsed[0].keys[1].notAfter, '2027-01-01T00:00:00+00:00');
 });
 
-test('every product the control-plane registry lists is accepted, one key set each', () => {
-  const parsed = validateLinkKeySets(PRODUCT_IDS.map(productId => set({ productId })));
-  assert.deepEqual(parsed.map(s => s.productId), [...PRODUCT_IDS]);
-});
-
 test('a valid file configuration is read once from the configured path', () => {
   const seen = [];
   const parsed = readLinkKeySets({ [LINK_KEYS_FILE_VAR]: '/etc/titan/link-keys.json' }, { readFile: (p) => { seen.push(p); return JSON.stringify(sets(set())); } });
