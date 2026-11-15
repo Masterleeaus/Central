@@ -117,6 +117,16 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" <<'SQL'
           GRANT titan_trusted_writer, titan_trusted_reader TO titan_central_app;
           SQL
+      # Login-role path: the service login role (NOINHERIT, member of the trusted roles) runs the
+      # session-revocation and OIDC-state statements and the access check through SET LOCAL ROLE.
+      # TITAN_REQUIRE_DB_TESTS makes a missing psql or database URL fail the job instead of skipping.
+      - name: Login-role path tests (SQL, real PostgreSQL)
+        env:
+          TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
+          TITAN_REQUIRE_DB_TESTS: '1'
+        run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
+      # Runs before any other SQL or test writes data: test_login_role_path.py requires a freshly migrated
+      # database and refuses to run once titan tables hold rows (CI run 43678602824).
       # Runs after migrations because the feature-flag tests need migrations 0001-0009 and 0013.
       # The URL logs in as titan_central_app (password set in the provisioning step above).
       # TITAN_REQUIRE_DB_TESTS makes a missing URL fail the file instead of skipping its nine tests (issue #145).
@@ -142,14 +152,6 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/activity_events.sql "$TITAN_CI_DATABASE_URL"
       - name: Session revocation RLS tests (two organisations)
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/session_revocation_rls.sql "$TITAN_CI_DATABASE_URL"
-      # Login-role path: the service login role (NOINHERIT, member of the trusted roles) runs the
-      # session-revocation and OIDC-state statements and the access check through SET LOCAL ROLE.
-      # TITAN_REQUIRE_DB_TESTS makes a missing psql or database URL fail the job instead of skipping.
-      - name: Login-role path tests (SQL, real PostgreSQL)
-        env:
-          TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
-          TITAN_REQUIRE_DB_TESTS: '1'
-        run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
 
 
       # The draft shared-schema chain is a separate clean-install path until #43 reconciles it.
