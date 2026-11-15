@@ -17,7 +17,6 @@ const fixture = JSON.parse(readFileSync(new URL('./fixtures/booking-envelopes.js
 
 const EVENT_NAMES = ['booking_created', 'booking_cancelled', 'booking_rescheduled'];
 const WIRE_NAME = /^[a-z][a-z0-9_]{0,63}$/;
-const TODO_REGISTRY = 'expected-fail until Central registers the booking events: PRODUCTION_EVENT_REGISTRY is empty';
 const TODO_FRESHNESS = 'expected-fail: Central has no occurredAt age or future-skew check on inbound envelopes';
 
 const bookingCase = (id) => {
@@ -175,19 +174,19 @@ test('booking fixtures: Scheduled verdicts record the signature, freshness and e
 
 // ---------- expected-fail mismatches ----------
 
-test('booking_created: Central production registry lists the event for scheduled (expected-fail)', { todo: TODO_REGISTRY }, () => {
+test('booking_created: Central production registry lists the event for scheduled', () => {
   const entry = PRODUCTION_EVENT_REGISTRY.find((d) => d.eventType === 'booking_created' && d.schemaVersion === 1);
   assert.ok(entry, 'booking_created v1 is registered');
   assert.ok(entry.sourceProducts.includes('scheduled'));
 });
 
-test('booking_cancelled: Central production registry lists the event for scheduled (expected-fail)', { todo: TODO_REGISTRY }, () => {
+test('booking_cancelled: Central production registry lists the event for scheduled', () => {
   const entry = PRODUCTION_EVENT_REGISTRY.find((d) => d.eventType === 'booking_cancelled' && d.schemaVersion === 1);
   assert.ok(entry, 'booking_cancelled v1 is registered');
   assert.ok(entry.sourceProducts.includes('scheduled'));
 });
 
-test('booking_rescheduled: Central production registry lists the event for scheduled (expected-fail)', { todo: TODO_REGISTRY }, () => {
+test('booking_rescheduled: Central production registry lists the event for scheduled', () => {
   const entry = PRODUCTION_EVENT_REGISTRY.find((d) => d.eventType === 'booking_rescheduled' && d.schemaVersion === 1);
   assert.ok(entry, 'booking_rescheduled v1 is registered');
   assert.ok(entry.sourceProducts.includes('scheduled'));
