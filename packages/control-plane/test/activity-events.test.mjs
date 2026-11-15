@@ -28,6 +28,24 @@ test('valid event is prepared with stripped personal keys reported by name', () 
  assert.deepEqual(e.strippedDetailKeys, ['email']);
 });
 
+test('scheduled is accepted as a source product', () => {
+ const e = prepareActivityEvent({ ...base, sourceProduct: 'scheduled' });
+ assert.equal(e.sourceProduct, 'scheduled');
+});
+
+test('recordActivity writes scheduled as the source product', async () => {
+ const s = scripted();
+ await recordActivity({ query: async (q, p) => s.calls.push([q, p]) }, { ...base, sourceProduct: 'scheduled' });
+ assert.equal(s.calls[0][1][8], 'scheduled');
+});
+
+test('unknown source products are still refused, including near-miss spellings', () => {
+ const unknown = ['billing', 'Scheduled', 'SCHEDULED', ' scheduled', 'scheduled ', 'scheduled_work', '', 'constructor', '__proto__'];
+ for (const sourceProduct of unknown) {
+  assert.throws(() => prepareActivityEvent({ ...base, sourceProduct }), /invalid activity source product/, JSON.stringify(sourceProduct));
+ }
+});
+
 test('invalid events are refused before any statement runs', () => {
  const bad = [
   { organisationId: 'not-a-uuid' },
