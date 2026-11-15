@@ -13,5 +13,5 @@ test('verifies RSA signature, issuer, audience and expiry',async()=>{
  assert.equal((await verify('Bearer '+token(claims))).clientId,'config_service');
  await assert.rejects(verify('Bearer '+token({...claims,aud:'https://other.test/'})));
  await assert.rejects(verify('Bearer '+token({...claims,exp:now-100})));
- await assert.rejects(verify('Bearer '+token({...claims,sub:'a'}).slice(0,-2)+'xx'));
+ {const [h,b,sig]=token(claims).split('.');const bytes=Buffer.from(sig,'base64url');bytes[0]^=1;await assert.rejects(verify('Bearer '+[h,b,bytes.toString('base64url')].join('.')));}
 });
