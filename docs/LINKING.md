@@ -12,7 +12,7 @@ A Central identity may act in a connected product only through a local account t
 | --- | --- | --- |
 | Central identity subject | The Logto subject of the user (`usr_...`) | `titan.identities.logto_subject` |
 | Organisation identifier | The Logto organisation ID | `titan.organisations.logto_organisation_id` |
-| Product | `sorted`, `supercharged`, `lms` (`PRODUCT_IDS`) | key sets in operator config |
+| Product | `sorted`, `supercharged`, `lms`, `scheduled` (`PRODUCT_IDS`). `scheduled` has no application id and no link path yet: application-to-product mapping rejects it with `product_mismatch`. | key sets in operator config |
 | Application | Legacy id `field`, `desk`, `academy` (`LEGACY_TO_PRODUCT`: field to sorted, desk to supercharged, academy to lms) | `titan.local_account_links.application_id` |
 | Local account | `local_user_id` and `local_account_id`, opaque and immutable IDs issued by the product | `titan.local_account_links` |
 
@@ -89,7 +89,7 @@ Operator-controlled configuration, one key set per product:
 - `TITAN_LINK_KEYS_FILE` names a JSON file holding the key sets. `TITAN_LINK_KEYS_JSON` holds the same JSON inline. Set at most one.
 - Read once at startup. Malformed configuration fails startup, whether or not the operator plane is on. Unset means no key sets.
 - Every key must declare `"alg": "EdDSA"`.
-- Rules, each tested in `apps/control-api/test/link-key-config.test.mjs`: exactly one source; the file can be read; valid JSON; one to three entries, each a known product (`sorted`, `supercharged`, `lms`) listed once; 1 to 8 keys per product; only the documented fields, so no private member (`d` and the like); `kid` of 1 to 64 letters, digits, dots, underscores or hyphens, unique within its product; `alg` `EdDSA`; `kty` `OKP` and `crv` `Ed25519`; `x` a 32-byte base64url public key; `notBefore` an RFC 3339 time with an offset; `notAfter` optional, RFC 3339, and later than `notBefore`.
+- Rules, each tested in `apps/control-api/test/link-key-config.test.mjs`: exactly one source; the file can be read; valid JSON; one to four entries, each a known product (`sorted`, `supercharged`, `lms`, `scheduled`) listed once; 1 to 8 keys per product; only the documented fields, so no private member (`d` and the like); `kid` of 1 to 64 letters, digits, dots, underscores or hyphens, unique within its product; `alg` `EdDSA`; `kty` `OKP` and `crv` `Ed25519`; `x` a 32-byte base64url public key; `notBefore` an RFC 3339 time with an offset; `notAfter` optional, RFC 3339, and later than `notBefore`.
 - Errors name the variable and the rule. They never echo a value or a file path.
 - `POST /v1/admin/provision` runs trusted provisioning only when the operator plane (`TITAN_OPERATOR_*`) is on and key sets are configured. Otherwise it answers `404` (operator plane off) or `503 provisioning_disabled` (no key sets).
 
