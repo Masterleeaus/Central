@@ -90,3 +90,11 @@ Source: [Central architecture decisions ADR-009](https://github.com/Masterleeaus
 4. Do not falsely check implementation tasks to satisfy the closure gate. Close completed implementation only when its own code and tests are verified.
 5. Never assume a ticket with the word “Pro” requires a second WordPress plugin. Source authority is the single-plugin architecture and Central ADR-009.
 6. Keep only these seven repos in scope; do not mutate historical source repositories or other Titan workspaces as part of this review.
+
+
+## Later corrections and concurrent snapshot
+
+- [Website #17](https://github.com/Masterleeaus/Titan-zero-website/issues/17): corrected four obsolete, unchecked Pro/seven-offer checklist tasks to the canonical six optional upgrades, one plugin, and approved Central price/entitlement gates. **No implementation box was marked complete.**
+- [Website #14](https://github.com/Masterleeaus/Titan-zero-website/issues/14): corrected obsolete Pro-compatibility documentation checkbox to one-plugin + hosted services with legacy SEO guidance, still unchecked.
+- [Front Desk #1](https://github.com/Masterleeaus/Titan-Zero-Trades-Front-Desk/issues/1) was administratively closed as a duplicate by concurrent work after source requirements were transferred unchecked to canonical #45. Treat #45 as active; do not infer the single-plugin delivery is finished.
+- **Latest checked point-in-time search:** Scheduled 28, Sorted 42, Skilled 53, Supercharged 53, Central 55, Front Desk 44, Website 44 = **319 open issues**, **zero missing Markdown checklists** across these seven. The earlier 322-issue table remains a timestamped snapshot; concurrent agent updates changed the issue count, not the seven-repository scope.
