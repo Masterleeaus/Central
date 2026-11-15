@@ -6,5 +6,6 @@
 - [Canonical company database](../database/README.md), distinct from legacy access migrations.
 - [Central launcher](../apps/control-api/CENTRAL_LAUNCHER.md) and [configuration engine](../packages/config-engine/README.md).
 - [Brand/workspace reconciliation](central-brand-workspace-reconciliation.md).
+- [Cross-product data contract](CROSS_PRODUCT_DATA_CONTRACT.md) for shared entities, identifiers and event shapes.
 
 Historical pass records remain under `docs/records/pass`. Their deployment assumptions and naming describe historical snapshots; current code, migration checksums and reviewed contracts govern current behavior. Logto remains an external identity runtime.
