@@ -1,4 +1,4 @@
--- Migration 0029: allow 'scheduled' as an activity source product (Scheduled joins Central's activity history).
+-- Migration 0030: allow 'scheduled' as an activity source product (Scheduled joins Central's activity history).
 -- Applied after 0028. Migrations 0001 to 0028 are not edited.
 --
 -- Scope of change:
