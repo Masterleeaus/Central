@@ -10,7 +10,7 @@
  */
 import { createPublicKey, verify as verifySignature, type KeyObject } from 'node:crypto';
 import type { ApplicationId } from './contracts.js';
-import { LEGACY_TO_PRODUCT, PRODUCT_IDS, type ProductId } from './product-registry.js';
+import { LINK_APPLICATION_TO_PRODUCT, PRODUCT_IDS, type ProductId } from './product-registry.js';
 import type { SqlPool } from './postgres.js';
 import type { VerifyLocalLink } from './trusted-provisioning.js';
 
@@ -56,8 +56,8 @@ export interface LinkNonceStore {
 }
 
 export interface LinkAssertionExpectation {
-  /** Legacy application id of the account being linked. Must map to the asserting product. */
-  applicationId: ApplicationId;
+  /** Application id of the account being linked (legacy id, or 'scheduled'). Must map to the asserting product. */
+  applicationId: ApplicationId | 'scheduled';
   /** Central identity subject (Logto subject) resolved by Central from identities.id. */
   logtoSubject: string;
   /** Logto organisation ID resolved by Central from organisations.id. */
@@ -127,7 +127,7 @@ export class LinkAssertionVerifier {
     const now = this.clock();
     const nowMs = Date.parse(now);
     if (!Number.isFinite(nowMs)) throw new TypeError('invalid verifier clock');
-    const expectedProduct = LEGACY_TO_PRODUCT[expected.applicationId];
+    const expectedProduct = Object.hasOwn(LINK_APPLICATION_TO_PRODUCT, expected.applicationId) ? LINK_APPLICATION_TO_PRODUCT[expected.applicationId] : undefined;
     if (!expectedProduct) fail('unknown_product');
     if (typeof token !== 'string' || token.length === 0 || token.length > MAX_TOKEN_LENGTH) fail('malformed');
     const parts = token.split('.');

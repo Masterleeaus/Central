@@ -16,6 +16,13 @@ export declare const REQUIRED_CAPABILITIES: readonly ["health", "version", "tena
 export type TenantKeyKind = 'sorted.account_id' | 'supercharged.company_account' | 'lms.companyRef' | 'scheduled.account_id';
 /** Legacy application id -> canonical product id. The issue's ordering is field/desk/academy -> Sorted/Supercharged/LMS. */
 export declare const LEGACY_TO_PRODUCT: Readonly<Record<ApplicationId, ProductId>>;
+/**
+ * Application id -> product for link assertions only (docs/LINKING.md). Same rules as LEGACY_TO_PRODUCT, plus
+ * scheduled, which has no legacy application id. LEGACY_TO_PRODUCT stays unchanged: it types ApplicationId, drives
+ * the OIDC plan and planLookup (which needs a validated origin per entry), so adding scheduled there would change
+ * those contracts too.
+ */
+export declare const LINK_APPLICATION_TO_PRODUCT: Readonly<Record<ApplicationId | 'scheduled', ProductId>>;
 /** Canonical products that never had a legacy application id. They must declare legacyId null. */
 export declare const LEGACY_FREE_PRODUCTS: readonly ProductId[];
 /** Canonical products that have a legacy application id (the products in LEGACY_TO_PRODUCT). */
