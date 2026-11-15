@@ -1,0 +1,387 @@
+{
+  "source": "integration/S6: core/app/Booking/Events (BookingEventPublisher, BookingEventFacts, BookingEventEnvelope, BookingEventType) and core/app/Central/Events/SignedEventVerifier.php, run via tools/scheduled-booking-publisher.php",
+  "generatedBy": "tests/conformance/scheduled/tools/generate-booking-fixtures.mjs",
+  "now": "2026-11-15T10:00:00.000Z",
+  "consumer": {
+    "consumer": "scheduled-booking-inbox",
+    "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+    "eventTypes": [
+      "booking_created",
+      "booking_cancelled",
+      "booking_rescheduled"
+    ],
+    "secret": "titan-central conformance scheduled booking secret, test only, not a credential"
+  },
+  "cases": [
+    {
+      "id": "B-01",
+      "name": "booking_created-valid",
+      "eventType": "booking_created",
+      "idempotencyKey": "booking:bk-0001:booking_created:r1",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "eventType": "booking_created",
+        "idempotencyKey": "booking:bk-0001:booking_created:r1",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-20T00:00:00.000Z",
+          "occurredAt": "2026-11-15T09:55:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-01",
+            "staff-02"
+          ],
+          "startAt": "2026-11-19T22:00:00.000Z",
+          "status": "confirmed",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "signature": "8027fc9f8bbab37cc01e0f8b1519da2b8ef9d8dd5e3d0cf385984737469c849b",
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": true
+      },
+      "centralOutcome": "processed"
+    },
+    {
+      "id": "B-02",
+      "name": "booking_cancelled-valid",
+      "eventType": "booking_cancelled",
+      "idempotencyKey": "booking:bk-0001:booking_cancelled:r2",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "4c8f0a21-3d5e-4f70-9b0c-1d2e3f4a5b6c",
+        "eventType": "booking_cancelled",
+        "idempotencyKey": "booking:bk-0001:booking_cancelled:r2",
+        "occurredAt": "2026-11-15T09:56:00.000Z",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-20T00:00:00.000Z",
+          "occurredAt": "2026-11-15T09:56:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-01",
+            "staff-02"
+          ],
+          "startAt": "2026-11-19T22:00:00.000Z",
+          "status": "cancelled",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "signature": "490b5aa5793636c2972d83084d16211ee15953b23aa0df698b8a0fbd74772730",
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": true
+      },
+      "centralOutcome": "processed"
+    },
+    {
+      "id": "B-03",
+      "name": "booking_rescheduled-valid",
+      "eventType": "booking_rescheduled",
+      "idempotencyKey": "booking:bk-0001:booking_rescheduled:r3",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "5d9a1b32-4e6f-4a81-8c1d-2e3f4a5b6c7d",
+        "eventType": "booking_rescheduled",
+        "idempotencyKey": "booking:bk-0001:booking_rescheduled:r3",
+        "occurredAt": "2026-11-15T09:57:00.000Z",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-21T05:00:00.000Z",
+          "occurredAt": "2026-11-15T09:57:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-01",
+            "staff-02"
+          ],
+          "startAt": "2026-11-21T03:00:00.000Z",
+          "status": "confirmed",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "signature": "48f3c9b46a45ad2d8c8392560e6df52770791f7714ecb5f5b7618f83dca24aca",
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": true
+      },
+      "centralOutcome": "processed"
+    },
+    {
+      "id": "B-04",
+      "name": "booking_created-tenant-mismatch",
+      "eventType": "booking_created",
+      "idempotencyKey": "booking:bk-0001:booking_created:r1",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "eventType": "booking_created",
+        "idempotencyKey": "booking:bk-0001:booking_created:r1",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "organisationId": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-20T00:00:00.000Z",
+          "occurredAt": "2026-11-15T09:55:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-01",
+            "staff-02"
+          ],
+          "startAt": "2026-11-19T22:00:00.000Z",
+          "status": "confirmed",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "signature": "0e067622bb12b7b4d4e5c67fa8274f0ea814bc7f383bd2adbf2f14a36c16d8d6",
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": true
+      },
+      "centralOutcome": "tenant_mismatch",
+      "note": "Correctly signed for another tenant. Central binds the consumer to ORG and rejects it. Scheduled has no tenant check."
+    },
+    {
+      "id": "B-05",
+      "name": "booking_created-organisation-rewritten",
+      "eventType": "booking_created",
+      "idempotencyKey": "booking:bk-0001:booking_created:r1",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "eventType": "booking_created",
+        "idempotencyKey": "booking:bk-0001:booking_created:r1",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "organisationId": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-20T00:00:00.000Z",
+          "occurredAt": "2026-11-15T09:55:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-01",
+            "staff-02"
+          ],
+          "startAt": "2026-11-19T22:00:00.000Z",
+          "status": "confirmed",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "signature": "8027fc9f8bbab37cc01e0f8b1519da2b8ef9d8dd5e3d0cf385984737469c849b",
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "bad_signature"
+      },
+      "centralOutcome": "bad_signature",
+      "note": "Signed for ORG, then organisationId rewritten to another tenant. The signature covers organisationId, so it fails first."
+    },
+    {
+      "id": "B-06",
+      "name": "booking_created-payload-tampered",
+      "eventType": "booking_created",
+      "idempotencyKey": "booking:bk-0001:booking_created:r1",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "eventType": "booking_created",
+        "idempotencyKey": "booking:bk-0001:booking_created:r1",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-20T11:00:00+11:00",
+          "occurredAt": "2026-11-15T09:55:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-02",
+            "staff-01"
+          ],
+          "startAt": "2026-11-20T09:00:00+11:00",
+          "status": "cancelled",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "signature": "8027fc9f8bbab37cc01e0f8b1519da2b8ef9d8dd5e3d0cf385984737469c849b",
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "bad_signature"
+      },
+      "centralOutcome": "bad_signature"
+    },
+    {
+      "id": "B-07",
+      "name": "booking_created-wrong-secret",
+      "eventType": "booking_created",
+      "idempotencyKey": "booking:bk-0001:booking_created:r1",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "eventType": "booking_created",
+        "idempotencyKey": "booking:bk-0001:booking_created:r1",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-20T00:00:00.000Z",
+          "occurredAt": "2026-11-15T09:55:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-01",
+            "staff-02"
+          ],
+          "startAt": "2026-11-19T22:00:00.000Z",
+          "status": "confirmed",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "signature": "b5532b70cfdb8d7eb14ae57cb54b3f893c7189d364c9f4de861fa1ee4b29ad9f",
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "bad_signature"
+      },
+      "centralOutcome": "bad_signature"
+    },
+    {
+      "id": "B-08",
+      "name": "booking_created-stale",
+      "eventType": "booking_created",
+      "idempotencyKey": "booking:bk-0001:booking_created:r1",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "eventType": "booking_created",
+        "idempotencyKey": "booking:bk-0001:booking_created:r1",
+        "occurredAt": "2026-11-13T10:00:00.000Z",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-20T00:00:00.000Z",
+          "occurredAt": "2026-11-15T09:55:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-01",
+            "staff-02"
+          ],
+          "startAt": "2026-11-19T22:00:00.000Z",
+          "status": "confirmed",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "signature": "07827ed690df8b0efc2e161047fb7ad4c98c6e21cc96047e700ac017afd35599",
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "stale"
+      },
+      "centralOutcome": "processed",
+      "note": "Scheduled rejects anything older than 86400 seconds. Central has no age check on inbound envelopes."
+    },
+    {
+      "id": "B-09",
+      "name": "booking_rescheduled-from-future",
+      "eventType": "booking_rescheduled",
+      "idempotencyKey": "booking:bk-0001:booking_rescheduled:r3",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "eventType": "booking_rescheduled",
+        "idempotencyKey": "booking:bk-0001:booking_rescheduled:r3",
+        "occurredAt": "2026-11-15T10:20:00.000Z",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-21T05:00:00.000Z",
+          "occurredAt": "2026-11-15T09:55:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-01",
+            "staff-02"
+          ],
+          "startAt": "2026-11-21T03:00:00.000Z",
+          "status": "confirmed",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "signature": "e831c16da0b34af9a6e8ebbb424244336a2014255ab6b618e6bce800e7af8f4e",
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "from_future"
+      },
+      "centralOutcome": "processed",
+      "note": "Scheduled allows 300 seconds of future skew. Central has no occurredAt check on inbound envelopes."
+    },
+    {
+      "id": "B-10",
+      "name": "booking_created-unsigned",
+      "eventType": "booking_created",
+      "idempotencyKey": "booking:bk-0001:booking_created:r1",
+      "body": {
+        "correlationId": "booking:bk-0001",
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "eventType": "booking_created",
+        "idempotencyKey": "booking:bk-0001:booking_created:r1",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "payload": {
+          "bookingId": "bk-0001",
+          "companyId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+          "customerRef": "cust-ref-0001",
+          "endAt": "2026-11-20T00:00:00.000Z",
+          "occurredAt": "2026-11-15T09:55:00.000Z",
+          "serviceId": "svc-clean-01",
+          "staffIds": [
+            "staff-01",
+            "staff-02"
+          ],
+          "startAt": "2026-11-19T22:00:00.000Z",
+          "status": "confirmed",
+          "timezone": "Australia/Melbourne"
+        },
+        "schemaVersion": 1,
+        "sourceProduct": "scheduled"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "unsigned"
+      },
+      "centralOutcome": "invalid_envelope",
+      "note": "Same envelope as B-01 with the signature removed."
+    }
+  ]
+}
