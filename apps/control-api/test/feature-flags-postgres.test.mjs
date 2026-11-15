@@ -14,6 +14,10 @@ import { createConfigReadHandler } from '../src/config-read.mjs';
 
 const DB_URL = process.env.TITAN_FLAG_TEST_DATABASE_URL;
 const skip = DB_URL ? false : 'set TITAN_FLAG_TEST_DATABASE_URL to run against PostgreSQL 16';
+// CI sets TITAN_REQUIRE_DB_TESTS=1 so a missing database fails this file instead of skipping its tests.
+if (skip && process.env.TITAN_REQUIRE_DB_TESTS === '1') {
+  throw new Error(`database test required but cannot run: ${skip}`);
+}
 const RUN = Date.now().toString(36);
 const BOOL = `it_${RUN}_bool`;
 const INT = `it_${RUN}_int`;
