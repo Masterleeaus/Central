@@ -21,6 +21,12 @@ function scripted(handler = () => ({ rows: [], rowCount: 1 })) {
 }
 const insertCount = (calls) => calls.filter(([q]) => q.includes('INSERT INTO titan.activity_events')).length;
 
+test('scheduled is an accepted activity source product, matching migration 0029', () => {
+ const e = prepareActivityEvent({ ...base, sourceProduct: 'scheduled' });
+ assert.equal(e.sourceProduct, 'scheduled');
+ assert.throws(() => prepareActivityEvent({ ...base, sourceProduct: 'desk' }), /invalid activity source product/);
+});
+
 test('valid event is prepared with stripped personal keys reported by name', () => {
  const e = prepareActivityEvent({ ...base, detail: { role: 'manager', email: 'x' } });
  assert.match(e.eventId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
