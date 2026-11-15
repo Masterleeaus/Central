@@ -31,11 +31,12 @@ Read by `loadProductRegistry` in `apps/control-api/src/operator-config.mjs`. It 
 | `TITAN_FIELD_ORIGIN` | Service origin for `sorted` (legacy variable name) |
 | `TITAN_DESK_ORIGIN` | Service origin for `supercharged` (legacy variable name) |
 | `TITAN_ACADEMY_ORIGIN` | Service origin for `lms` (legacy variable name) |
+| `TITAN_SCHEDULED_ORIGIN` | Optional Scheduled service origin; must pass the shared allowlist and Scheduled settings validation |
 | `TITAN_PRODUCT_TRUSTED_ORIGINS` | Comma-separated operator allowlist. Required whenever any origin above is set |
 
-Scheduled has no origin variable yet. Its `serviceOrigin` stays `null` and it is never probed or fetched. Adding one is a separate change, because the three legacy origins are required together.
+Scheduled has an optional `TITAN_SCHEDULED_ORIGIN` variable. It may be configured alone or alongside the three legacy origins, but must be included in `TITAN_PRODUCT_TRUSTED_ORIGINS`. `TITAN_SCHEDULED_AUDIENCE` is validated separately by `readScheduledSettings` at API startup; the origin and audience must be configured together. This registry change does not enable Scheduled OIDC sign-in, probes or service calls.
 
-Rules: the three origins are set together or not at all. Each origin must be HTTPS on a public DNS name, with the default port, and with no credentials, path, query or fragment. IP literals, `localhost`, and GitHub hosts (`github.com`, `github.io`, `githubusercontent.com`) are rejected. Each origin must appear on the allowlist, and no two products may share one. Template: `deploy/env.example`.
+Rules: the three legacy origins are set together or not at all; Scheduled is independently optional. Each origin must be HTTPS on a public DNS name, with the default port, and with no credentials, path, query or fragment. IP literals, `localhost`, and GitHub hosts (`github.com`, `github.io`, `githubusercontent.com`) are rejected. Each origin must appear on the allowlist, and no two products may share one. Template: `deploy/env.example`.
 
 ## Rules enforced by the code
 

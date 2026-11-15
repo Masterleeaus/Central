@@ -12,6 +12,7 @@ import { originsForLegacyIds, buildProductRegistry } from '../../../packages/con
 const SORTED = 'https://sorted.titanzero.io';
 const SUPER = 'https://supercharged.titanzero.io';
 const LMS = 'https://lms.titanzero.io';
+const SCHEDULED = 'https://scheduled.titanzero.io';
 const ORG_ID = '00000000-0000-4000-8000-000000000001';
 const FULL = {
   TITAN_FIELD_ORIGIN: SORTED,
@@ -32,9 +33,53 @@ test('no product variables: empty registry, no origins, no error', () => {
 test('all three origins with an allowlist attach to the canonical products', () => {
   const reg = loadProductRegistry(FULL);
   const byId = Object.fromEntries(reg.map(p => [p.id, p.serviceOrigin]));
-  // Scheduled has no origin variable, so it stays unattached (default-off) and is not in the legacy-keyed origins.
+  // Scheduled remains optional and does not enter legacy-keyed OIDC plans.
   assert.deepEqual(byId, { sorted: SORTED, supercharged: SUPER, lms: LMS, scheduled: null });
   assert.deepEqual({ ...originsForLegacyIds(reg) }, { field: SORTED, desk: SUPER, academy: LMS });
+});
+
+test('Scheduled can be registered alongside the legacy trio without changing their OIDC origin plans', () => {
+  const env = {
+    ...FULL,
+    TITAN_SCHEDULED_ORIGIN: SCHEDULED,
+    TITAN_PRODUCT_TRUSTED_ORIGINS: `${SORTED},${SUPER},${LMS},${SCHEDULED}`,
+  };
+  const reg = loadProductRegistry(env);
+  assert.equal(reg.find(p => p.id === 'scheduled').serviceOrigin, SCHEDULED);
+  assert.deepEqual({ ...originsForLegacyIds(reg) }, { field: SORTED, desk: SUPER, academy: LMS });
+});
+
+test('Scheduled may be the only configured product origin while the legacy trio stays off', () => {
+  const reg = loadProductRegistry({
+    TITAN_SCHEDULED_ORIGIN: SCHEDULED,
+    TITAN_PRODUCT_TRUSTED_ORIGINS: SCHEDULED,
+  });
+  assert.deepEqual(Object.fromEntries(reg.map(p => [p.id, p.serviceOrigin])), {
+    sorted: null, supercharged: null, lms: null, scheduled: SCHEDULED,
+  });
+});
+
+test('Scheduled must be on the trusted allowlist and cannot reuse another product origin', () => {
+  const missing = codeOf(() => loadProductRegistry({
+    ...FULL,
+    TITAN_SCHEDULED_ORIGIN: SCHEDULED,
+  }));
+  assert.match(missing.message, /untrusted_origin/);
+  const duplicate = codeOf(() => loadProductRegistry({
+    ...FULL,
+    TITAN_SCHEDULED_ORIGIN: SORTED,
+  }));
+  assert.match(duplicate.message, /duplicate_origin/);
+});
+
+test('Scheduled cannot evade origin validation with a bad URL or placeholder', () => {
+  for (const bad of ['http://scheduled.example.test', 'https://scheduled.example.test/path', 'REPLACE_ME']) {
+    const error = codeOf(() => loadProductRegistry({
+      TITAN_SCHEDULED_ORIGIN: bad,
+      TITAN_PRODUCT_TRUSTED_ORIGINS: bad,
+    }));
+    assert.match(error.message, /invalid product origin configuration|invalid TITAN_PRODUCT_TRUSTED_ORIGINS/);
+  }
 });
 
 test('an allowlist alone is accepted and attaches no origins', () => {
