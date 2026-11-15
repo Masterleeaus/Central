@@ -1,0 +1,96 @@
+name: Daily host checks
+
+# Runs the existing proxy template check and the read-only live check of the public
+# Central host (issue #74). Nothing new is checked here: both scripts already live in deploy/proxy.
+# Output is uploaded as an artifact. On failure, one open issue is created or commented on.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-checks
+  cancel-in-progress: false
+
+jobs:
+  host-checks:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4 # major-version pin only
+      - uses: actions/setup-python@v5 # major-version pin only
+        with:
+          python-version: '3.13'
+
+      # Structural check of the committed proxy templates. Local only, no network.
+      - name: Proxy template check
+        id: templates
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/host-checks"
+          python3 -I deploy/proxy/validate_templates.py 2>&1 | tee "$RUNNER_TEMP/host-checks/templates.txt"
+
+      # Read-only live check from outside the host. Runs only when the repository variables are set.
+      # Variables: CENTRAL_PUBLIC_HOST (required to run), CENTRAL_NODE_PORT and CENTRAL_PUBLIC_IP (optional, both or neither).
+      - name: Live host check
+        id: live
+        continue-on-error: true
+        env:
+          CENTRAL_PUBLIC_HOST: ${{ vars.CENTRAL_PUBLIC_HOST }}
+          CENTRAL_NODE_PORT: ${{ vars.CENTRAL_NODE_PORT }}
+          CENTRAL_PUBLIC_IP: ${{ vars.CENTRAL_PUBLIC_IP }}
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/host-checks"
+          out="$RUNNER_TEMP/host-checks/live.txt"
+          if [ -z "$CENTRAL_PUBLIC_HOST" ]; then
+            echo "skipped: repository variable CENTRAL_PUBLIC_HOST is not set" | tee "$out"
+            echo "status=skipped" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          args=(--host "$CENTRAL_PUBLIC_HOST")
+          if [ -n "$CENTRAL_NODE_PORT" ] || [ -n "$CENTRAL_PUBLIC_IP" ]; then
+            args+=(--port "$CENTRAL_NODE_PORT" --public-ip "$CENTRAL_PUBLIC_IP")
+          fi
+          python3 -I deploy/proxy/live_check.py "${args[@]}" 2>&1 | tee "$out"
+          echo "status=ran" >> "$GITHUB_OUTPUT"
+
+      - name: Upload host check output
+        if: always()
+        uses: actions/upload-artifact@v4 # major-version pin only
+        with:
+          name: host-checks-${{ github.run_id }}
+          path: ${{ runner.temp }}/host-checks/
+          if-no-files-found: warn
+          retention-days: 30
+
+      # One issue for failing checks: comment on the open one if it exists, otherwise create it.
+      - name: Report failure to a GitHub issue
+        if: always() && (steps.templates.outcome == 'failure' || steps.live.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TEMPLATES: ${{ steps.templates.outcome }}
+          LIVE: ${{ steps.live.outcome }}
+        run: |
+          title="Daily host check failing"
+          body=$(printf 'Daily host checks failed in run %s.\n\n- Proxy template check: %s\n- Live host check: %s\n\nOutput is in the workflow run artifacts. Do not paste response bodies here.\n' "$RUN_URL" "$TEMPLATES" "$LIVE")
+          existing=$(gh issue list --repo "$REPO" --state open --search "in:title \"$title\"" --json number,title \
+            --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body"
+          fi
+
+      - name: Fail the job when a check failed
+        if: steps.templates.outcome == 'failure' || steps.live.outcome == 'failure'
+        run: exit 1

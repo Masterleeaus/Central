@@ -1,5 +1,5 @@
 -- Activity history tests for migration 0011 (issue #36).
--- Run as a superuser against a database where migrations 0001-0009 and 0011 are applied:
+-- Run as a superuser against a database where migrations 0001-0011 and 0029 are applied:
 --   psql -v ON_ERROR_STOP=1 -f tests/sql/activity_events.sql "$DATABASE_URL"
 -- Uses two fixed test organisations (f1, f2) and fixed event ids. Counts are limited to those, so the script
 -- can run on a database that already holds other activity rows. Seeds, then checks: the writer cannot UPDATE, DELETE or TRUNCATE; the trigger rejects
@@ -95,6 +95,17 @@ SELECT pg_temp.expect_count('writer with no organisation scope reads nothing', '
 SELECT set_config('titan.organisation_id', '00000000-0000-4000-8000-0000000000f2', true);
 SELECT pg_temp.expect_count('writer scoped to B reads only B events', 'SELECT event_id FROM titan.activity_events', 1);
 RESET ROLE;
+
+-- ---------------------------------------------------------------- source 'scheduled' (migration 0029)
+-- The writer records a Scheduled event. The CHECK is widened, not replaced by a looser rule: near-miss spellings stay refused.
+SET LOCAL ROLE titan_trusted_writer;
+INSERT INTO titan.activity_events (event_id, organisation_id, actor_kind, actor_id, action, target_type, target_id, source_product, outcome, correlation_id, detail)
+VALUES ('00000000-0000-4000-8000-0000000000d1', '00000000-0000-4000-8000-0000000000f1', 'service', 'svc_scheduled', 'booking.create', 'booking', '00000000-0000-4000-8000-0000000000e1', 'scheduled', 'success', 'req-activity-0011', '{"channel":"web"}');
+SELECT pg_temp.expect_error_like('source Scheduled in another case is refused', $s$INSERT INTO titan.activity_events (organisation_id, actor_kind, actor_id, action, target_type, target_id, source_product, outcome, correlation_id) VALUES ('00000000-0000-4000-8000-0000000000f1', 'service', 'svc_scheduled_2', 'booking.create', 'booking', 't9', 'Scheduled', 'success', 'req-activity-0012')$s$, '%activity_events_source_product_check%');
+SELECT pg_temp.expect_error_like('source scheduled-legacy is refused', $s$INSERT INTO titan.activity_events (organisation_id, actor_kind, actor_id, action, target_type, target_id, source_product, outcome, correlation_id) VALUES ('00000000-0000-4000-8000-0000000000f1', 'service', 'svc_scheduled_3', 'booking.create', 'booking', 't10', 'scheduled-legacy', 'success', 'req-activity-0013')$s$, '%activity_events_source_product_check%');
+RESET ROLE;
+SELECT pg_temp.expect_count('scheduled event is stored with source scheduled', $s$SELECT event_id FROM titan.activity_events WHERE event_id = '00000000-0000-4000-8000-0000000000d1' AND source_product = 'scheduled'$s$, 1);
+SELECT pg_temp.expect_count('refused scheduled spellings were not stored', $s$SELECT event_id FROM titan.activity_events WHERE actor_id IN ('svc_scheduled_2','svc_scheduled_3')$s$, 0);
 
 -- ---------------------------------------------------------------- tenant app has no privilege
 SET LOCAL ROLE titan_tenant_app;

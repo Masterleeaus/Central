@@ -73,9 +73,11 @@ Source: `apps/control-api/src/oidc-login.mjs`, `oidc-cookie-policy.mjs`, `oidc-a
   are never shared between apps.
 - **App-local logout.** `POST /auth/titan/{application}/logout` revokes the app session and clears the host-only cookie.
   It does not end the Logto provider session.
-- **Global logout.** `POST /auth/titan/global-logout` is implemented as a module (`oidc-global-logout.mjs`). It is not
-  mounted by `apps/control-api/src/server.mjs` on `main`. Logto RP-initiated logout is not implemented. Do not describe
-  logout as global until this is mounted and tested across all three apps.
+- **Global logout.** `POST /auth/titan/global-logout` and the post-logout landing are mounted by
+  `apps/control-api/src/server.mjs` through `global-logout-mount.mjs` (issue #6). They stay off unless
+  `TITAN_GLOBAL_LOGOUT_ENABLED=1`. Enabling needs `TITAN_GLOBAL_LOGOUT_POST_URI` registered in Logto and an app-owned
+  session loader, which does not exist yet, so the gate currently fails startup when on. Do not describe logout as
+  global until that loader exists and it is tested across all three apps.
 
 Status: DRAFT. Product-side sign-in is not implemented in this repository. The Logto applications are not yet
 registered (issue #24).
@@ -206,7 +208,7 @@ Review resolution is not built.
 | Account linking | Central verifier implemented. **Product signing not implemented.** Key wiring not done. Review resolution not built. | LINKING.md |
 | Sign-in | Central helper modules implemented, not mounted into products. Products must implement their own callback and session. | PASS13, PASS14 |
 | App-local logout | Module implemented. Not claimed as global. | PASS13 |
-| Global logout | Module implemented, **not mounted**. Logto RP-initiated logout not implemented. | PASS14, PASS15 |
+| Global logout | Routes mounted behind a gate (off). Needs Logto URI registration and an app session loader. | PASS14, PASS15, #6 |
 | Support console | Read API implemented, not mounted by default. | SUPPORT_CONSOLE.md |
 | Launcher endpoints | **Not present on `main`.** | section 5 |
 | Outbox events | Mechanism implemented. No events approved. | EVENTS.md |
