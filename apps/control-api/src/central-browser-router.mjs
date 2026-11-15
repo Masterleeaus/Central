@@ -8,6 +8,7 @@ import {createCentralSignInService} from './central-sign-in-service.mjs';
 import {createIdTokenVerifier} from './oidc-id-token.mjs';
 import {createStateSealer,parseStateKey} from './oidc-state-crypto.mjs';
 import {createConcurrencyLimiter} from './concurrency-limit.mjs';
+import {recordActivityInOwnTransaction} from '../../../packages/control-plane/dist/index.js';
 
 function secureOrigin(value){
   if(typeof value!=='string')throw new TypeError('secure Central origin required');
@@ -36,7 +37,7 @@ function config(env){
   return {origin,redirectUri,destinations};
 }
 export function createCentralBrowserRouter({env=process.env,pool,getCompanyName,fetcher,
-  verifyIdToken,launcherStore,stateStore,selectionStore,logger,concurrencyLimits={perKey:5,globalLimit:72},clientIp=req=>req.socket?.remoteAddress??'unknown'}={}){
+  verifyIdToken,launcherStore,stateStore,selectionStore,logger,activityRecorder,concurrencyLimits={perKey:5,globalLimit:72},clientIp=req=>req.socket?.remoteAddress??'unknown'}={}){
   const settings=config(env);
   if(!settings)return null;
   if(!pool?.connect||typeof getCompanyName!=='function')
@@ -57,7 +58,9 @@ export function createCentralBrowserRouter({env=process.env,pool,getCompanyName,
     redirectUri:settings.redirectUri,
     verifyIdToken:verifier,getCompanyName,enableCompanySelection:true,sealer,
     ...(fetcher?{fetcher}:{}),...(stateStore?{stateStore}:{}),
-    ...(selectionStore?{selectionStore}:{}),...(logger?{logger}:{})
+    ...(selectionStore?{selectionStore}:{}),...(logger?{logger}:{}),
+    // Login outcomes go to the activity history (issue #16). Tests may inject a recorder.
+    activityRecorder:activityRecorder??((input)=>recordActivityInOwnTransaction(pool,input))
   });
   const concurrent=createConcurrencyLimiter(concurrencyLimits);
   return Object.freeze({

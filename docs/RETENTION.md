@@ -83,6 +83,11 @@ are still in the service log (section 3). Their retention period is the same as 
   `central-access-check`, action `access.check`, the requested application and action, the reason code, and the
   role (allow only). The Logto subject, the token and raw error text are not stored. Requests that make no decision
   (401, 400, 429, 503) are not recorded.
+- **CURRENT (Central browser login, when `TITAN_CENTRAL_BROWSER_ENABLED=1`):** a successful sign-in is recorded as
+  `login.succeeded`, and a sign-in refused at the company recheck as `login.denied` (reason `company_access_denied`).
+  Each row carries the company as organisation and target, actor `central-oidc-login`, and no subject, token or cookie.
+  Not recorded: refusals before a company is chosen (no trusted organisation to attach), multi-company selection,
+  and errors that stop the login before the recheck. Those stay in the log only.
 - **CURRENT, recorder outage policy (fail open, fail visible):** a recording failure never changes the access
   response. The response waits at most 2 seconds for the recorder, then goes out. Each failure writes one
   `activity_record_failed` log line with the error class only. There is no retry and no queue, so a decision whose
