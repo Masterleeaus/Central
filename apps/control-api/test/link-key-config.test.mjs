@@ -54,10 +54,15 @@ test('content that is not JSON fails startup without echoing it', () => {
   assert.throws(() => readLinkKeySets({ [LINK_KEYS_JSON_VAR]: `[{"productId":"sorted",${X}` }), (e) => e.message === 'TITAN_LINK_KEYS_JSON: content is not valid JSON' && !e.message.includes(X));
 });
 
-test('the top level must be an array of one to three product entries', () => {
+test('the top level must be an array of one to four product entries', () => {
   rejects({ productId: 'sorted', keys: [key()] }, /must be an array/);
   rejects([], /must be an array/);
-  rejects([set(), set({ productId: 'supercharged' }), set({ productId: 'lms' }), set({ productId: 'sorted' })], /must be an array/);
+  rejects([set(), set({ productId: 'supercharged' }), set({ productId: 'lms' }), set({ productId: 'scheduled' }), set({ productId: 'sorted' })], /must be an array/);
+});
+
+test('scheduled is a known product for link key sets, and an unknown product is still rejected', () => {
+  assert.deepEqual(validateLinkKeySets(sets(set({ productId: 'scheduled' }))).map((s) => s.productId), ['scheduled']);
+  rejects(sets(set({ productId: 'desk' })), /products\[0\]\.productId must be a known product/);
 });
 
 test('each entry must be an object with only productId and keys', () => {
