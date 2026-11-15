@@ -2,6 +2,38 @@
 
 Snapshot: 2026-11-15 (live GitHub issue reads; concurrent agents may change status after this scan). Scope deliberately excludes all other repositories, including historical planning repositories.
 
+## Pass 2 — verified fixes and closeouts (15 November 2026)
+
+This pass is strictly restricted to the **seven core repositories**. The previous 319-open-issue register below remains a historical snapshot; this addendum records the later verified current status and does not rewrite history.
+
+### Updated live issue counts
+
+| Core repo | Open issues | Unchecked checklist tasks |
+|---|---:|---:|
+| Scheduled | 25 | 154 |
+| Sorted | 42 | 364 |
+| Skilled | 53 | 444 |
+| Supercharged | 53 | 472 |
+| Central | 53 | 464 |
+| Titan-Zero-Trades-Front-Desk | 44 | 554 |
+| Titan-zero-website | 44 | 367 |
+| **Total** | **314** | **2,819** |
+
+Every one of the 314 open issues had a Markdown checklist in this refreshed query. These are *issue tracking* quantities, not implementation completion percentages.
+
+### Merged code and verified issue resolution
+
+- **Scheduled [PR #78](https://github.com/Masterleeaus/Scheduled/pull/78)**: added `tests/cleanto_booking_api_syntax_contract_test.php`, an executable PHP lint gate for all seven named Cleanto legacy booking API files. Merged as `fa92b1a6d4d96400553261b81d635be6c17fc725`; [Actions green](https://github.com/Masterleeaus/Scheduled/actions/runs/43711690833). Closed [#55](https://github.com/Masterleeaus/Scheduled/issues/55) after source and syntax verification. The original scan said eight files, but enumerated seven distinct paths.
+- **Scheduled [#50](https://github.com/Masterleeaus/Scheduled/issues/50), [#51](https://github.com/Masterleeaus/Scheduled/issues/51), [#52](https://github.com/Masterleeaus/Scheduled/issues/52)**: older migration allowlist, standalone PHP CI and 10-vs-19-template test findings rechecked; actual 2026 migration set has 22 files, test/discovery source matches, PHP CI successfully runs the scripts, and the tests now assert 19 templates. Each narrow defect closed with checked evidence; full clean installer, provider payments and publishing acceptance remain open under Scheduled #46–#49.
+- **Central [#144](https://github.com/Masterleeaus/Central/issues/144), [#145](https://github.com/Masterleeaus/Central/issues/145)**: verified actual [CI run](https://github.com/Masterleeaus/Central/actions/runs/43710732638) includes required Scheduled conformance (67 tests, 65 passed, 2 TODO, 0 failures) and PostgreSQL feature-flag tests (1,016 passed, 0 skipped). Both *CI omission* issues closed with their verified task checklists; cross-product staging remains open under Central #140/#160.
+- **Skilled [PR #321](https://github.com/Masterleeaus/Skilled/pull/321)**: merged `46e4a57541b28476e2b3532c0238db3d3d2e6b9c`. Scoped discussion write access to current course ownership and enrolment, refused unpublished/deleted course writes, checked course authorization before loading private thread bodies, and added 10 real Express/JWT HTTP regression tests. The [backend/postgres/typecheck gates](https://github.com/Masterleeaus/Skilled/actions/runs/43712354676) and [curriculum gate](https://github.com/Masterleeaus/Skilled/actions/runs/43712354675) passed. [#300](https://github.com/Masterleeaus/Skilled/issues/300) remains open pending deployed multi-tenant PostgreSQL acceptance and security review.
+
+### Blocked / overlapping source work
+
+- **Supercharged [PR #346](https://github.com/Masterleeaus/Supercharged/pull/346)**: proposes fail-closed Origin/Referer checking on `POST /widget/session/start` (aligns with config GET), refuses malformed origins/body types, and adds security tests. **Not merged** because the PR check pipeline was still failing in existing Postgres boot/inbox gates at the time of this review; do not bypass quality gates.
+- **Supercharged [PR #345](https://github.com/Masterleeaus/Supercharged/pull/345)** overlaps #346 and must be reconciled to one canonical security fix, with unique tests preserved. Neither PR proves browser/provider runtime acceptance, and Origin headers alone are not authentication.
+- High-risk issues still open: Sorted #88/#100/#95, Supercharged #317/#343, Central #140/#141/#160, Skilled #300/#301, Scheduled #46/#47/#49 and Front Desk #45–#49. Do not tick remaining implementation work without reproducible evidence.
+
 ## Architecture invariants
 - Single Scheduling & Enquiries Manager WordPress plugin, with optional hosted AI Assistant and Agent Team; no separate Pro-installable deliverable.
 - Central is the authoritative identity authority and the target single PostgreSQL migration registry for Scheduled, Sorted, Skilled, Supercharged, Central.
