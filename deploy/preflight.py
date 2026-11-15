@@ -14,6 +14,9 @@ Usage:
 
 Config keys:
   deferred_apps         list of apps not blocking this release (only 'academy' may be deferred).
+                        Every key in APPS (desk, field, academy, scheduled) must be present in
+                        app_origins, callback_paths, logout_paths, live_app_dirs and
+                        app_adapter_implemented; a missing 'scheduled' entry fails the gate.
   provisioned_hostnames hostnames that exist on the server; every hostname in
                         oidc_origin, central_origin and blocking app origins must be listed.
   live_app_dirs         app name -> directory name under --live.
@@ -25,8 +28,8 @@ import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
-APPS = ('desk','field','academy')
-DEFERRABLE_APPS = ('academy',)
+APPS = ('desk','field','academy','scheduled')
+DEFERRABLE_APPS = ('academy',)  # 'scheduled' is never deferrable: it always blocks the release.
 FLAG_KEYS = ('central_db_separate','logto_db_separate','supported_postgres',
              'real_logto_verified','migration_verified','two_tenant_test_passed',
              'global_logout_test_passed','rollback_test_passed')

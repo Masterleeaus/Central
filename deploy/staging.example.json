@@ -4,17 +4,20 @@
   "app_origins": {
     "desk": "https://desk.titanzero.io",
     "field": "https://field.titanzero.io",
-    "academy": "https://academy.titanzero.io"
+    "academy": "https://academy.titanzero.io",
+    "scheduled": "https://scheduled.titanzero.io"
   },
   "callback_paths": {
     "desk": "/auth/titan/desk/callback",
     "field": "/auth/titan/field/callback",
-    "academy": "/auth/titan/academy/callback"
+    "academy": "/auth/titan/academy/callback",
+    "scheduled": "/auth/titan/scheduled/callback"
   },
   "logout_paths": {
     "desk": "/auth/titan/desk/logout",
     "field": "/auth/titan/field/logout",
-    "academy": "/auth/titan/academy/logout"
+    "academy": "/auth/titan/academy/logout",
+    "scheduled": "/auth/titan/scheduled/logout"
   },
   "deferred_apps": ["academy"],
   "provisioned_hostnames": [
@@ -26,12 +29,13 @@
   "live_app_dirs": {
     "desk": "desk",
     "field": "ai-fsm",
-    "academy": "academy"
+    "academy": "academy",
+    "scheduled": "scheduled"
   },
   "central_db_separate": false,
   "logto_db_separate": false,
   "supported_postgres": false,
-  "app_adapter_implemented": {"desk": false, "field": false, "academy": false},
+  "app_adapter_implemented": {"desk": false, "field": false, "academy": false, "scheduled": false},
   "real_logto_verified": false,
   "migration_verified": false,
   "two_tenant_test_passed": false,

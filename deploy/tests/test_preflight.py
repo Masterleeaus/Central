@@ -10,6 +10,10 @@ sys.path.insert(0,str(DEPLOY))
 from preflight import APPS, FLAG_KEYS, NEEDED, assess, validate_dirname, validate_hostname, validate_origin, validate_route
 EXAMPLE=DEPLOY/'staging.example.json'
 PREFLIGHT=DEPLOY/'preflight.py'
+# Hosts that a ready staging configuration must provision. Scheduled is blocking, so its host is required.
+PROVISIONED=['auth.titanzero.io','central.titanzero.io','desk.titanzero.io','field.titanzero.io','scheduled.titanzero.io']
+# Live application directories a ready staging configuration must contain for blocking apps (academy is deferred).
+LIVE=['desk','ai-fsm','scheduled']
 
 
 def make_root(base: Path, pass_number=14, omit=()):
@@ -46,6 +50,7 @@ class GateTests(unittest.TestCase):
     def ready(self):
         for name in FLAG_KEYS: self.data[name]=True
         self.data['app_adapter_implemented']={a:True for a in APPS}
+        self.data['provisioned_hostnames']=list(PROVISIONED)
 
     def issues(self, **kwargs):
         return assess(self.data, **kwargs)['issues']
@@ -64,7 +69,7 @@ class GateTests(unittest.TestCase):
             base=Path(d)
             root=make_root(base/'extract')
             upstream=make_upstream(base/'logto')
-            live=make_live(base/'live',['desk','ai-fsm'])
+            live=make_live(base/'live',LIVE)
             result=assess(self.data,root=root,live=live,upstream=upstream)
         self.assertEqual(result['issues'],[])
         self.assertTrue(result['ready'])
@@ -113,12 +118,75 @@ class GateTests(unittest.TestCase):
         self.ready()
         with TemporaryDirectory() as d:
             root=make_root(Path(d)/'x'); upstream=make_upstream(Path(d)/'u')
-            live=make_live(Path(d)/'live',['desk','ai-fsm'])
+            live=make_live(Path(d)/'live',LIVE)
             self.assertTrue(assess(self.data,root=root,live=live,upstream=upstream)['ready'])
 
     def test_deferred_academy_host_need_not_be_provisioned(self):
-        self.ready(); self.data['provisioned_hostnames']=['auth.titanzero.io','central.titanzero.io','desk.titanzero.io','field.titanzero.io']
+        self.ready(); self.data['provisioned_hostnames']=['auth.titanzero.io','central.titanzero.io','desk.titanzero.io','field.titanzero.io','scheduled.titanzero.io']
         self.assertTrue(assess(self.data)['ready'])
+
+    # Scheduled product (always blocking, never deferrable)
+    def test_scheduled_is_a_checked_app(self):
+        self.assertIn('scheduled',APPS)
+
+    def test_scheduled_is_not_deferrable(self):
+        self.ready(); self.data['deferred_apps']=['scheduled']
+        result=assess(self.data)
+        self.assertIn('invalid_deferred_apps',result['issues'])
+        self.assertFalse(result['ready'])
+
+    def test_missing_scheduled_origin_blocks(self):
+        self.ready(); del self.data['app_origins']['scheduled']
+        self.assertIn('invalid_app_origins',self.issues())
+
+    def test_missing_scheduled_callback_path_blocks(self):
+        self.ready(); del self.data['callback_paths']['scheduled']
+        self.assertIn('invalid_routes:callback_paths',self.issues())
+
+    def test_missing_scheduled_logout_path_blocks(self):
+        self.ready(); del self.data['logout_paths']['scheduled']
+        self.assertIn('invalid_routes:logout_paths',self.issues())
+
+    def test_missing_scheduled_live_dir_key_blocks(self):
+        self.ready(); del self.data['live_app_dirs']['scheduled']
+        self.assertIn('invalid_live_app_dirs',self.issues())
+
+    def test_missing_scheduled_adapter_key_blocks(self):
+        self.ready(); del self.data['app_adapter_implemented']['scheduled']
+        self.assertIn('invalid_app_adapter_implemented',self.issues())
+
+    def test_unverified_scheduled_adapter_blocks(self):
+        self.ready(); self.data['app_adapter_implemented']['scheduled']=False
+        self.assertIn('unverified:app_adapter_implemented.scheduled',self.issues())
+
+    def test_unprovisioned_scheduled_host_blocks(self):
+        self.ready(); self.data['provisioned_hostnames']=['auth.titanzero.io','central.titanzero.io','desk.titanzero.io','field.titanzero.io']
+        self.assertIn('unprovisioned_host:app_origins.scheduled',self.issues())
+
+    def test_missing_scheduled_live_dir_blocks(self):
+        self.ready()
+        with TemporaryDirectory() as d:
+            root=make_root(Path(d)/'x'); upstream=make_upstream(Path(d)/'u')
+            live=make_live(Path(d)/'live',['desk','ai-fsm'])
+            result=assess(self.data,root=root,live=live,upstream=upstream)
+        self.assertIn('missing_live_app:scheduled',result['issues'])
+        self.assertFalse(result['ready'])
+
+    def test_example_blocks_for_scheduled_reasons(self):
+        issues=assess(self.data)['issues']
+        self.assertIn('unverified:app_adapter_implemented.scheduled',issues)
+        self.assertIn('unprovisioned_host:app_origins.scheduled',issues)
+
+    def test_preflight_has_no_network_imports(self):
+        import ast
+        tree=ast.parse(PREFLIGHT.read_text())
+        imported=set()
+        for node in ast.walk(tree):
+            if isinstance(node,ast.Import): imported.update(a.name for a in node.names)
+            elif isinstance(node,ast.ImportFrom) and node.module: imported.add(node.module)
+        forbidden=('socket','http','urllib.request','ssl','requests','subprocess','ftplib','smtplib','asyncio')
+        hits={m for m in imported if any(m==f or m.startswith(f+'.') for f in forbidden)}
+        self.assertFalse(hits, hits)
 
     def test_undeferred_academy_blocks_without_adapter(self):
         self.ready(); self.data['deferred_apps']=[]; self.data['app_adapter_implemented']['academy']=False
@@ -208,7 +276,7 @@ class GateTests(unittest.TestCase):
         with TemporaryDirectory() as d:
             root=make_root(Path(d)/'x'); upstream=make_upstream(Path(d)/'u')
             # Default name 'ai-fsm' is absent; the config says field lives in 'custom-field'.
-            live=make_live(Path(d)/'live',['desk','custom-field'])
+            live=make_live(Path(d)/'live',['desk','custom-field','scheduled'])
             self.assertIn('missing_live_app:field',assess(self.data,root=root,live=live,upstream=upstream)['issues'])
             self.data['live_app_dirs']['field']='custom-field'
             self.assertTrue(assess(self.data,root=root,live=live,upstream=upstream)['ready'])
