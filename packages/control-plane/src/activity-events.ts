@@ -3,7 +3,7 @@
  * Event schema (shared by Central and connected products):
  *   eventId, occurredAt, organisationId (tenant key), actorKind ('subject' | 'service'), actorId,
  *   action (dotted lower-case, e.g. membership.update), targetType, targetId,
- *   sourceProduct ('sorted' | 'supercharged' | 'lms' | 'central'), outcome ('success' | 'failure' | 'denied'),
+ *   sourceProduct ('sorted' | 'supercharged' | 'lms' | 'central' | 'scheduled'), outcome ('success' | 'failure' | 'denied'),
  *   correlationId (shared across products for one lifecycle chain), detail (flat, redacted, at most 1024 bytes).
  *
  * Writing: recordActivity(conn, input) inserts on the caller's connection, so the event commits or rolls back
@@ -17,7 +17,7 @@ import type { SqlClient, SqlPool } from './postgres.js';
 import { assertSafeText, redactActivityDetail } from './activity-redaction.js';
 import type { RedactedDetail } from './activity-redaction.js';
 
-export type ActivitySourceProduct = 'sorted' | 'supercharged' | 'lms' | 'central';
+export type ActivitySourceProduct = 'sorted' | 'supercharged' | 'lms' | 'central' | 'scheduled';
 export type ActivityOutcome = 'success' | 'failure' | 'denied';
 export type ActivityActorKind = 'subject' | 'service';
 
@@ -78,7 +78,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACTION = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,3}$/;
 const TARGET_TYPE = /^[a-z][a-z0-9_]{0,31}$/;
 const CORRELATION = /^[A-Za-z0-9._:-]{8,128}$/;
-const SOURCES: readonly ActivitySourceProduct[] = ['sorted', 'supercharged', 'lms', 'central'];
+const SOURCES: readonly ActivitySourceProduct[] = ['sorted', 'supercharged', 'lms', 'central', 'scheduled'];
 const OUTCOMES: readonly ActivityOutcome[] = ['success', 'failure', 'denied'];
 
 /** Validates and redacts an event. Throws ActivityRedactionError or Error for invalid input. No I/O. */
