@@ -84,6 +84,37 @@ Operator-controlled configuration, one key set per product:
 - Compromise: set `notAfter` on the key to the current time. This stops new assertions under that key. It does not revoke links already created; review the links made in the exposure window.
 - Keys are loaded at startup from operator configuration. See "Operator configuration" below.
 
+### Operator runbook: onboard, rotate, retire (issue #101)
+
+Scope: the link-assertion signing key only. Central never generates a product's private key and never stores one.
+
+**Onboard a product key**
+1. The product generates an Ed25519 key pair on its own side and keeps the private key there.
+2. The product sends only the public JWK (`kty`, `crv`, `x`) and its planned `kid` to the platform owner, through the owner's normal channel. Never through a link assertion, a request body or a token header.
+3. The operator checks the JWK: `kty` `OKP`, `crv` `Ed25519`, `x` 32 bytes, and no `d` member. The operator also checks that the `kid` is new for that product.
+4. The operator adds one entry to the product's key set in the operator file named by `TITAN_LINK_KEYS_FILE`, with `notBefore` set to the time it is added. The file is held on the host, not in the repository. The repository keeps only the shape shown above.
+5. The operator restarts Central. Startup validation (`apps/control-api/test/link-key-config.test.mjs`) rejects any malformed entry, so a bad key stops the start rather than linking silently.
+6. The product signs its first assertion with the new `kid` only after the restart.
+
+**Rotate without a failed link**
+1. Add the new key with a `notBefore` no later than the first assertion signed with it (steps 1 to 5 above). Keep the old key in place.
+2. Restart Central. Both keys now verify, so assertions under either one are accepted.
+3. The product switches its signing `kid` to the new one.
+4. Wait at least 5 minutes after the last assertion under the old key could have been sent. Its lifetime is at most 300 seconds.
+5. Set `notAfter` on the old key to that time and restart. Assertions under the old `kid` now fail with `key_inactive`.
+6. Remove the old entry in a later change, once no product still signs with it.
+
+**Retire a compromised key**
+1. Set `notAfter` on the key to the current time and restart. New assertions under that key are refused at once.
+2. Review the links made with that key in the exposure window. Revoking existing links is a separate decision and is not done by key retirement.
+
+**Checks that prove the rules (existing tests)**
+- Unknown `kid` is rejected with `unknown_key`: `packages/control-plane/test/link-assertion.test.mjs`.
+- Retired `kid` (past `notAfter`) is rejected with `key_inactive`, and the new key is rejected before its `notBefore`: `packages/control-plane/test/link-assertion.test.mjs`, "key rotation" test.
+- Malformed key sets fail startup: `apps/control-api/test/link-key-config.test.mjs`.
+
+**Open (not done here)**: a repository-side registry of which product holds which `kid`. Central holds the keys only in operator configuration, so this stays a host-side record for now.
+
 ## Operator configuration (names only)
 
 - `TITAN_LINK_KEYS_FILE` names a JSON file holding the key sets. `TITAN_LINK_KEYS_JSON` holds the same JSON inline. Set at most one.
