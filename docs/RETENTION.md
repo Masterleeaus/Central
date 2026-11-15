@@ -1,9 +1,9 @@
 # Retention policy (partly decided)
 
-Status: PARTLY DECIDED. Owner update 2026-11-14: **90 days** for audit and activity rows, superseding the earlier 1-year decision (section 1)
-and for activity history (section 6). Nothing else in this document is settled policy. Items marked **TO DECIDE**
+Status: PARTLY DECIDED. Owner decision: **1 year (365 days)** for audit rows (section 1) and activity history (section 6).
+Nothing else in this document is settled policy. Items marked **TO DECIDE**
 need a legal, privacy or owner decision before they are implemented or relied on. Items marked **CURRENT** describe
-behaviour that the code already has. A purge job exists (`tools/retention_purge.py`, migration 0028, issue #16). It is dry-run by default, uses a 90-day cutoff by default, and has not been run against any database.
+behaviour that the code already has. A purge job exists (`tools/retention_purge.py`, migration 0028, issue #16). It is dry-run by default, uses a 365-day cutoff by default, exports rows to a file before any delete, and has not been run against any database.
 
 ## Scope
 
@@ -22,7 +22,9 @@ Each provisioning write records `request_id`, `actor_subject` (the Logto subject
   the year is counted; that detail is still open. The period is decided; the purge itself is still Proposed (below).
 - **TO DECIDE (legal):** whether `actor_subject` and `subject_id` are personal data for this purpose, and whether an
   erasure request can be honoured by pseudonymisation rather than deletion while the audit duty runs.
-- **TO DECIDE (owner):** whether audit rows are exported to an external store before deletion.
+- **DECIDED (owner):** audit rows are exported to a file before any delete. `tools/retention_purge.py --execute`
+  requires `--export-dir` and writes every eligible row to a new 0600 CSV file before its first DELETE.
+- **TO DECIDE (owner):** whether those export files are moved to an external store, and how long they are kept.
 
 Access decisions (allow and deny) are also written to `titan.activity_events` (section 6), one row each. They
 are still in the service log (section 3). Their retention period is the same as for audit rows above: **1 year**
@@ -90,8 +92,8 @@ are still in the service log (section 3). Their retention period is the same as 
 - **TO DECIDE (owner):** whether a missing row for a decision is acceptable, or whether access must wait for the
   recorder (fail closed). The current choice favours availability and keeps the response shape fixed.
 - **CURRENT:** each row holds identifiers, an outcome and a detail object of at most 1,024 bytes, redacted before insert. Credentials and email addresses are refused, and personal-data keys are removed. Actor and target fields refuse address-shaped values.
-- **Proposed:** a purge run by the owner, outside the application, that removes rows older than the retention period. It must be the only path that deletes rows, must be bounded in batches, and must be recorded. It is not written.
-- **DECIDED (owner):** retention period of **1 year**, the same as section 1. The owner did not state the point
+- **Proposed:** a purge run by the owner, outside the application, that removes rows older than the retention period. It must be the only path that deletes rows, must be bounded in batches, and must be recorded. Section 7 describes the job that implements this. It is not run.
+- **DECIDED (owner):** retention period of **1 year**, the same as section 1. Rows are exported to a file before the purge deletes them (section 7). The owner did not state the point
   from which the year is counted; that detail is still open.
 - **TO DECIDE (owner):** whether activity export is needed (for example to a customer's own store) and in what format. The current reader returns one organisation's events, newest first, in pages of 100, and is the basis for any export.
 - **TO DECIDE (owner):** which roles may read activity. Tenant users should see events their role permits. Support operators should see only what their role permits, and each read should be audited. No operator read path exists yet.
@@ -99,12 +101,10 @@ are still in the service log (section 3). Their retention period is the same as 
 ## 7. Purge job (issue #16)
 
 - **CURRENT (implemented, not run):** `tools/retention_purge.py` deletes `titan.activity_events` and `titan.provisioning_audit`
-  rows older than `--retention-days` (default **90**). It is a dry run unless `--execute` is passed. Each batch is one
+  rows older than `--retention-days` (default **365**, the 1-year decision in sections 1 and 6). It is a dry run unless `--execute` is passed. Each batch is one
   transaction, run as `titan_retention_purger`, bounded by the same cutoff in the database (migration 0028).
-- **Resolved 2026-11-14 (owner):** audit and activity rows use a **90-day** retention period. This supersedes the 1-year decision in sections 1 and 6 for those rows. Earlier text below is kept for history.
-- (Superseded) Earlier conflict note: section 1 and
-  section 6 above recorded a DECIDED 1-year period. Until the owner confirmed which applies, set `--retention-days 365` before any
-  `--execute` run, or change the default in the tool.
+- **CURRENT (export before delete):** `--execute` requires `--export-dir DIR`. The job first writes every row older than the
+  cutoff in both tables to a new CSV file in `DIR` (mode 0600, never overwritten). Only after all exports succeed does it run any DELETE. An export failure deletes nothing.
 - **Gap:** the migration 0028 carve-out has no PostgreSQL test yet. Review it, and apply the migration only after that review.
 - Rollback for the migration: `database/retention/rollback_0028.sql`.
 

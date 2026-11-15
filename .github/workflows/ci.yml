@@ -119,6 +119,8 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/onboarding_states.sql "$TITAN_CI_DATABASE_URL"
       - name: Transactional outbox tests (SQL, real PostgreSQL)
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/outbox.sql "$TITAN_CI_DATABASE_URL"
+      - name: Activity history tests (SQL, real PostgreSQL, migrations 0011 and 0029)
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/activity_events.sql "$TITAN_CI_DATABASE_URL"
       - name: Session revocation RLS tests (two organisations)
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/session_revocation_rls.sql "$TITAN_CI_DATABASE_URL"
       - name: Activity events retention purge trigger tests (migration 0028)

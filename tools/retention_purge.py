@@ -8,12 +8,16 @@ Health probe results are not stored in any table, so there is nothing to purge f
 
 Default is DRY RUN. The job reads counts and oldest/newest timestamps and deletes nothing.
 Rows are deleted only when --execute is passed. There is no other way to delete rows.
+The default retention is 365 days (owner decision: 1 year).
 
 Usage
   TITAN_RETENTION_DATABASE_URL=postgresql://... python3 tools/retention_purge.py            # dry run
-  TITAN_RETENTION_DATABASE_URL=postgresql://... python3 tools/retention_purge.py --execute  # delete
+  TITAN_RETENTION_DATABASE_URL=postgresql://... python3 tools/retention_purge.py --execute --export-dir DIR  # export, then delete
 
 How it works
+  * --execute requires --export-dir. Before any DELETE, every row older than the cutoff in each target
+    table is written to a new CSV file in that directory (mode 0600, created with O_EXCL so an existing
+    export is never overwritten). If any export fails, the job stops and deletes nothing.
   * Each batch is one transaction. It runs SET LOCAL ROLE titan_retention_purger, sets the cutoff
     (now() - retention days) with set_config(..., true), then deletes at most --batch-size rows.
   * The database enforces the cutoff too (migration 0028): the purger role can delete only rows older
@@ -27,13 +31,16 @@ How it works
 Exit codes: 0 done, 1 database error, 2 bad configuration.
 """
 import argparse
+import csv
+import io
 import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 
-DEFAULT_RETENTION_DAYS = 90
+DEFAULT_RETENTION_DAYS = 365
 MAX_RETENTION_DAYS = 3650
 DEFAULT_BATCH_SIZE = 1000
 MAX_BATCH_SIZE = 10000
@@ -108,6 +115,52 @@ def build_batch_sql(days: int, target: Target, batch_size: int) -> str:
     )
 
 
+def build_export_sql(days: int, target: Target) -> str:
+    # Read-only: the export never changes a row. COPY writes CSV with a header to stdout.
+    col = target.timestamp_column
+    return (
+        'BEGIN READ ONLY;\n'
+        + _setup(days)
+        + f"COPY (SELECT * FROM {target.table} "
+        f"WHERE {col} < NULLIF(current_setting('{CUTOFF_GUC}', true), '')::timestamptz "
+        f"ORDER BY {col}) TO STDOUT WITH (FORMAT csv, HEADER true);\n"
+        'ROLLBACK;\n'
+    )
+
+
+def ensure_export_dir(path: str) -> None:
+    try:
+        os.makedirs(path, mode=0o700, exist_ok=True)
+    except OSError as exc:
+        raise PurgeError(f'export directory could not be created ({type(exc).__name__}); nothing was deleted') from exc
+    if not os.path.isdir(path):
+        raise PurgeError('export directory is not a directory; nothing was deleted')
+
+
+def export_targets(runner, days: int, targets, export_dir: str) -> list:
+    """Write every eligible row of each target to a new 0600 CSV file. Runs before any DELETE.
+
+    Returns one dict per target: table, path, rows. Any failure raises PurgeError, and the caller
+    must not delete anything.
+    """
+    stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
+    results = []
+    for t in targets:
+        csv_text = runner(build_export_sql(days, t))
+        rows = sum(1 for _ in csv.reader(io.StringIO(csv_text))) - 1
+        if rows < 0:
+            raise PurgeError(f'export of {t.table} produced no header; nothing was deleted')
+        path = os.path.join(export_dir, f"{t.table.replace('.', '_')}-{stamp}.csv")
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, 'w', encoding='utf-8', newline='') as fh:
+                fh.write(csv_text)
+        except OSError as exc:
+            raise PurgeError(f'could not write export file for {t.table} ({type(exc).__name__}); nothing was deleted') from exc
+        results.append({'table': t.table, 'path': path, 'rows': rows})
+    return results
+
+
 def build_table_check_sql() -> str:
     names = ', '.join(f"'{t.table}'" for t in TARGETS)
     return (
@@ -151,7 +204,9 @@ def dry_run(runner, days: int, targets) -> list:
     return lines
 
 
-def execute(runner, days: int, batch_size: int, targets) -> dict:
+def execute(runner, days: int, batch_size: int, targets, export_dir: str) -> tuple:
+    # Phase 1: export every eligible row of every target. Phase 2 runs only if phase 1 succeeded.
+    exported = export_targets(runner, days, targets, export_dir)
     totals = {}
     for t in targets:
         total = 0
@@ -162,12 +217,13 @@ def execute(runner, days: int, batch_size: int, targets) -> dict:
             if deleted < batch_size:
                 break
         totals[t.table] = total
-    return totals
+    return exported, totals
 
 
 def parse_args(argv):
     p = argparse.ArgumentParser(description='Purge access-decision and audit rows older than the retention period. Dry run unless --execute.')
     p.add_argument('--execute', action='store_true', help='delete rows. Without this flag nothing is deleted.')
+    p.add_argument('--export-dir', default='', help='required with --execute: directory for the pre-delete CSV exports (created 0700 if missing)')
     p.add_argument('--retention-days', type=int, default=DEFAULT_RETENTION_DAYS, help=f'default {DEFAULT_RETENTION_DAYS}')
     p.add_argument('--batch-size', type=int, default=DEFAULT_BATCH_SIZE, help=f'rows per transaction, 1 to {MAX_BATCH_SIZE}')
     return p.parse_args(argv)
@@ -182,6 +238,9 @@ def main(argv=None, runner=None, env=None) -> int:
     except ConfigError as exc:
         print(f'configuration error: {exc}', file=sys.stderr)
         return 2
+    if args.execute and not args.export_dir:
+        print('configuration error: --execute needs --export-dir (rows are exported before any delete)', file=sys.stderr)
+        return 2
     url = env.get(URL_ENV, '')
     if runner is None:
         if not url:
@@ -195,12 +254,15 @@ def main(argv=None, runner=None, env=None) -> int:
             print(f'DRY RUN. Nothing was deleted. Cutoff: rows older than {days} days (database clock).')
             for r in rows:
                 print(f"{r['table']}: {r['count']} row(s) eligible; oldest {r['oldest'] or '-'}, newest {r['newest'] or '-'}")
-            print('Re-run with --execute to delete these rows.')
+            print('Re-run with --execute --export-dir DIR to export and then delete these rows.')
             return 0
         if not targets:
             print('no target tables exist; nothing to purge')
             return 0
-        totals = execute(runner, days, batch, targets)
+        ensure_export_dir(args.export_dir)
+        exported, totals = execute(runner, days, batch, targets, args.export_dir)
+        for e in exported:
+            print(f"exported {e['rows']} row(s) from {e['table']} to {e['path']} before any delete")
         for name, n in totals.items():
             print(f'deleted {n} row(s) from {name} older than {days} days')
         return 0
