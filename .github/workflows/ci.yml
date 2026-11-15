@@ -108,6 +108,14 @@ jobs:
           out=$(python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL")
           echo "$out"
           test "$out" = "applied 0 migration(s)"
+      # Test-only prerequisite. Migration 0006 creates titan_trusted_writer NOLOGIN, and no migration grants it to the
+      # service login. The flag tests run SET ROLE titan_trusted_writer as titan_central_app, which Postgres refuses
+      # without membership (CI failure on #150, SQLSTATE 42501). NOINHERIT keeps the 'no direct privilege' assertion valid.
+      - name: Grant trusted writer role to the CI service login
+        run: |
+          psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" <<'SQL'
+          GRANT titan_trusted_writer TO titan_central_app;
+          SQL
       # Runs after migrations because the feature-flag tests need migrations 0001-0009 and 0013.
       # The URL logs in as titan_central_app (password set in the provisioning step above).
       # TITAN_REQUIRE_DB_TESTS makes a missing URL fail the file instead of skipping its nine tests (issue #145).
