@@ -12,7 +12,8 @@ following dependencies are implemented and verified.
 - `readProducts({identityId,companyId})` must verify current membership,
   company status, and every product's entitlement using trusted database reads.
   It must return `{authorised,company:{id,name},products:[{id,status}]}`
-  with exactly one decision for each of `sorted`, `supercharged`, `lms`.
+  with exactly one decision for each of `sorted`, `supercharged`, `lms`,
+  `scheduled`.
 - Configure destinations through server-owned HTTPS origins, not user input.
 - Rendered links are **navigation**, not authorization. Each product must still
   enforce its own server-side access and current entitlements.

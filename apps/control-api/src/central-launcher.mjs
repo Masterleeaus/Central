@@ -4,7 +4,7 @@
  * resolver and a company-scoped entitlement reader. Never pass client claims
  * directly into either callback.
  */
-const PRODUCTS = Object.freeze(['sorted', 'supercharged', 'lms']);
+const PRODUCTS = Object.freeze(['sorted', 'supercharged', 'lms', 'scheduled']);
 const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value);
 const verifiedSubject = value => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\s\x00-\x1f\x7f]/u.test(value);
@@ -35,7 +35,7 @@ export function renderCentralLauncher({company,products,destinations,logoutEnabl
   const cards = products.map(product => {
     if (!product || !PRODUCTS.includes(product.id) || seen.has(product.id) || !['allowed','denied','unavailable'].includes(product.status)) throw new TypeError('invalid product decision');
     seen.add(product.id);
-    const name = {sorted:'Sorted',supercharged:'Supercharged',lms:'LMS'}[product.id];
+    const name = {sorted:'Sorted',supercharged:'Supercharged',lms:'LMS',scheduled:'Scheduled'}[product.id];
     const href = destinations[product.id];
     const active = product.status === 'allowed' && typeof href === 'string';
     const status = active ? 'Available' : product.status === 'denied' ? 'Not included' : 'Unavailable';
