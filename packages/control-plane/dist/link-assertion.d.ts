@@ -35,8 +35,8 @@ export interface LinkNonceStore {
     consume(productId: ProductId, nonce: string, expiresAt: string, now: string): Promise<boolean>;
 }
 export interface LinkAssertionExpectation {
-    /** Legacy application id of the account being linked. Must map to the asserting product. */
-    applicationId: ApplicationId;
+    /** Application id of the account being linked (legacy id, or 'scheduled'). Must map to the asserting product. */
+    applicationId: ApplicationId | 'scheduled';
     /** Central identity subject (Logto subject) resolved by Central from identities.id. */
     logtoSubject: string;
     /** Logto organisation ID resolved by Central from organisations.id. */

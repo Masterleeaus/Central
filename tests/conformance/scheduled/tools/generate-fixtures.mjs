@@ -149,10 +149,10 @@ const envelope = (overrides = {}) => ({
   eventId: '3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b',
   organisationId: ORG,
   sourceProduct: 'scheduled',
-  eventType: 'booking_confirmed',
+  eventType: 'booking_created',
   schemaVersion: 1,
   correlationId: 'corr-scheduled-0001',
-  idempotencyKey: 'scheduled:booking:bk-0001:confirmed',
+  idempotencyKey: 'scheduled:booking:bk-0001:created',
   occurredAt: '2026-11-15T09:55:00.000Z',
   payload: { bookingRef: 'bk-0001', status: 'confirmed' },
   ...overrides,
@@ -208,7 +208,8 @@ const eventFixture = {
   source: 'core/app/Central/Events/SignedEventVerifier.php (canonicalJson, verify), run via tools/scheduled-event-verifier.php',
   generatedBy: 'tests/conformance/scheduled/tools/generate-fixtures.mjs',
   now: NOW_ISO,
-  consumer: { consumer: 'scheduled-inbox', organisationId: ORG, eventTypes: ['booking_confirmed'], secret: EVENT_SECRET },
+  // Event types are the names C5 registers (packages/control-plane/src/outbox.ts). booking_confirmed is not registered.
+  consumer: { consumer: 'scheduled-inbox', organisationId: ORG, eventTypes: ['booking_created'], secret: EVENT_SECRET },
   cases: variantNames.map((name, i) => ({
     id: `E-${String(i + 1).padStart(2, '0')}`,
     name,

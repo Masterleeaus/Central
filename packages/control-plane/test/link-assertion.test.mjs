@@ -32,6 +32,14 @@ test('cross-product: a Sorted assertion cannot link a Desk (Supercharged) accoun
   await rejectsWith(verifier.verify(signClaims(sorted, claimsFor()), { ...EXPECT_FIELD, applicationId: 'desk' }), 'product_mismatch');
 });
 
+test('scheduled: accepted for the scheduled application only, and a cross-product link is still product_mismatch', async () => {
+  const scheduledKey = makeProductKey('scheduled-2026-01');
+  const verifier = new LinkAssertionVerifier([{ productId: 'scheduled', keys: [scheduledKey.keyConfig] }], memoryNonces(), () => NOW);
+  const result = await verifier.verify(signClaims(scheduledKey, claimsFor({ iss: 'scheduled' })), { ...EXPECT_FIELD, applicationId: 'scheduled' });
+  assert.equal(result.productId, 'scheduled');
+  await rejectsWith(verifier.verify(signClaims(scheduledKey, claimsFor({ iss: 'scheduled' })), EXPECT_FIELD), 'product_mismatch');
+});
+
 test('rejects the wrong audience', async () => {
   const { verifier } = makeVerifier();
   await rejectsWith(verifier.verify(signClaims(sorted, claimsFor({ aud: 'some-other-service' })), EXPECT_FIELD), 'wrong_audience');
