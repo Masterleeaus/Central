@@ -1,4 +1,4 @@
-export declare const FLAG_PRODUCTS: readonly ["sorted", "supercharged", "lms", "central"];
+export declare const FLAG_PRODUCTS: readonly ["sorted", "supercharged", "lms", "central", "scheduled"];
 export type FlagProduct = (typeof FLAG_PRODUCTS)[number];
 export declare const FLAG_ENVIRONMENTS: readonly ["development", "staging", "production"];
 export type FlagEnvironment = (typeof FLAG_ENVIRONMENTS)[number];
