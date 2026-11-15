@@ -12,6 +12,7 @@ import { FLAG_PRODUCTS, createFlagRegistry, createPostgresFlagStore } from '../.
 import { readServiceDecisionConfig } from './service-decision-config.mjs';
 import { createSkilledDecisionHandler } from './service-decision-handler.mjs';
 import { readLinkKeySets } from './link-key-config.mjs';
+import { readScheduledSettings } from './scheduled-settings.mjs';
 import { createConfigDbRuntime } from './config-db-runtime.mjs';
 import { createProductionConfigRoute } from './config-production-route.mjs';
 import { assertConfigStartup } from './config-startup-guard.mjs';
@@ -46,6 +47,8 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   const auditLog=(event,fields)=>{try{metrics.observeLog(event,fields);}catch{/* metrics never alter a request */}logger(event,fields);};
   // Link assertion keys are validated here, whether or not the operator plane is on: a malformed key fails startup.
   const linkKeySets=readLinkKeySets(env);
+  // Scheduled operator settings (default off): a malformed origin or audience fails startup; unset means not configured.
+  readScheduledSettings(env);
   // Product registry: validated at every startup, so bad product origins stop startup even with the operator plane off.
   const productRegistry=loadProductRegistry(env);
   assertConfigStartup(env);
