@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCentralLauncherHandler,renderCentralLauncher,validateLauncherDestinations} from '../src/central-launcher.mjs';
 const companyId='00000000-0000-4000-8000-000000000001';
-const destinations={sorted:'https://sorted.example/',supercharged:'https://supercharged.example/',lms:'https://lms.example/'};
-const products=[{id:'sorted',status:'allowed'},{id:'supercharged',status:'denied'},{id:'lms',status:'unavailable'}];
+const destinations={sorted:'https://sorted.example/',supercharged:'https://supercharged.example/',lms:'https://lms.example/',scheduled:'https://scheduled.example/'};
+const products=[{id:'sorted',status:'allowed'},{id:'supercharged',status:'denied'},{id:'lms',status:'unavailable'},{id:'scheduled',status:'denied'}];
 const data={authorised:true,company:{id:companyId,name:'Example & Co'},products};
 function fakeRes(){return {status:null,headers:null,body:null,writeHead(status,headers){this.status=status;this.headers=headers},end(body){this.body=body}}}
 const make = (overrides={}) => createCentralLauncherHandler({resolveSession:async()=>({identityId:'user_1',companyId}),readProducts:async()=>data,destinations,...overrides});
@@ -13,7 +13,7 @@ test('renders product decisions from a trusted company scope, not client query p
   assert.equal(await handler({url:'/central?company_id=evil',method:'GET'},res),true);
   assert.equal(res.status,200);assert.deepEqual(scope,{identityId:'user_1',companyId});
   assert.match(res.body,/Example &amp; Co/);assert.match(res.body,/Open Sorted/);
-  assert.doesNotMatch(res.body,/Open Supercharged|Open LMS/);
+  assert.doesNotMatch(res.body,/Open Supercharged|Open LMS|Open Scheduled/);
   assert.match(res.headers['content-security-policy'],/frame-ancestors 'none'/);
   assert.equal(res.headers['cache-control'],'no-store, private');
 });
@@ -26,6 +26,46 @@ test('a mismatched company or revoked membership fails closed',async()=>{
   for(const record of [{...data,authorised:false},{...data,company:{...data.company,id:'00000000-0000-4000-8000-000000000002'}}]){
     const res=fakeRes();await make({readProducts:async()=>record})({url:'/central',method:'GET'},res);assert.equal(res.status,403);
   }
+});
+test('scheduled is rendered as its own product with a distinct decision',async()=>{
+  const res=fakeRes();
+  const allowedAll=[{id:'sorted',status:'allowed'},{id:'supercharged',status:'allowed'},{id:'lms',status:'allowed'},{id:'scheduled',status:'allowed'}];
+  await make({readProducts:async()=>({...data,products:allowedAll})})({url:'/central',method:'GET'},res);
+  assert.equal(res.status,200);
+  assert.match(res.body,/<h2>Scheduled<\/h2>/);
+  assert.match(res.body,/Open Scheduled/);
+  assert.match(res.body,/href="https:\/\/scheduled\.example\/"/);
+});
+test('scheduled navigation is not authorisation: a denied scheduled decision never links',async()=>{
+  const res=fakeRes();
+  await make({readProducts:async()=>({...data,products:[
+    {id:'sorted',status:'allowed'},{id:'supercharged',status:'allowed'},{id:'lms',status:'allowed'},{id:'scheduled',status:'denied'}
+  ]})})({url:'/central',method:'GET'},res);
+  assert.equal(res.status,200);
+  assert.doesNotMatch(res.body,/Open Scheduled|scheduled\.example/);
+  assert.match(res.body,/Not included/);
+});
+test('allowed scheduled without a configured destination is unavailable, not launchable',async()=>{
+  const res=fakeRes();
+  const {scheduled:_omitted,...withoutScheduled}=destinations;
+  await make({destinations:withoutScheduled,readProducts:async()=>({...data,products:[
+    {id:'sorted',status:'allowed'},{id:'supercharged',status:'allowed'},{id:'lms',status:'allowed'},{id:'scheduled',status:'allowed'}
+  ]})})({url:'/central',method:'GET'},res);
+  assert.equal(res.status,200);
+  assert.doesNotMatch(res.body,/Open Scheduled/);
+  assert.match(res.body,/Access unavailable/);
+});
+test('a decision list that omits scheduled fails closed',async()=>{
+  const res=fakeRes();
+  await make({readProducts:async()=>({...data,products:products.filter(p=>p.id!=='scheduled')})})({url:'/central',method:'GET'},res);
+  assert.equal(res.status,503);
+  assert.doesNotMatch(res.body,/Open /);
+});
+test('unknown product identifiers are rejected, including non-canonical scheduled spellings',()=>{
+  assert.throws(()=>validateLauncherDestinations({scheduled:'https://scheduled.example/',field:'https://field.example/'}),TypeError);
+  assert.throws(()=>validateLauncherDestinations({Scheduled:'https://scheduled.example/'}),TypeError);
+  assert.throws(()=>renderCentralLauncher({company:{id:companyId,name:'Example'},
+    products:[...products.slice(0,3),{id:'Scheduled',status:'allowed'}],destinations}),TypeError);
 });
 test('malformed decision fails unavailable, never grants',async()=>{
   const res=fakeRes();await make({readProducts:async()=>({...data,products:[...products,{id:'sorted',status:'allowed'}]})})({url:'/central',method:'GET'},res);

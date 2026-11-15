@@ -1,11 +1,14 @@
 /**
  * Read-only trusted launch access. Legacy app identifiers are mapped to their
  * displayed product names until the shared schema migration is adopted.
+ * Scheduled has no legacy identifier, so its canonical ID is used directly; the
+ * legacy entitlement table does not accept it, so it stays denied until the
+ * canonical registry (migration 0013) is the read source.
  * Every decision is taken from a single RLS-scoped repeatable-read snapshot.
  */
 import {withCentralReadSnapshot} from '../../../packages/control-plane/dist/index.js';
 
-const APPLICATIONS=Object.freeze({sorted:'field',supercharged:'desk',lms:'academy'});
+const APPLICATIONS=Object.freeze({sorted:'field',supercharged:'desk',lms:'academy',scheduled:'scheduled'});
 const validCompany=value=>typeof value==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const validSubject=value=>typeof value==='string' && value.length>0 && value.length<=256 && !/[\r\n\0]/.test(value);
 const live=expiry=>!expiry || (Number.isFinite(Date.parse(expiry)) && Date.parse(expiry)>Date.now());
