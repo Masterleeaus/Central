@@ -12,7 +12,7 @@ A Central identity may act in a connected product only through a local account t
 | --- | --- | --- |
 | Central identity subject | The Logto subject of the user (`usr_...`) | `titan.identities.logto_subject` |
 | Organisation identifier | The Logto organisation ID | `titan.organisations.logto_organisation_id` |
-| Product | `sorted`, `supercharged`, `lms`, `scheduled` (`PRODUCT_IDS`). `scheduled` has no application id and no link path yet: application-to-product mapping rejects it with `product_mismatch`. | key sets in operator config |
+| Product | `sorted`, `supercharged`, `lms`, `scheduled` (`PRODUCT_IDS`). `scheduled` has no legacy application id. Link assertions name it as `scheduled` (`LINK_APPLICATION_TO_PRODUCT`), and it is accepted once a Scheduled key set is configured. The legacy-id mapping is unchanged. | key sets in operator config |
 | Application | Legacy id `field`, `desk`, `academy` (`LEGACY_TO_PRODUCT`: field to sorted, desk to supercharged, academy to lms) | `titan.local_account_links.application_id` |
 | Local account | `local_user_id` and `local_account_id`, opaque and immutable IDs issued by the product | `titan.local_account_links` |
 

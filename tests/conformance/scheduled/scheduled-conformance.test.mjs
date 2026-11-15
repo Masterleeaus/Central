@@ -6,13 +6,12 @@
 // Each case records the outcome Central should reach once scheduled is registered (centralAfterRegistration) or the
 // code Central must throw (centralOutcome).
 //
-// Expected-fail cases use node:test's `todo` option. They run, and their failure is reported as TODO without failing
-// the suite. Scheduled is not a Central product yet (PRODUCT_IDS, link key config, legacy/expectation mapping and the
-// activity source check). So:
-//   - "today" tests pin the current rejection and must pass. They fail if Central's behaviour changes, which means
-//     the matching TODO tests are ready to be promoted.
-//   - "after registration" tests carry the TODO marker and assert the target outcome.
-// When C1, C2, C4 and C5 land, remove the todo option from those tests and delete the "today" pins.
+// Link assertions: Scheduled is registered (PRODUCT_IDS, LINK_APPLICATION_TO_PRODUCT, link key config), so every
+// link case asserts Central's target outcome directly. The "without a key set" pins check that a verifier holding no
+// Scheduled key still rejects with unknown_product.
+// Activity events: the source check does not accept scheduled yet (C4 or C5). That case stays an expected-fail
+// (node:test `todo`): it runs, and its failure is reported as TODO without failing the suite. When C4 or C5 land,
+// remove its todo option.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPublicKey, generateKeyPairSync } from 'node:crypto';
@@ -28,10 +27,10 @@ const eventFixture = JSON.parse(readFileSync(new URL('./fixtures/event-envelopes
 
 const NOW_ISO = linkFixture.now;
 const NOW_MS = Date.parse(NOW_ISO);
-const TODO_REGISTRATION = 'expected-fail until C1, C2, C4 and C5 land: scheduled is not a Central product yet';
+const TODO_ACTIVITY = 'expected-fail until C4 or C5 land: the activity source check does not accept scheduled yet';
 
-// Expectation Central must receive for a Scheduled assertion. There is no legacy application id for scheduled, so
-// the 'scheduled' value below is the placeholder C1 must replace or map. Adjust it when C1 defines the mapping.
+// Expectation Central receives for a Scheduled assertion. There is no legacy application id for scheduled, so the
+// link application id 'scheduled' maps to the scheduled product through LINK_APPLICATION_TO_PRODUCT.
 const SCHEDULED_EXPECTATION = {
   applicationId: 'scheduled',
   logtoSubject: 'central-user-0001',
@@ -60,7 +59,7 @@ const currentVerifier = () => new LinkAssertionVerifier(
   nonces(), () => NOW_ISO,
 );
 
-// What the verifier looks like once scheduled is registered with the fixture's public key.
+// The verifier once scheduled is registered with the fixture's public key.
 const registeredVerifier = () => new LinkAssertionVerifier(
   [{ productId: 'scheduled', keys: [linkFixture.centralKeyConfig] }],
   nonces(), () => NOW_ISO,
@@ -98,16 +97,20 @@ test('link fixtures: the public key is the only key material; no private key is 
   assert.doesNotMatch(JSON.stringify(linkFixture), /"d":/);
 });
 
+// Token-shape checks (algorithm, forbidden claims) run before the issuer lookup, so those cases fail on their own
+// code even with no Scheduled key set. Every other case stops at the missing key set with unknown_product.
+const EARLIER_CHECKS = ['forbidden_claim', 'bad_algorithm'];
 for (const c of linkFixture.cases) {
-  test(`link ${c.id} ${c.name}: today Central rejects a Scheduled assertion with unknown_product`, async () => {
+  const expectedCode = EARLIER_CHECKS.includes(c.centralAfterRegistration) ? c.centralAfterRegistration : 'unknown_product';
+  test(`link ${c.id} ${c.name}: with no Scheduled key set Central rejects with ${expectedCode}`, async () => {
     await assert.rejects(
       currentVerifier().verify(c.token, SCHEDULED_EXPECTATION),
-      (error) => error instanceof LinkAssertionRejected && error.code === 'unknown_product',
+      (error) => error instanceof LinkAssertionRejected && error.code === expectedCode,
     );
   });
 }
 
-test('link: a Scheduled token presented for an LMS expectation is rejected at the issuer check with unknown_product', async () => {
+test('link: a Scheduled token presented for an LMS expectation is rejected with unknown_product when no Scheduled key set is configured', async () => {
   await assert.rejects(
     currentVerifier().verify(linkCase('L-01').token, {
       applicationId: 'academy', logtoSubject: 'central-user-0001', logtoOrganisationId: 'central-org-0001',
@@ -117,13 +120,12 @@ test('link: a Scheduled token presented for an LMS expectation is rejected at th
   );
 });
 
-test('link: Central cannot be configured with a scheduled key set today (expected-fail, C1)', { todo: TODO_REGISTRATION }, () => {
+test('link: Central accepts a scheduled key set in configuration', () => {
   registeredVerifier();
 });
 
 for (const c of linkFixture.cases) {
-  test(`link ${c.id} ${c.name}: after registration Central outcome is ${c.centralAfterRegistration}`,
-    { todo: TODO_REGISTRATION }, async () => {
+  test(`link ${c.id} ${c.name}: Central outcome is ${c.centralAfterRegistration}`, async () => {
       const verifier = registeredVerifier();
       if (c.centralAfterRegistration === 'accept') {
         const result = await verifier.verify(c.token, SCHEDULED_EXPECTATION);
@@ -137,11 +139,11 @@ for (const c of linkFixture.cases) {
     });
 }
 
-test('product registry: scheduled is listed in PRODUCT_IDS (expected-fail, C1)', { todo: TODO_REGISTRATION }, () => {
+test('product registry: scheduled is listed in PRODUCT_IDS', () => {
   assert.ok(PRODUCT_IDS.includes('scheduled'));
 });
 
-test('activity events: source product scheduled is accepted by prepareActivityEvent (expected-fail, C4 or C5)', { todo: TODO_REGISTRATION }, () => {
+test('activity events: source product scheduled is accepted by prepareActivityEvent (expected-fail, C4 or C5)', { todo: TODO_ACTIVITY }, () => {
   assert.doesNotThrow(() => prepareActivityEvent({
     organisationId: '6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b',
     actorKind: 'service',

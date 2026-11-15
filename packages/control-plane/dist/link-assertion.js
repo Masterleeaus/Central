@@ -9,7 +9,7 @@
  * Pure module: no network, no environment reads. The nonce store is injected (PostgreSQL in production).
  */
 import { createPublicKey, verify as verifySignature } from 'node:crypto';
-import { LEGACY_TO_PRODUCT, PRODUCT_IDS } from './product-registry.js';
+import { LINK_APPLICATION_TO_PRODUCT, PRODUCT_IDS } from './product-registry.js';
 export const LINK_ASSERTION_AUDIENCE = 'titan-central';
 export const LINK_ASSERTION_TYPE = 'titan-link+jwt';
 /** Maximum exp minus iat. Nonces need only be remembered until exp, so this bounds the replay window. */
@@ -102,7 +102,7 @@ export class LinkAssertionVerifier {
         const nowMs = Date.parse(now);
         if (!Number.isFinite(nowMs))
             throw new TypeError('invalid verifier clock');
-        const expectedProduct = LEGACY_TO_PRODUCT[expected.applicationId];
+        const expectedProduct = Object.hasOwn(LINK_APPLICATION_TO_PRODUCT, expected.applicationId) ? LINK_APPLICATION_TO_PRODUCT[expected.applicationId] : undefined;
         if (!expectedProduct)
             fail('unknown_product');
         if (typeof token !== 'string' || token.length === 0 || token.length > MAX_TOKEN_LENGTH)
