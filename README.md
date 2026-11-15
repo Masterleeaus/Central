@@ -8,12 +8,14 @@ Status: pre-deployment. The migrations are reviewed drafts, the HTTP service is 
 
 | Path | What it is |
 | --- | --- |
-| `apps/control-api` | Node 22 ESM HTTP service (`src/server.mjs`). Verifies OIDC tokens, checks access through the control-plane library, and stores OIDC login state and session revocations in PostgreSQL. Binds to loopback only. |
+| `apps/control-api` | Node 22 ESM HTTP service (`src/server.mjs`). Verifies OIDC tokens, checks access through the control-plane library, and stores OIDC login state, session revocations, browser sessions and company selections in PostgreSQL. Binds to loopback only. |
+| `apps/launcher` | Server-rendered sign-in and product launcher for Titan Central (`src/`, built to `dist/`). Shows the active company and the three products after sign-in. |
 | `packages/control-plane` | TypeScript authorization library (`src/`). Resolves app-scoped roles, entitlements and local-account links. Compiled output is committed in `dist/`; see below. |
-| `migrations` | Ordered SQL migrations for the dedicated `titan_central` PostgreSQL database. |
-| `tools` | `migrate.py`, the migration runner, and `verify_logto_source.py`, a read-only checker for a supplied Logto source archive. |
+| `packages/config-engine` | Dependency-free ESM configuration engine (`src/`), tested by `npm test`. Review-only: feature flags are not an authorisation mechanism. |
+| `migrations` | Ordered SQL migrations `0001` to `0028` for the dedicated `titan_central` PostgreSQL database. See the table below. |
+| `tools` | Operator scripts. `migrate.py` is the migration runner, `verify_logto_source.py` is a read-only checker for a supplied Logto source archive, `retention_purge.py` is the retention purge (dry-run by default; migration 0028), and the company backfill, reconciliation and cutover scripts. |
 | `deploy` | `preflight.py`, a read-only readiness assessor for a staging configuration, and `staging.example.json`, an example that must report not ready. |
-| `tests` | Python tests for `tools/`, the migration runner, and `tests/sql/rls_two_tenant.sql`, the two-tenant row-level security test. |
+| `tests` | Python tests for `tools/` and the migration runner, `tests/sql/` (PostgreSQL row-level security, role and store checks, run by hand or in CI), and `tests/integration/`. |
 | `deploy/tests` | Python tests for `deploy/preflight.py`. |
 
 ## Build and test
@@ -65,9 +67,25 @@ The RLS test seeds two tenants and runs inside a transaction that is rolled back
 | 0007 | Provisioning audit types for update and revoke commands; session-revocation and OIDC-state grants. |
 | 0008 | Trusted reader scoped to the organisation set for the transaction; `titan_trusted_writer` may read session revocations (needed by the revocation bump). |
 | 0009 | Login-role grants for the control-api stores: `titan_trusted_writer` may SELECT the OIDC login-state columns that consume and prune read. Nothing is granted to the login role itself. |
-| 0015 | Subscription lifecycle ledger (issue #35): `titan.billing_subscriptions` (last applied position per provider subscription) and `titan.billing_events` (one row per verified provider event, with its disposition). Written only by `titan_trusted_writer`. Numbers 0010-0014 are unused. See `docs/SUBSCRIPTIONS.md`. |
-| 0012 | Transactional outbox: `titan.outbox_events` (versioned, tenant-keyed, idempotency-keyed, bounded payload, pending/published/dead), `titan.outbox_event_audit`, and `titan.outbox_processed_events` for consumer dedupe. Tenant-scoped RLS. Versions 0010 and 0011 are reserved by other work. See `docs/EVENTS.md`. |
 | 0010 | Row-level security on `titan.titan_session_revocations`, keyed by `organisation_id`. The reader sees one organisation (the one set for its transaction); the writer keeps cross-tenant bumps. |
+| 0011 | Append-only `titan.activity_events` (issue #36): one redacted row per lifecycle event. No role may UPDATE, DELETE or TRUNCATE; a trigger rejects every such change. Retention carve-out in 0028. |
+| 0012 | Transactional outbox: `titan.outbox_events` (versioned, tenant-keyed, idempotency-keyed, bounded payload, pending/published/dead), `titan.outbox_event_audit`, and `titan.outbox_processed_events` for consumer dedupe. Tenant-scoped RLS. See `docs/EVENTS.md`. |
+| 0013 | Centrally governed configuration and feature flags (issue #38): `titan.feature_flags` (global rows and temporary per-organisation overrides that require `expires_at`), and `titan.feature_flag_history`, which is append-only. Changes are audited by trigger. |
+| 0014 | Verified account links (issue #37): at most one verified link per local account and application, `titan.link_assertion_nonces` for link assertions, and `titan.link_reviews` for ambiguous link attempts. Written only by `titan_trusted_writer`. |
+| 0015 | Subscription lifecycle ledger (issue #35): `titan.billing_subscriptions` (last applied position per provider subscription) and `titan.billing_events` (one row per verified provider event, with its disposition). Written only by `titan_trusted_writer`. See `docs/SUBSCRIPTIONS.md`. |
+| 0016 | Durable, one-use organisation selection for users with several eligible organisations (issue #32): `titan.titan_oidc_organisation_selections`, bound to the OIDC state, browser binding and selection token by digest. |
+| 0017 | Guided customer onboarding (issue #41): `titan.onboardings`, `titan.onboarding_product_results` and the append-only `titan.onboarding_events`, with the state machine enforced by triggers. |
+| 0018 | Reviewed resolution of account link conflicts: `titan.link_reviews` gains resolution columns. A resolved review is never reopened (issue #37). |
+| 0019 | Central browser sessions (`titan.central_browser_sessions`), keyed by an opaque token digest, with the NOLOGIN role `titan_central_sessions`. |
+| 0020 | Dedicated `central` application ID in `titan.titan_oidc_login_states`, and the NOLOGIN role `titan_central_oidc`. Central login state does not share a namespace with a product. |
+| 0021 | Company discovery for a verified Logto subject: the vetted `SECURITY DEFINER` function `titan.central_eligible_companies`, executable by `titan_central_discovery` (issue #44). |
+| 0022 | Durable, one-use, browser-bound Central company selection: `titan.central_company_selection_states`, with the issuer and subject sealed by the application. |
+| 0023 | Triggers that invalidate Central browser sessions in the same transaction as an access reduction (membership, organisation, identity, entitlement or account link), including direct SQL changes. |
+| 0024 | `titan.central_issue_browser_session`, which locks current membership, identity, organisation and entitlement before a session is created, so a login cannot race a revocation. |
+| 0025 | Product account-link proof nonces (`titan.product_link_proof_nonces`) and `titan.claim_product_link_proof_nonce`, so each nonce is used once across workers. |
+| 0026 | Product-specific one-use company selection (`titan.product_company_selection_states`) for `field`, `desk` and `academy`, with a separate browser binding and sealed identity. |
+| 0027 | Per-product selection roles (`titan_product_selection_<app>`) with row policies, so one app cannot read, delete or consume another app's pending selection states. |
+| 0028 | Retention purge (issue #16): the NOLOGIN role `titan_retention_purger` may DELETE and SELECT old rows in `titan.activity_events` and `titan.provisioning_audit`, only when the transaction sets `titan.retention_cutoff`. Used by `tools/retention_purge.py`, which is dry-run by default. |
 
 Tenant isolation (0006, narrowed by 0008; session revocations by 0010). Tenant scope is the transaction-local setting `titan.organisation_id`. Set it with a bound parameter, never by interpolation: `SELECT set_config('titan.organisation_id', $1, true)`. This has the same effect as `SET LOCAL` and is the only form that takes a bind parameter. With no scope set, tenant rows are invisible and writes fail (fail closed). A malformed value raises an error.
 
