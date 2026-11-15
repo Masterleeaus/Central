@@ -19,6 +19,7 @@ function makeDatabase({memberRevision=1,role='manager'}={}){
   if(q.startsWith('UPDATE titan.memberships')){ if(db.membership.revision!==p[1])return {rowCount:0,rows:[]}; db.membership.role=p[2];db.membership.state=p[3];db.membership.revision++;return {rowCount:1,rows:[]}; }
   if(q.startsWith('INSERT INTO titan.titan_session_revocations')){const k=key(p[0],p[1],p[2]);const g=(db.generations.get(k)??0)+1;db.generations.set(k,g);return {rows:[{generation:g}],rowCount:1}; }
   if(q.startsWith('INSERT INTO titan.provisioning_audit')){db.audit.push({request_id:p[0],command_kind:p[3],command_digest:p[4]});return {rowCount:1,rows:[]}}
+  if(q.startsWith('INSERT INTO titan.outbox_events')){(db.outbox??=[]).push({event_type:p[2],idempotency_key:p[5]});return {rowCount:1,rows:[{id:'evt'}]}}
   if(q.startsWith('INSERT INTO titan.activity_events')){db.activity.push({organisation_id:p[2],action:p[5],correlation_id:p[10]});return {rowCount:1,rows:[]}}
   if(q.startsWith('SELECT generation FROM titan.titan_session_revocations')){const g=db.generations.get(key(p[0],p[1],p[2]));return {rows:g===undefined?[]:[{generation:g}]}}
   throw Error('unhandled SQL in fixture: '+q.slice(0,60));

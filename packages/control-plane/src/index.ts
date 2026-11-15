@@ -32,4 +32,5 @@ export * from './outbox-publisher.js';
 export * from './outbox-consumer.js';
 export * from './outbox-keys.js';
 export * from './outbox-http-transport.js';
+export * from './session-revocation-event.js';
 export * from './canonical-resolver.js';

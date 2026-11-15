@@ -7,11 +7,12 @@ export function fakeControlDb({ memberships = [], entitlements = [] } = {}) {
     audit: [],
     activity: [],
     revocations: new Map(),
+    outbox: [],
   };
   let snapshot = null;
   let armed = null;
-  const clone = () => ({ entitlements: structuredClone(state.entitlements), audit: structuredClone(state.audit), revocations: new Map(state.revocations) });
-  const restore = (s) => { state.entitlements = s.entitlements; state.audit = s.audit; state.revocations = s.revocations; };
+  const clone = () => ({ entitlements: structuredClone(state.entitlements), audit: structuredClone(state.audit), revocations: new Map(state.revocations), outbox: structuredClone(state.outbox) });
+  const restore = (s) => { state.entitlements = s.entitlements; state.audit = s.audit; state.revocations = s.revocations; state.outbox = s.outbox; };
   const log = [];
   const route = (text, p) => {
     if (/^BEGIN/.test(text)) { snapshot = clone(); return { rows: [], rowCount: 0 }; }
@@ -44,6 +45,17 @@ export function fakeControlDb({ memberships = [], entitlements = [] } = {}) {
       const generation = (state.revocations.get(key) ?? 0) + 1;
       state.revocations.set(key, generation);
       return { rows: [{ generation }], rowCount: 1 };
+    }
+    if (text.startsWith('INSERT INTO titan.outbox_events')) {
+      // Signed outbox row written in the same transaction as the change (outbox.ts). Idempotency key is unique.
+      const [organisation_id, source_product, event_type, schema_version, correlation_id, idempotency_key, payload, payload_digest] = p;
+      if (state.outbox.some(e => e.idempotency_key === idempotency_key)) return { rows: [], rowCount: 0 };
+      state.outbox.push({ organisation_id, source_product, event_type, schema_version, correlation_id, idempotency_key, payload: JSON.parse(payload), payload_digest });
+      return { rows: [{ id: `evt_${state.outbox.length}` }], rowCount: 1 };
+    }
+    if (text.startsWith('SELECT organisation_id, source_product, event_type, schema_version, payload_digest')) {
+      const rows = state.outbox.filter(e => e.idempotency_key === p[0]).map(({ organisation_id, source_product, event_type, schema_version, payload_digest }) => ({ organisation_id, source_product, event_type, schema_version, payload_digest }));
+      return { rows, rowCount: rows.length };
     }
     if (text.startsWith('INSERT INTO titan.activity_events')) {
       // Activity history (issue #36) written in the same transaction as a lifecycle change. Recorded, not queried.
@@ -78,6 +90,8 @@ export function fakeControlDb({ memberships = [], entitlements = [] } = {}) {
     pool, state, log,
     /** Fails the next statement whose text matches. */
     failNext(match, error = Error('injected database failure')) { armed = { match, error }; },
+    /** Outbox rows written by the fake, in insert order. */
+    outboxEvents() { return state.outbox.map(e => ({ ...e })); },
     revocationsFor(app, sub, org) { return state.revocations.get(`${app}|${sub}|${org}`) ?? 0; },
   };
 }
