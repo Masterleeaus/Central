@@ -25,14 +25,15 @@ const codeOf = fn => { try { fn(); return undefined; } catch (e) { return e; } }
 
 test('no product variables: empty registry, no origins, no error', () => {
   const reg = loadProductRegistry({});
-  assert.equal(reg.length, 3);
+  assert.equal(reg.length, 4);
   assert.ok(reg.every(p => p.serviceOrigin === null));
 });
 
 test('all three origins with an allowlist attach to the canonical products', () => {
   const reg = loadProductRegistry(FULL);
   const byId = Object.fromEntries(reg.map(p => [p.id, p.serviceOrigin]));
-  assert.deepEqual(byId, { sorted: SORTED, supercharged: SUPER, lms: LMS });
+  // Scheduled has no origin variable, so it stays unattached (default-off) and is not in the legacy-keyed origins.
+  assert.deepEqual(byId, { sorted: SORTED, supercharged: SUPER, lms: LMS, scheduled: null });
   assert.deepEqual({ ...originsForLegacyIds(reg) }, { field: SORTED, desk: SUPER, academy: LMS });
 });
 

@@ -1,0 +1,229 @@
+{
+  "source": "core/app/Central/Events/SignedEventVerifier.php (canonicalJson, verify), run via tools/scheduled-event-verifier.php",
+  "generatedBy": "tests/conformance/scheduled/tools/generate-fixtures.mjs",
+  "now": "2026-11-15T10:00:00.000Z",
+  "consumer": {
+    "consumer": "scheduled-inbox",
+    "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+    "eventTypes": [
+      "booking_confirmed"
+    ],
+    "secret": "titan-central conformance scheduled events secret, test only, not a credential"
+  },
+  "cases": [
+    {
+      "id": "E-01",
+      "name": "valid",
+      "body": {
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "sourceProduct": "scheduled",
+        "eventType": "booking_confirmed",
+        "schemaVersion": 1,
+        "correlationId": "corr-scheduled-0001",
+        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "payload": {
+          "bookingRef": "bk-0001",
+          "status": "confirmed"
+        },
+        "signature": "e0efe4eed5e18c383e0f47e2cd999fa29e80f3bd869d05786203e2c526c103d4"
+      },
+      "scheduledVerdict": {
+        "accepted": true
+      },
+      "centralOutcome": "processed"
+    },
+    {
+      "id": "E-02",
+      "name": "tamperedPayload",
+      "body": {
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "sourceProduct": "scheduled",
+        "eventType": "booking_confirmed",
+        "schemaVersion": 1,
+        "correlationId": "corr-scheduled-0001",
+        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "payload": {
+          "bookingRef": "bk-0001",
+          "status": "cancelled"
+        },
+        "signature": "e0efe4eed5e18c383e0f47e2cd999fa29e80f3bd869d05786203e2c526c103d4"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "bad_signature"
+      },
+      "centralOutcome": "bad_signature"
+    },
+    {
+      "id": "E-03",
+      "name": "wrongSecret",
+      "body": {
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "sourceProduct": "scheduled",
+        "eventType": "booking_confirmed",
+        "schemaVersion": 1,
+        "correlationId": "corr-scheduled-0001",
+        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "payload": {
+          "bookingRef": "bk-0001",
+          "status": "confirmed"
+        },
+        "signature": "0c46529e8c9aca2886ac77c43991ac8c4b1b5ab66f4656d7df87aa1d647a3f0a"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "bad_signature"
+      },
+      "centralOutcome": "bad_signature"
+    },
+    {
+      "id": "E-04",
+      "name": "wrongTenant",
+      "body": {
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "organisationId": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+        "sourceProduct": "scheduled",
+        "eventType": "booking_confirmed",
+        "schemaVersion": 1,
+        "correlationId": "corr-scheduled-0001",
+        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "payload": {
+          "bookingRef": "bk-0001",
+          "status": "confirmed"
+        },
+        "signature": "e872ba35ae44d6c83247c24308ce5652c7743238b84f5c81db374113144cf10e"
+      },
+      "scheduledVerdict": {
+        "accepted": true
+      },
+      "centralOutcome": "tenant_mismatch"
+    },
+    {
+      "id": "E-05",
+      "name": "unacceptedType",
+      "body": {
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "sourceProduct": "scheduled",
+        "eventType": "booking_cancelled",
+        "schemaVersion": 1,
+        "correlationId": "corr-scheduled-0001",
+        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "payload": {
+          "bookingRef": "bk-0001",
+          "status": "confirmed"
+        },
+        "signature": "dca5d8eb5ac80598cf6d98f89eb994a7ba841e3f68332e6f8c8067e8748965e3"
+      },
+      "scheduledVerdict": {
+        "accepted": true
+      },
+      "centralOutcome": "unknown_event_type"
+    },
+    {
+      "id": "E-06",
+      "name": "unsigned",
+      "body": {
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "sourceProduct": "scheduled",
+        "eventType": "booking_confirmed",
+        "schemaVersion": 1,
+        "correlationId": "corr-scheduled-0001",
+        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "payload": {
+          "bookingRef": "bk-0001",
+          "status": "confirmed"
+        }
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "unsigned"
+      },
+      "centralOutcome": "invalid_envelope"
+    },
+    {
+      "id": "E-07",
+      "name": "stale",
+      "body": {
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "sourceProduct": "scheduled",
+        "eventType": "booking_confirmed",
+        "schemaVersion": 1,
+        "correlationId": "corr-scheduled-0001",
+        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "occurredAt": "2026-11-13T10:00:00.000Z",
+        "payload": {
+          "bookingRef": "bk-0001",
+          "status": "confirmed"
+        },
+        "signature": "08910a73a2b70d283a0ef8063e2f737b22a03133ab52f952d9c61fda36443ae8"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "stale"
+      },
+      "centralOutcome": "processed",
+      "note": "Central does not check occurredAt age. Scheduled rejects anything older than 86400 seconds."
+    },
+    {
+      "id": "E-08",
+      "name": "future",
+      "body": {
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "sourceProduct": "scheduled",
+        "eventType": "booking_confirmed",
+        "schemaVersion": 1,
+        "correlationId": "corr-scheduled-0001",
+        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "occurredAt": "2026-11-15T11:00:00.000Z",
+        "payload": {
+          "bookingRef": "bk-0001",
+          "status": "confirmed"
+        },
+        "signature": "dc76b3d548709115ff40539814ebf0aa3e9cde2f906e51a6d80741b96a59679c"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "from_future"
+      },
+      "centralOutcome": "processed",
+      "note": "Central does not check occurredAt against its clock. Scheduled allows 300 seconds of skew."
+    },
+    {
+      "id": "E-09",
+      "name": "badSchemaVersion",
+      "body": {
+        "eventId": "3b7e9f10-2c4d-4e6f-8a9b-0c1d2e3f4a5b",
+        "organisationId": "6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b",
+        "sourceProduct": "scheduled",
+        "eventType": "booking_confirmed",
+        "schemaVersion": 0,
+        "correlationId": "corr-scheduled-0001",
+        "idempotencyKey": "scheduled:booking:bk-0001:confirmed",
+        "occurredAt": "2026-11-15T09:55:00.000Z",
+        "payload": {
+          "bookingRef": "bk-0001",
+          "status": "confirmed"
+        },
+        "signature": "b2749ad758c8f53879ca183552ea52314255f23c0cfcb0ef14e4a735b7c2b1a3"
+      },
+      "scheduledVerdict": {
+        "accepted": false,
+        "reason": "invalid_envelope"
+      },
+      "centralOutcome": "invalid_envelope"
+    }
+  ]
+}

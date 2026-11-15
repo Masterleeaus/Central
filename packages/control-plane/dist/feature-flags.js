@@ -16,7 +16,7 @@
 // Any failure to read the store, or any row that does not match its declaration, resolves to the
 // declared default. The resolver never returns a value that is not declared.
 import { createHash } from 'node:crypto';
-export const FLAG_PRODUCTS = ['sorted', 'supercharged', 'lms', 'central'];
+export const FLAG_PRODUCTS = ['sorted', 'supercharged', 'lms', 'central', 'scheduled'];
 export const FLAG_ENVIRONMENTS = ['development', 'staging', 'production'];
 export class FlagError extends Error {
     code;

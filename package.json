@@ -13,7 +13,8 @@
   },
   "scripts": {
     "build": "npm run build --workspace=@titan-central/control-plane && npm run build --workspace=@titan-central/launcher",
-    "test": "npm run build && npm run test --workspace=@titan-central/control-plane && npm run test --workspace=@titan-central/control-api && npm run test --workspace=@titan-central/launcher && node --test packages/config-engine/test/*.test.mjs",
+    "test": "npm run build && npm run test --workspace=@titan-central/control-plane && npm run test --workspace=@titan-central/control-api && npm run test --workspace=@titan-central/launcher && node --test packages/config-engine/test/*.test.mjs && npm run test:conformance",
+    "test:conformance": "node --test tests/conformance/scheduled/scheduled-conformance.test.mjs tests/conformance/scheduled/booking-conformance.test.mjs",
     "test:preflight": "python3 -m unittest discover -s deploy/tests",
     "start": "npm run start --workspace=@titan-central/control-api"
   }

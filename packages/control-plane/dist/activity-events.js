@@ -6,7 +6,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ACTION = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,3}$/;
 const TARGET_TYPE = /^[a-z][a-z0-9_]{0,31}$/;
 const CORRELATION = /^[A-Za-z0-9._:-]{8,128}$/;
-const SOURCES = ['sorted', 'supercharged', 'lms', 'central'];
+const SOURCES = ['sorted', 'supercharged', 'lms', 'central', 'scheduled'];
 const OUTCOMES = ['success', 'failure', 'denied'];
 /** Validates and redacts an event. Throws ActivityRedactionError or Error for invalid input. No I/O. */
 export function prepareActivityEvent(input) {

@@ -1,4 +1,4 @@
-import { PRODUCT_IDS, toLegacyApplicationId } from './product-registry.js';
+import { LEGACY_PRODUCT_IDS, toLegacyApplicationId } from './product-registry.js';
 import { queryActivity } from './activity-events.js';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LOGTO_ID = /^[A-Za-z0-9_-]{1,256}$/;
@@ -131,7 +131,8 @@ export async function readSupportCentralSnapshot(pool, organisationId, options) 
             entry[state] = Number(row['n']);
             linkCounts.set(app, entry);
         }
-        const products = PRODUCT_IDS.map((productId) => {
+        // Scheduled has no legacy application id, so the entitlement and link views here cover legacy-backed products only.
+        const products = LEGACY_PRODUCT_IDS.map((productId) => {
             const applicationId = toLegacyApplicationId(productId);
             const row = entitlementRows.find((r) => String(r['application_id']) === applicationId);
             const expiresAt = isoOrNull(row?.['expires_at']);

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
+  FLAG_PRODUCTS,
   FlagError,
   createFlagRegistry,
   trustVerifiedContext,
@@ -427,4 +428,38 @@ test('a store that is down during a change is not silently treated as success', 
     /connection refused/,
   );
   assert.equal(store.commits, 0);
+});
+
+// ---------------------------------------------------------------- scheduled product
+
+test('scheduled is a flag product, and its flags follow the same rules as the others', async () => {
+  assert.ok(FLAG_PRODUCTS.includes('scheduled'));
+  const scheduledRegistry = createFlagRegistry([
+    { product: 'scheduled', key: 'booking_widget', owner: 'scheduled-team', spec: { type: 'boolean' }, default: false },
+    { product: 'scheduled', key: 'slot_limit', owner: 'scheduled-team', spec: { type: 'integer', min: 1, max: 50 }, default: 10 },
+  ]);
+  const store = memoryStore();
+  const sdeps = deps(store, { registry: scheduledRegistry });
+  const scheduledReq = (over = {}) => ({ product: 'scheduled', environment: 'staging', key: 'booking_widget', ...over });
+
+  // No stored row: the declared default is served.
+  const none = await resolveFlag(sdeps, scheduledReq(), ctx());
+  assert.equal(none.value, false);
+  assert.equal(none.source, 'default');
+
+  // A committed global value is served to a verified organisation.
+  await changeFlag(sdeps, { product: 'scheduled', environment: 'staging', key: 'booking_widget', organisationId: null, expectedRevision: 0, value: true, actor: 'ops', reason: 'enable' });
+  const on = await resolveFlag(sdeps, scheduledReq(), ctx(ORG_A));
+  assert.equal(on.value, true);
+  assert.equal(on.source, 'global');
+
+  // Values are still checked against the declared type.
+  await assert.rejects(
+    changeFlag(sdeps, { product: 'scheduled', environment: 'staging', key: 'slot_limit', organisationId: null, expectedRevision: 0, value: 99, actor: 'ops', reason: 'too big' }),
+    (e) => e instanceof FlagError && e.code === 'INVALID_VALUE',
+  );
+
+  // A product outside the list is still refused, and an undeclared scheduled key is still refused.
+  await assert.rejects(resolveFlag(sdeps, { product: 'desk', environment: 'staging', key: 'booking_widget' }, ctx()), (e) => e.code === 'INVALID_REQUEST');
+  await assert.rejects(resolveFlag(sdeps, scheduledReq({ key: 'not_declared' }), ctx()), (e) => e.code === 'UNDECLARED_FLAG');
 });

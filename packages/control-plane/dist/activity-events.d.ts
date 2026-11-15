@@ -3,7 +3,7 @@
  * Event schema (shared by Central and connected products):
  *   eventId, occurredAt, organisationId (tenant key), actorKind ('subject' | 'service'), actorId,
  *   action (dotted lower-case, e.g. membership.update), targetType, targetId,
- *   sourceProduct ('sorted' | 'supercharged' | 'lms' | 'central'), outcome ('success' | 'failure' | 'denied'),
+ *   sourceProduct ('sorted' | 'supercharged' | 'lms' | 'central' | 'scheduled'), outcome ('success' | 'failure' | 'denied'),
  *   correlationId (shared across products for one lifecycle chain), detail (flat, redacted, at most 1024 bytes).
  *
  * Writing: recordActivity(conn, input) inserts on the caller's connection, so the event commits or rolls back
@@ -15,7 +15,7 @@
  */
 import type { SqlClient, SqlPool } from './postgres.js';
 import type { RedactedDetail } from './activity-redaction.js';
-export type ActivitySourceProduct = 'sorted' | 'supercharged' | 'lms' | 'central';
+export type ActivitySourceProduct = 'sorted' | 'supercharged' | 'lms' | 'central' | 'scheduled';
 export type ActivityOutcome = 'success' | 'failure' | 'denied';
 export type ActivityActorKind = 'subject' | 'service';
 export interface ActivityEventInput {

@@ -16,6 +16,8 @@ spec.loader.exec_module(migrate)
 
 RECORD_RE = re.compile(r"INSERT INTO public\.schema_migrations \(version, name, checksum\) VALUES \((\d+), '([^']+)', '([0-9a-f]+)'\);")
 MIGRATION_TEXT = "BEGIN;\nCREATE TABLE t_{n} (id int);\nCOMMIT;\n"
+# Real migrations on main: 0001-0028 and 0030. There is no 0029 file on main.
+REPO_MIGRATION_VERSIONS = list(range(1, 29)) + [30]
 
 
 class FakeClient:
@@ -51,7 +53,7 @@ def write_dir(files):
 class RealMigrationsTests(unittest.TestCase):
     def test_all_repository_migrations_are_one_transaction(self):
         found = migrate.discover(ROOT / 'migrations')
-        self.assertEqual([m.version for m in found], list(range(1, 29)))
+        self.assertEqual([m.version for m in found], REPO_MIGRATION_VERSIONS)
         for m in found:
             self.assertIn('COMMIT;', m.text, m.name)
 
@@ -65,9 +67,9 @@ class RealMigrationsTests(unittest.TestCase):
 
     def test_repository_migrations_apply_in_order_then_are_noop(self):
         client = FakeClient()
-        self.assertEqual(migrate.run(client, ROOT / 'migrations'), list(range(1, 29)))
+        self.assertEqual(migrate.run(client, ROOT / 'migrations'), REPO_MIGRATION_VERSIONS)
         self.assertEqual(migrate.run(client, ROOT / 'migrations'), [])
-        self.assertEqual(len(client.executed), 28)
+        self.assertEqual(len(client.executed), len(REPO_MIGRATION_VERSIONS))
 
     def test_migration_0016_grants_only_to_the_trusted_writer(self):
         text = (ROOT / 'migrations' / '0016_organisation_selection.sql').read_text(encoding='utf-8')

@@ -9,7 +9,7 @@
  * Node type declarations), so it has no timers or crypto. */
 import type { SqlClient, SqlPool } from './postgres.js';
 import type { ApplicationId, EntitlementStatus, MembershipStatus } from './contracts.js';
-import { PRODUCT_IDS, toLegacyApplicationId } from './product-registry.js';
+import { LEGACY_PRODUCT_IDS, toLegacyApplicationId } from './product-registry.js';
 import type { ProductId } from './product-registry.js';
 import { queryActivity } from './activity-events.js';
 import type { ActivityEventRecord } from './activity-events.js';
@@ -167,7 +167,8 @@ export async function readSupportCentralSnapshot(pool: SqlPool, organisationId: 
    linkCounts.set(app, entry);
   }
 
-  const products: SupportProductCentral[] = PRODUCT_IDS.map((productId) => {
+  // Scheduled has no legacy application id, so the entitlement and link views here cover legacy-backed products only.
+  const products: SupportProductCentral[] = LEGACY_PRODUCT_IDS.map((productId) => {
    const applicationId = toLegacyApplicationId(productId);
    const row = entitlementRows.find((r) => String(r['application_id']) === applicationId);
    const expiresAt = isoOrNull(row?.['expires_at']);
