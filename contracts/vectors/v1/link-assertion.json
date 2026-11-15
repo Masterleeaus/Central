@@ -1,0 +1,735 @@
+{
+  "contract": "titan-central.link-assertion",
+  "contract_version": "1.0.0",
+  "source": "packages/control-plane/src/link-assertion.ts (docs/LINKING.md)",
+  "notes": [
+    "Ed25519 test keys were generated when this file was built. Only public JWKs are stored; the private keys were discarded, so no key here signs anything real.",
+    "A case runs in order against one verifier and one nonce store. Each step expectation is merged over the case expectation, then the file default.",
+    "Rejection codes are the exact LinkRejectionCode values. Products should assert the code, not only that the assertion was refused.",
+    "expect is the outcome of the final step."
+  ],
+  "audience": "titan-central",
+  "now": "2026-11-15T12:00:00.000Z",
+  "default_expectation": {
+    "applicationId": "field",
+    "logtoSubject": "usr_abcdef12",
+    "logtoOrganisationId": "org_tenanta01",
+    "localUserId": "user-0001-abcd",
+    "localAccountId": "acct-0001-abcd"
+  },
+  "key_sets": [
+    {
+      "productId": "sorted",
+      "keys": [
+        {
+          "kid": "sorted-2026-01",
+          "jwk": {
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "HPDG6erCvzvTtzGKH6qlSdw2pbmRYTVrQ1LnReTDrFU"
+          },
+          "notBefore": "2026-01-01T00:00:00.000Z",
+          "notAfter": "2026-11-20T00:00:00.000Z"
+        },
+        {
+          "kid": "sorted-2026-11",
+          "jwk": {
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "K4Mh7Qo-DXUEEsQBP3Ic6fRU7ljhX5RvvMVpnSb5U84"
+          },
+          "notBefore": "2026-11-10T00:00:00.000Z"
+        },
+        {
+          "kid": "sorted-2027-01",
+          "jwk": {
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "6_JZueb5vGMxoyI2sJFsfru9CcqxvkMpuvg_5SPMmXk"
+          },
+          "notBefore": "2027-01-01T00:00:00.000Z"
+        },
+        {
+          "kid": "sorted-2025-12",
+          "jwk": {
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "RrBT3H07Xo22Tjd83WOWye8FwG2uxxLDcqgcHkshIiM"
+          },
+          "notBefore": "2025-01-01T00:00:00.000Z",
+          "notAfter": "2025-12-31T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "productId": "supercharged",
+      "keys": [
+        {
+          "kid": "supercharged-2026-01",
+          "jwk": {
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "f2l-R-wbfkZc4ErvKqfVOCRN8hCdU-ROK9zaHmaGmSY"
+          },
+          "notBefore": "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "productId": "lms",
+      "keys": [
+        {
+          "kid": "lms-2026-01",
+          "jwk": {
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "NWKMMrzzZG4iXsr4Cx-og6v8PPk8sZwwIhg0O0RLzHg"
+          },
+          "notBefore": "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "accept-sorted-current-key",
+      "description": "Correctly signed, in-window assertion for the field application under the current Sorted key.",
+      "expect": "accept",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJNNmxyYm9Ic21xcjB0Wkt3WGtKQXRkMUEiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.zO59T1Kx4ErMYJLTbHVEROMb48gChhZfT_2ykrY0EzBF-SaqKVaq3h-aOZoKP_IqsPpo2AJzro71EjVZAAJFCQ",
+          "expect": "accept",
+          "result": {
+            "productId": "sorted",
+            "nonce": "M6lrboHsmqr0tZKwXkJAtd1A",
+            "issuedAt": "2026-11-15T12:00:00.000Z",
+            "expiresAt": "2026-11-15T12:02:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accept-sorted-old-key-in-overlap",
+      "description": "Previous Sorted key is still accepted before its notAfter during rotation.",
+      "expect": "accept",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMDEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJwOWlhcjJvejhrR0tkNW1mUm9aOHZSaEoiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.Sti1Bt_bAM6NroEJIVu-G_BB5QrVDfsSkcSi2pndvkZ2BSdLBenaW6cVjWYe7ndbKir5hFEYKLDyqiG5PqVECQ",
+          "expect": "accept",
+          "result": {
+            "productId": "sorted",
+            "nonce": "p9iar2oz8kGKd5mfRoZ8vRhJ",
+            "issuedAt": "2026-11-15T12:00:00.000Z",
+            "expiresAt": "2026-11-15T12:02:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accept-iat-at-clock-skew-limit",
+      "description": "iat exactly 30 seconds in the future is inside the allowed skew.",
+      "expect": "accept",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJZd3N6U3BlcnZfUUVZdnBNbzdfR2V5Q0QiLCJpYXQiOjE3OTQ3NDQwMzAsImV4cCI6MTc5NDc0NDE1MH0.bi74LnyvcWvx04GbpR1KkVf7t02nQbo9XFILB3M4wf8oani7NLznbp5uoCSedCh75P564wmOGQFSCeWt0qaMDA",
+          "expect": "accept",
+          "result": {
+            "productId": "sorted",
+            "nonce": "YwszSperv_QEYvpMo7_GeyCD",
+            "issuedAt": "2026-11-15T12:00:30.000Z",
+            "expiresAt": "2026-11-15T12:02:30.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accept-lifetime-exactly-300-seconds",
+      "description": "exp minus iat of 300 seconds is the maximum accepted lifetime.",
+      "expect": "accept",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJfaWlfWUhWeG9yTlM3cVliRjdxUktUcUYiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDMwMH0.Ha13mClZnlwgMrLu0xDV7OvzTp-UpdlZ8Xv3wgq09dCAMzFhzmZyYRWVDYfwBNnrD4gUyslU-5DTquW3PXt-Dw",
+          "expect": "accept",
+          "result": {
+            "productId": "sorted",
+            "nonce": "_ii_YHVxorNS7qYbF7qRKTqF",
+            "issuedAt": "2026-11-15T12:00:00.000Z",
+            "expiresAt": "2026-11-15T12:05:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accept-one-second-before-expiry",
+      "description": "Assertion accepted one second before exp.",
+      "expect": "accept",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJ0NThVX1JHMWstRzZSUkZjV1NuRE9hQ0kiLCJpYXQiOjE3OTQ3NDM3MDEsImV4cCI6MTc5NDc0NDAwMX0.ePWtALpO9tovc86KGwMyyhzV--RgVMgDe-LiP58vQoqrBcbu40fKko68HMdEFLpmhn5LMVvrhucZS-2v9PNICg",
+          "expect": "accept",
+          "result": {
+            "productId": "sorted",
+            "nonce": "t58U_RG1k-G6RRFcWSnDOaCI",
+            "issuedAt": "2026-11-15T11:55:01.000Z",
+            "expiresAt": "2026-11-15T12:00:01.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accept-supercharged-for-desk",
+      "description": "Supercharged assertion for the desk application.",
+      "expect": "accept",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic3VwZXJjaGFyZ2VkLTIwMjYtMDEifQ.eyJpc3MiOiJzdXBlcmNoYXJnZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJOVjFzTi1MUmQ1X1g2aHBINlZEREZTZTQiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.D3BYa8i7tFvmnXHevMfygNn1eF6JU7p0hEDlSI8LTKX71ko7WqtMRVwXzfQYnV9wz6uO1yGfPP1MnUQHDg2PCQ",
+          "expect": "accept",
+          "result": {
+            "productId": "supercharged",
+            "nonce": "NV1sN-LRd5_X6hpH6VDDFSe4",
+            "issuedAt": "2026-11-15T12:00:00.000Z",
+            "expiresAt": "2026-11-15T12:02:00.000Z"
+          }
+        }
+      ],
+      "expectation": {
+        "applicationId": "desk"
+      }
+    },
+    {
+      "id": "accept-lms-for-academy",
+      "description": "LMS assertion for the academy application.",
+      "expect": "accept",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoibG1zLTIwMjYtMDEifQ.eyJpc3MiOiJsbXMiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJWMlNBd05MMGh2U0JnUE56akh3YjNOOXMiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.POTrJ2MhOQFj2mM2f68U31esKCy6UcVmc1_cupHiEFepZqGy2qc7WfYnecpazNPu41MZNl999fcSOZyopIp5BQ",
+          "expect": "accept",
+          "result": {
+            "productId": "lms",
+            "nonce": "V2SAwNL0hvSBgPNzjHwb3N9s",
+            "issuedAt": "2026-11-15T12:00:00.000Z",
+            "expiresAt": "2026-11-15T12:02:00.000Z"
+          }
+        }
+      ],
+      "expectation": {
+        "applicationId": "academy"
+      }
+    },
+    {
+      "id": "accept-distinct-nonces-in-sequence",
+      "description": "Two assertions with distinct nonces are both accepted in one sequence.",
+      "expect": "accept",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiI4SkdOV09MRjFEd0Q2NUJKdXFJcXZ5UUUiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.hKP75HM6tKcEVFfwmTM_iawrHKHcbFdJidUyu6_nB3Qzsgt5grH7_pNp6CwhM315LinLu4nqXA6kyV4GtkpFAg",
+          "expect": "accept",
+          "result": {
+            "productId": "sorted",
+            "nonce": "8JGNWOLF1DwD65BJuqIqvyQE",
+            "issuedAt": "2026-11-15T12:00:00.000Z",
+            "expiresAt": "2026-11-15T12:02:00.000Z"
+          }
+        },
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJJX0VwT2xhekxoazBXcFJ6bnhEY2NCbjAiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.BavMaVUbomVvAstEuMBOEEa0InntGKJUtXEWBIvj8GBwjic5grz8abpCqZj6ancb7j-fAgY1U2Hwqm9aGkvKDQ",
+          "expect": "accept",
+          "result": {
+            "productId": "sorted",
+            "nonce": "I_EpOlazLhk0WpRznxDccBn0",
+            "issuedAt": "2026-11-15T12:00:00.000Z",
+            "expiresAt": "2026-11-15T12:02:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accept-after-rejected-attempt-keeps-nonce",
+      "description": "A rejected attempt does not consume its nonce; the same assertion is then accepted.",
+      "expect": "accept",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJWS1FQLWRuaHRVUmw3akVtQkJrVk5rb2IiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.zUn-EiL-o-IAypvu7Yeqswmo_9SpS5M2VMoVEKE77jF3vaK74_IJ0Qre0naw5SDREWEUdhESNAEN0ZcTdpFODA",
+          "expect": "reject",
+          "code": "organisation_mismatch",
+          "expectation": {
+            "logtoOrganisationId": "org_tenantb01"
+          }
+        },
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJWS1FQLWRuaHRVUmw3akVtQkJrVk5rb2IiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.zUn-EiL-o-IAypvu7Yeqswmo_9SpS5M2VMoVEKE77jF3vaK74_IJ0Qre0naw5SDREWEUdhESNAEN0ZcTdpFODA",
+          "expect": "accept",
+          "result": {
+            "productId": "sorted",
+            "nonce": "VKQP-dnhtURl7jEmBBkVNkob",
+            "issuedAt": "2026-11-15T12:00:00.000Z",
+            "expiresAt": "2026-11-15T12:02:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "reject-alg-none-empty-signature",
+      "description": "alg none with no signature segment.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJub25lIiwidHlwIjoidGl0YW4tbGluaytqd3QiLCJraWQiOiJzb3J0ZWQtMjAyNi0xMSJ9.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJUWFBfSDJuUDl3ajRyd2gyRFg4M1p1WWMiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.",
+          "expect": "reject",
+          "code": "malformed"
+        }
+      ]
+    },
+    {
+      "id": "reject-alg-none-with-signature-bytes",
+      "description": "alg none with arbitrary signature bytes is refused on algorithm.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJub25lIiwidHlwIjoidGl0YW4tbGluaytqd3QiLCJraWQiOiJzb3J0ZWQtMjAyNi0xMSJ9.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiI0WUNVQkgwSkxLQVBJVFlLc0ZBTW5UNGMiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.AAAA",
+          "expect": "reject",
+          "code": "bad_algorithm"
+        }
+      ]
+    },
+    {
+      "id": "reject-alg-hs256",
+      "description": "HS256 with a shared secret; the verifier never uses key material for it.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJPd0M0akRuVlZDUlhoMGl2dTRJWHNIdzEiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.2elox4qXXbauHp1rMti66Lx_DZ7_aNWcinvFmrV0WuI",
+          "expect": "reject",
+          "code": "bad_algorithm"
+        }
+      ]
+    },
+    {
+      "id": "reject-typ-not-link-jwt",
+      "description": "Header typ is JWT, not titan-link+jwt.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6InNvcnRlZC0yMDI2LTExIn0.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJfM1dWcmVwMVhSUm9XSHFhSUY4ZEVQMmgiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.ZpU1Xjo2Wu8H6lGqhHywhN-su6pGlYYf13JfAlVCzkVc1JP5MYaW_1Tjq-MxYx1eUeDt8u6EG9LpQ6CbfwUUCA",
+          "expect": "reject",
+          "code": "bad_algorithm"
+        }
+      ]
+    },
+    {
+      "id": "reject-header-extra-field",
+      "description": "Header carries jku, which is not an allowed header field.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEiLCJqa3UiOiJodHRwczovL2tleXMuZXhhbXBsZS50ZXN0L2p3a3MuanNvbiJ9.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJROUVFSmxac25xMHlYcjdpWm1wQkpYRUwiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.XM-pXehVBtTxFBcQvMNUH0w7MXDjZqGOEuOvG3ahYnjMMu8NPfMBh3K4dG2ci8ckqVolee_JT09tFI8HIWCIBQ",
+          "expect": "reject",
+          "code": "malformed"
+        }
+      ]
+    },
+    {
+      "id": "reject-unknown-key-id",
+      "description": "kid is not in the product key set.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLXJvZ3VlIn0.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiIybjFhYy1ERkM0MkRDT0FHbkNMZ29sNmkiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.pEVX1QsPp7WG_6vr6gwZCMd3Y-_sqd8H3s0XK3z8da7jWh8cv7VXWs3QHjRPRfiRp_Qys3pxi4OienrIO6axCQ",
+          "expect": "reject",
+          "code": "unknown_key"
+        }
+      ]
+    },
+    {
+      "id": "reject-key-not-yet-valid",
+      "description": "kid is configured but notBefore is in the future.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjctMDEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJSLVE0b0RhcGxtU0FVaW5KRnFvNkFDcXUiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.CtcXWhVv1EksdSNzrXXkaWM4I1iDEZ65M0IQ-B5s4ALfUBnpo93_jANZAYwSo9fT3NfCtDpkfFfhN5gwFIrdAg",
+          "expect": "reject",
+          "code": "key_inactive"
+        }
+      ]
+    },
+    {
+      "id": "reject-key-after-not-after",
+      "description": "kid is configured but notAfter has passed.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjUtMTIifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiI5TWdPdU5PODdrMXVLY2lyRHpPaUdOc0UiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.CPcnGkfYKshgDmEgbv52m_0jKVfeoTobyAvEUljqdSLqzbDVog7CHAcLUxn875bb9PDNsDJ2B3WPeasJC58dBg",
+          "expect": "reject",
+          "code": "key_inactive"
+        }
+      ]
+    },
+    {
+      "id": "reject-tampered-payload",
+      "description": "Payload changed under the original signature.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtYXR0YWNrZXItMDAwMiIsIm5vbmNlIjoia3oyUjlDejl6Wi1WVHZWTDlmSzNTeHFmIiwiaWF0IjoxNzk0NzQ0MDAwLCJleHAiOjE3OTQ3NDQxMjB9.brA4-hFLlTgnH57snGUotAb1SmfMypY_dNova_CJNwVoUsC6QBYjQcT7yYo1fT5ifPz8Thavkn1z-7ggi7_vBQ",
+          "expect": "reject",
+          "code": "bad_signature"
+        }
+      ]
+    },
+    {
+      "id": "reject-signed-by-other-key",
+      "description": "Signed with a key other than the configured key for that kid.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJTSFFhQnVtLUpudXBOMFN5RUVKQUhzLWUiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.l0pwd1E8Ht7hPIJ_kMyAnBth2SUluCI8y6t0EtJ2bj5Jyrw6Zzur0yMiWHCwpzVBbGG4cLpv-lsI4G0fx1GXDw",
+          "expect": "reject",
+          "code": "bad_signature"
+        }
+      ]
+    },
+    {
+      "id": "reject-forbidden-email-claim",
+      "description": "An email claim is present, even alongside valid identifiers.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiItazR3MGIySVptRnJUOU9ScVI3aVh2NlAiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMCwiZW1haWwiOiJqYW5lQGV4YW1wbGUuY29tIn0.HnUqiTtZ9dn3hW-cUQnO16zJLx9VTFfS16x5OO9npq-sU9nzPTk3M3SZs68L2CR7N12idzjQ5ueKoTLIUCMBDA",
+          "expect": "reject",
+          "code": "forbidden_claim"
+        }
+      ]
+    },
+    {
+      "id": "reject-forbidden-display-name-claim",
+      "description": "A name claim is present.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJ3TXdQWnVtM0pLVk84UG9uNlJMaGlneFMiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMCwibmFtZSI6IkphbmUgU21pdGgifQ.kpHD_7JBQEV2XhThc49E4GfD3r2bJwGQruQdnnL4KpNako-Mk1NXvtqY_uydgmiVK-M3ubJkF_p3HBy07K4pCw",
+          "expect": "reject",
+          "code": "forbidden_claim"
+        }
+      ]
+    },
+    {
+      "id": "reject-missing-nonce",
+      "description": "Required nonce claim is absent.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwiaWF0IjoxNzk0NzQ0MDAwLCJleHAiOjE3OTQ3NDQxMjB9.cKOfij5Pv3gTgmw1JarwxwHE--90ArHf3aPcPo656BuCRQQUYYgDgIYzPlll9XnOJyyDS4la63v-V3eTumsxBw",
+          "expect": "reject",
+          "code": "missing_claim"
+        }
+      ]
+    },
+    {
+      "id": "reject-nonce-too-short",
+      "description": "Nonce is under 22 characters.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJzaG9ydC1ub25jZS0xIiwiaWF0IjoxNzk0NzQ0MDAwLCJleHAiOjE3OTQ3NDQxMjB9.Re8vPSCzwFtmnFeUb73qwvWOLB7zTL73SOBR0eWAYJujBWaombyWaThhBADpDH4B3D7fwjC5t_RPK3xMiWI-Bw",
+          "expect": "reject",
+          "code": "malformed"
+        }
+      ]
+    },
+    {
+      "id": "reject-nonce-outside-charset",
+      "description": "Nonce contains base64 characters that are not base64url.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJhYmMrZGVmL2doaStqa2wvbW5vK3Bxci9zdHUrdnciLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.KyTaCYPrBfbllGMeHyXF4OrPmGr3uLH8HS0RqXHj7qEFNpmtJ21oCF1BxUttEFy6KowF7VVidFgXyy9jOLvfBQ",
+          "expect": "reject",
+          "code": "malformed"
+        }
+      ]
+    },
+    {
+      "id": "reject-unknown-product",
+      "description": "iss is not a known product.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJteXN0ZXJ5IiwiYXVkIjoidGl0YW4tY2VudHJhbCIsInN1YiI6InVzcl9hYmNkZWYxMiIsIm9yZyI6Im9yZ190ZW5hbnRhMDEiLCJsdSI6InVzZXItMDAwMS1hYmNkIiwibGEiOiJhY2N0LTAwMDEtYWJjZCIsIm5vbmNlIjoidDdfckVGaHlBRklaekFzdDdfN1N1dFlzIiwiaWF0IjoxNzk0NzQ0MDAwLCJleHAiOjE3OTQ3NDQxMjB9.h-9UsEZL5HB9sCrH23W4HOAH0JgZRfD15FRuMyKySyPrt0rLY1rjqcJ_7P-gfpNdgg2wSr8uGjSqolZPZCJQCg",
+          "expect": "reject",
+          "code": "unknown_product"
+        }
+      ]
+    },
+    {
+      "id": "reject-product-mismatch",
+      "description": "Supercharged assertion used to link a field (Sorted) application.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic3VwZXJjaGFyZ2VkLTIwMjYtMDEifQ.eyJpc3MiOiJzdXBlcmNoYXJnZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJKQnlrNDU3ZE9oSjU4R2pkRll1cjNORloiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.Kp2aU4vGVc0wg819uNTz43ZdDQ-pqq_QUtssSft2IWMcKseV4sVNnbPlALm9DBDxcksODCw_S4CtZ3XIZlMnBA",
+          "expect": "reject",
+          "code": "product_mismatch"
+        }
+      ],
+      "expectation": {
+        "applicationId": "field"
+      }
+    },
+    {
+      "id": "reject-product-without-key-set",
+      "description": "Known product with no key set configured.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic3VwZXJjaGFyZ2VkLTIwMjYtMDEifQ.eyJpc3MiOiJzdXBlcmNoYXJnZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJXQTI5NEhfMl9STjFab3NadV9qZVhxV1QiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.VNuWyt0BIe_B8CDnBPiunkMet_Sfy2cnXC3-4unYIL4t1qRXrIdg6I02CPAIuV0XoDxNAG1ye2ea9s3GNoy0AA",
+          "expect": "reject",
+          "code": "unknown_product"
+        }
+      ],
+      "key_sets": [
+        {
+          "productId": "sorted",
+          "keys": [
+            {
+              "kid": "sorted-2026-11",
+              "jwk": {
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": "K4Mh7Qo-DXUEEsQBP3Ic6fRU7ljhX5RvvMVpnSb5U84"
+              },
+              "notBefore": "2026-11-10T00:00:00.000Z"
+            }
+          ]
+        }
+      ],
+      "expectation": {
+        "applicationId": "desk"
+      }
+    },
+    {
+      "id": "reject-wrong-audience",
+      "description": "aud is not titan-central.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJzb21lLW90aGVyLXNlcnZpY2UiLCJzdWIiOiJ1c3JfYWJjZGVmMTIiLCJvcmciOiJvcmdfdGVuYW50YTAxIiwibHUiOiJ1c2VyLTAwMDEtYWJjZCIsImxhIjoiYWNjdC0wMDAxLWFiY2QiLCJub25jZSI6ImZuMGlGUmRoNEdYeHR0VExOWGExS3hKaiIsImlhdCI6MTc5NDc0NDAwMCwiZXhwIjoxNzk0NzQ0MTIwfQ.B1VoQWGH1yIg_CXvY1KpKx8dVtqDC5O6ChBpqMNylIGq3etiBM6gD-LLM-x1SxMXueo8hp_zbLYmLH4akfjyAA",
+          "expect": "reject",
+          "code": "wrong_audience"
+        }
+      ]
+    },
+    {
+      "id": "reject-expired-exp-equals-now",
+      "description": "exp equal to the verifier clock is already expired.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJSemh6T0hwVlA5bzB5YUdLTjBndVVGblMiLCJpYXQiOjE3OTQ3NDM4MDAsImV4cCI6MTc5NDc0NDAwMH0.qhfc-LHfAiXoRiFQRBPnOAevd1zqYeF-I_-MKwmGws22GibRiLYMsk-AqdUuWetJxwLMXehtsW5mGIX0hMGWCQ",
+          "expect": "reject",
+          "code": "expired"
+        }
+      ]
+    },
+    {
+      "id": "reject-expired-in-past",
+      "description": "exp is before the verifier clock.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJZdFRSTXpkU3d5MDdLblNZbmtRb0VOdjUiLCJpYXQiOjE3OTQ3NDM4MDAsImV4cCI6MTc5NDc0Mzk5OX0.5fUATGCoEi2gGJfvgVYC4HDZn9tOE5mBVmrtEVOdMMabFvCVlujWMX2YyBZyGFC0_dNRgZsMrhWLkBsaJch_Ag",
+          "expect": "reject",
+          "code": "expired"
+        }
+      ]
+    },
+    {
+      "id": "reject-future-dated-beyond-skew",
+      "description": "iat is 60 seconds ahead, beyond the 30 second skew.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiItRi1nd1RjcWVBQzRpLUpGV2FhM3RwTEQiLCJpYXQiOjE3OTQ3NDQwNjAsImV4cCI6MTc5NDc0NDE4MH0.JqkWE5-GxWg59lf3iec0281BfFeFQlxhg9ElPglX_ETj94e_nacll0owlD0nWyaUjGzXDOQUBa_ajZAKbZZjBw",
+          "expect": "reject",
+          "code": "future_dated"
+        }
+      ]
+    },
+    {
+      "id": "reject-lifetime-over-300-seconds",
+      "description": "exp minus iat is 301 seconds.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJuWkVhbnNqMmtzLXlVcFNZczd2RmhvTGIiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDMwMX0.d9hz5e7L5Ks3vc7Bj42PBkE8hALJ-05EAj93tvjTpa6h6tNQsrjKVeNrBwMnVQfhvYwFCpSBvGGKvKHcIpDwCw",
+          "expect": "reject",
+          "code": "bad_lifetime"
+        }
+      ]
+    },
+    {
+      "id": "reject-lifetime-zero",
+      "description": "exp equal to iat is not a positive lifetime.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJFamRsOS1SamhvLVZmRFJzRXJXdWZmenQiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDAwMH0.6SbIrT3KdFWeDMl4Z7shEXNyGjWhoG4EFKbebVCePrkITR9G6MaGVuAU0cjyIvGARZu0JhLXW9khkOZu_AX5DA",
+          "expect": "reject",
+          "code": "bad_lifetime"
+        }
+      ]
+    },
+    {
+      "id": "reject-email-as-subject",
+      "description": "An email address used as the subject identifier.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiamFuZUBleGFtcGxlLmNvbSIsIm9yZyI6Im9yZ190ZW5hbnRhMDEiLCJsdSI6InVzZXItMDAwMS1hYmNkIiwibGEiOiJhY2N0LTAwMDEtYWJjZCIsIm5vbmNlIjoickpEb2p6VndFMjl3ekltbHVmUklPaXBDIiwiaWF0IjoxNzk0NzQ0MDAwLCJleHAiOjE3OTQ3NDQxMjB9.payUMFrmS0dwrz6t1WI4Les53e9OQ1-Zuhdt-Wvtx0kGJDOP4f6XPWCbFn6F1B0Mui3VJ6RYtqoF0IShfJkEDg",
+          "expect": "reject",
+          "code": "identifier_not_permitted"
+        }
+      ],
+      "expectation": {
+        "logtoSubject": "jane@example.com"
+      }
+    },
+    {
+      "id": "reject-display-name-as-account",
+      "description": "A display name with a space used as the local account id.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6IkphbmUgU21pdGgiLCJub25jZSI6IjNhTFk3Y0tZTUJTdkFVYzhBeEt5SWhuSiIsImlhdCI6MTc5NDc0NDAwMCwiZXhwIjoxNzk0NzQ0MTIwfQ.Op8C162r-aWgK0RToofbRkpiZO73rJoyI3pDnJ3eOZMq7C8VYDHMrKzYwjFrhRtAxAXMqR5TsTvUWR3uKHqhBw",
+          "expect": "reject",
+          "code": "identifier_not_permitted"
+        }
+      ],
+      "expectation": {
+        "localAccountId": "Jane Smith"
+      }
+    },
+    {
+      "id": "reject-subject-mismatch",
+      "description": "sub differs from Central's identity record.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX290aGVycGVyc29uIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiItVDg1UlJSTUpUVFVzREJYWlFJSlpkZmgiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.QTD60jwDES2BCPGG194L9Tedeej3lBDKPYLDDZcso2h8g76II7B9LhGYpGROnhIt99b8pZkK9gnKASSjncbHAw",
+          "expect": "reject",
+          "code": "subject_mismatch"
+        }
+      ]
+    },
+    {
+      "id": "reject-organisation-mismatch",
+      "description": "org differs from Central's organisation record.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3VucmVsYXRlZDEiLCJsdSI6InVzZXItMDAwMS1hYmNkIiwibGEiOiJhY2N0LTAwMDEtYWJjZCIsIm5vbmNlIjoiejJsM0pNZ1FfQzBzd2VjdTA4QWlCanZvIiwiaWF0IjoxNzk0NzQ0MDAwLCJleHAiOjE3OTQ3NDQxMjB9.iSWe86pnVrsY63T0cTssCT0I4bA1zkq7w4zbNoRobE65-OXMNuZuN7A5r4w6fplUODIDmbTlMzUPHXCb_KsIBg",
+          "expect": "reject",
+          "code": "organisation_mismatch"
+        }
+      ]
+    },
+    {
+      "id": "reject-account-mismatch",
+      "description": "la differs from the command's local account.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3Qtb3RoZXItMDAwMiIsIm5vbmNlIjoid0ktbk9tdUFCSEt1aUp3MEplbDFrZGVuIiwiaWF0IjoxNzk0NzQ0MDAwLCJleHAiOjE3OTQ3NDQxMjB9.Yx1HRZwtItDRXaPUy0Q2lqj-LDm6Q2DQpAmJua2thO5ekUITHkks9EyuiiqDH0c9g-Hf56ateJVAPXvSQjLvAA",
+          "expect": "reject",
+          "code": "account_mismatch"
+        }
+      ]
+    },
+    {
+      "id": "reject-local-user-mismatch",
+      "description": "lu differs from the command's local user.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci1vdGhlci0wMDAyIiwibGEiOiJhY2N0LTAwMDEtYWJjZCIsIm5vbmNlIjoiLTJVa0Z0Y2ZLdjJaZVpVb0FqYzllQzhHIiwiaWF0IjoxNzk0NzQ0MDAwLCJleHAiOjE3OTQ3NDQxMjB9.ezMURuAyNqHNJkQWs5ihuN3UgOhjiXgWpvJ5W3V3T1quwxJ4Wfbk65tMTUQgzQhxnUnpT-9jvVRAGhwGVA7fCw",
+          "expect": "reject",
+          "code": "account_mismatch"
+        }
+      ]
+    },
+    {
+      "id": "reject-replayed-nonce",
+      "description": "Same nonce resubmitted, then a different token carrying the same nonce.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiI3VHVEUXdVRlNyaERFeDdqcjZDMUhybzQiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.YvJ1G4JdUGIWIpSeVGCIDxoz0x9yOjXxOJryNLXcNtGsyCXyHoZhFt-kXVw2C7ykJZYtRNgldouZ4d9C1ESzCg",
+          "expect": "accept",
+          "result": {
+            "productId": "sorted",
+            "nonce": "7TuDQwUFSrhDEx7jr6C1Hro4",
+            "issuedAt": "2026-11-15T12:00:00.000Z",
+            "expiresAt": "2026-11-15T12:02:00.000Z"
+          }
+        },
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiI3VHVEUXdVRlNyaERFeDdqcjZDMUhybzQiLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.YvJ1G4JdUGIWIpSeVGCIDxoz0x9yOjXxOJryNLXcNtGsyCXyHoZhFt-kXVw2C7ykJZYtRNgldouZ4d9C1ESzCg",
+          "expect": "reject",
+          "code": "replayed"
+        },
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiI3VHVEUXdVRlNyaERFeDdqcjZDMUhybzQiLCJpYXQiOjE3OTQ3NDQwMDEsImV4cCI6MTc5NDc0NDEyMX0.l4egVHTOpq21PinGCHAfmGLH-p7rBOpKyUAc9BrTruXOuKqzJjxMlpk9fCsMyPfQem20Un3dNuVMbh3-PdFeCQ",
+          "expect": "reject",
+          "code": "replayed"
+        }
+      ]
+    },
+    {
+      "id": "reject-two-segments",
+      "description": "Token with two segments.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "a.b",
+          "expect": "reject",
+          "code": "malformed"
+        }
+      ]
+    },
+    {
+      "id": "reject-header-not-json",
+      "description": "Header segment decodes to non-JSON.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "bm90IGpzb24.eyJpc3MiOiJzb3J0ZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoidXNyX2FiY2RlZjEyIiwib3JnIjoib3JnX3RlbmFudGEwMSIsImx1IjoidXNlci0wMDAxLWFiY2QiLCJsYSI6ImFjY3QtMDAwMS1hYmNkIiwibm9uY2UiOiJRdFB5azJ3dVd6ODQ3aHd3UUZlUGN1TF8iLCJpYXQiOjE3OTQ3NDQwMDAsImV4cCI6MTc5NDc0NDEyMH0.AAAA",
+          "expect": "reject",
+          "code": "malformed"
+        }
+      ]
+    },
+    {
+      "id": "reject-payload-is-array",
+      "description": "Payload decodes to a JSON array, not an object.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic29ydGVkLTIwMjYtMTEifQ.W10.AAAA",
+          "expect": "reject",
+          "code": "malformed"
+        }
+      ]
+    },
+    {
+      "id": "reject-token-over-4096-characters",
+      "description": "Token longer than the 4096 character limit.",
+      "expect": "reject",
+      "steps": [
+        {
+          "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expect": "reject",
+          "code": "malformed"
+        }
+      ]
+    }
+  ]
+}

@@ -96,7 +96,7 @@ test('rejects an unknown event type, an unknown version and an unlisted source',
   assert.equal(tx.log.length, 0);
 });
 
-test('production registry is empty, so no business event can be written yet', async () => {
+test('an empty registry rejects every business event', async () => {
   const writer = createOutboxWriter([]);
   await assert.rejects(writer.enqueue(fakeTx(), base()), { code: 'unknown_event_type' });
 });

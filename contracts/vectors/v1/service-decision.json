@@ -1,0 +1,1061 @@
+{
+  "contract": "titan-central.service-decision",
+  "contract_version": "1.0.0",
+  "source": "apps/control-api/src/service-decision-handler.mjs with service-decision-auth.mjs, -request.mjs",
+  "notes": [
+    "This endpoint authenticates with a shared service bearer, not a signed token, so these are unsigned request and response pairs.",
+    "config.bearer and config.wrong_bearer are random test values generated when this file was built. Placeholders in headers are replaced by the runner.",
+    "Each case runs the real handler on loopback with the stubbed decision named in decision. decide_called states whether the decision function must run."
+  ],
+  "now": "2026-11-15T12:00:00.000Z",
+  "config": {
+    "issuer": "https://central.example.test",
+    "audience": "skilled-academy",
+    "bearer": "fz0ebpD1DRLL0yyzDyY6m3whsyu-F0q6o8QR0iPh3GDycT7Dj4Zp0SaCdtzMQSf7",
+    "wrong_bearer": "IUmLyI-Ge55QvlhKugZCWJnp-dcnnE2DybnOnYhqSKFNv2ngyfQ_Qof53EqBLM3r"
+  },
+  "cases": [
+    {
+      "id": "accept-allow",
+      "description": "Valid Central-signed-off request with an allowed decision; response echoes issuer, subject and requestId and sets expiresAt 300 seconds ahead.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 200,
+        "decide_called": true,
+        "body": {
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw",
+          "decision": {
+            "allowed": true,
+            "applicationId": "academy",
+            "organisationId": "central-org-0001",
+            "localUserId": "skilled-user-0001",
+            "localAccountId": "account-0001",
+            "membershipRevision": 1,
+            "entitlementRevision": 1,
+            "linkRevision": 1,
+            "expiresAt": "2026-11-15T12:05:00.000Z"
+          }
+        }
+      }
+    },
+    {
+      "id": "accept-subject-with-allowed-punctuation",
+      "description": "Subject uses colon, underscore and hyphen, all inside the identifier charset.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central:user_0001-a",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 200,
+        "decide_called": true,
+        "body": {
+          "issuer": "https://central.example.test",
+          "subject": "central:user_0001-a",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw",
+          "decision": {
+            "allowed": true,
+            "applicationId": "academy",
+            "organisationId": "central-org-0001",
+            "localUserId": "skilled-user-0001",
+            "localAccountId": "account-0001",
+            "membershipRevision": 1,
+            "entitlementRevision": 1,
+            "linkRevision": 1,
+            "expiresAt": "2026-11-15T12:05:00.000Z"
+          }
+        }
+      }
+    },
+    {
+      "id": "accept-subject-at-200-characters",
+      "description": "Subject at the 200 character maximum.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 200,
+        "decide_called": true,
+        "body": {
+          "issuer": "https://central.example.test",
+          "subject": "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw",
+          "decision": {
+            "allowed": true,
+            "applicationId": "academy",
+            "organisationId": "central-org-0001",
+            "localUserId": "skilled-user-0001",
+            "localAccountId": "account-0001",
+            "membershipRevision": 1,
+            "entitlementRevision": 1,
+            "linkRevision": 1,
+            "expiresAt": "2026-11-15T12:05:00.000Z"
+          }
+        }
+      }
+    },
+    {
+      "id": "accept-uppercase-organisation-uuid",
+      "description": "organisationId in upper case is accepted (case-insensitive UUID).",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 200,
+        "decide_called": true,
+        "body": {
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw",
+          "decision": {
+            "allowed": true,
+            "applicationId": "academy",
+            "organisationId": "central-org-0001",
+            "localUserId": "skilled-user-0001",
+            "localAccountId": "account-0001",
+            "membershipRevision": 1,
+            "entitlementRevision": 1,
+            "linkRevision": 1,
+            "expiresAt": "2026-11-15T12:05:00.000Z"
+          }
+        }
+      }
+    },
+    {
+      "id": "reject-unrelated-path-not-handled",
+      "description": "A different path is not this endpoint; the server answers 404 and no decision runs.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/other/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 404,
+        "decide_called": false
+      }
+    },
+    {
+      "id": "reject-get-method",
+      "description": "GET is refused with 405 before authentication.",
+      "request": {
+        "method": "GET",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 405,
+        "decide_called": false,
+        "body": {
+          "error": "method_not_allowed"
+        }
+      }
+    },
+    {
+      "id": "reject-query-string",
+      "description": "A query string on the path is refused with 400 before authentication.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision?x=1",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-missing-authorization",
+      "description": "No Authorization header.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 401,
+        "decide_called": false,
+        "body": {
+          "error": "unauthenticated"
+        }
+      }
+    },
+    {
+      "id": "reject-wrong-bearer",
+      "description": "Bearer of the right shape with a different value.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{wrong_bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 401,
+        "decide_called": false,
+        "body": {
+          "error": "unauthenticated"
+        }
+      }
+    },
+    {
+      "id": "reject-short-bearer",
+      "description": "Bearer shorter than 32 characters.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer short-token",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 401,
+        "decide_called": false,
+        "body": {
+          "error": "unauthenticated"
+        }
+      }
+    },
+    {
+      "id": "reject-bearer-outside-charset",
+      "description": "Bearer containing a character outside the contract charset.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 401,
+        "decide_called": false,
+        "body": {
+          "error": "unauthenticated"
+        }
+      }
+    },
+    {
+      "id": "reject-content-type-text-plain",
+      "description": "Content-Type text/plain.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "text/plain",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-content-type-non-utf8-charset",
+      "description": "JSON with a non-UTF-8 charset parameter.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json; charset=latin1",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-invalid-json",
+      "description": "Body is truncated JSON.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body_raw": "{\"applicationId\":"
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-body-over-2048-bytes",
+      "description": "Body larger than 2048 bytes.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body_raw": "{\"applicationId\":\"academy\",\"issuer\":\"https://central.example.test\",\"subject\":\"central-user-0001\",\"organisationId\":\"00000000-0000-4000-8000-000000000001\",\"requestId\":\"UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw\",\"padding\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}"
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-array-body",
+      "description": "Top-level JSON array.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": []
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-extra-email-field",
+      "description": "Request carries an email field, which is not part of the contract.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw",
+          "email": "jane@example.com"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-wrong-application",
+      "description": "applicationId is field, not academy.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "field",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-wrong-issuer",
+      "description": "issuer does not match the configured Central issuer.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://evil.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-organisation-not-uuid",
+      "description": "organisationId is not a UUID.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "org_tenanta01",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-request-id-too-short",
+      "description": "requestId is 31 characters.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2um"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-missing-subject",
+      "description": "subject is absent.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-email-as-subject",
+      "description": "An email address used as subject.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "jane@example.com",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-legacy-body-without-organisation",
+      "description": "Body without organisationId, as sent by the earlier Skilled client. Fails closed.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "allow",
+        "value": {
+          "allowed": true,
+          "applicationId": "academy",
+          "organisationId": "central-org-0001",
+          "localUserId": "skilled-user-0001",
+          "localAccountId": "account-0001",
+          "membershipRevision": 1,
+          "entitlementRevision": 1,
+          "linkRevision": 1
+        }
+      },
+      "expect": {
+        "status": 400,
+        "decide_called": false,
+        "body": {
+          "error": "invalid_request"
+        }
+      }
+    },
+    {
+      "id": "reject-decision-denied",
+      "description": "Central denies the account; no decision is returned.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "deny"
+      },
+      "expect": {
+        "status": 403,
+        "decide_called": true,
+        "body": {
+          "error": "account_not_authorised"
+        }
+      }
+    },
+    {
+      "id": "reject-decision-backend-unavailable",
+      "description": "The decision backend throws; the server answers 503 without detail.",
+      "request": {
+        "method": "POST",
+        "path": "/v1/integrations/academy/decision",
+        "headers": {
+          "authorization": "Bearer {{bearer}}",
+          "content-type": "application/json",
+          "accept": "application/json"
+        },
+        "body": {
+          "applicationId": "academy",
+          "issuer": "https://central.example.test",
+          "subject": "central-user-0001",
+          "organisationId": "00000000-0000-4000-8000-000000000001",
+          "requestId": "UWYNR5GCpJXeKnVnB4S4GlSnb8Nr2umnTTLtl3ln0Uw"
+        }
+      },
+      "decision": {
+        "mode": "unavailable"
+      },
+      "expect": {
+        "status": 503,
+        "decide_called": true,
+        "body": {
+          "error": "decision_unavailable"
+        }
+      }
+    }
+  ]
+}

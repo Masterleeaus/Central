@@ -31,11 +31,24 @@ export interface EventDefinition {
   readonly eventType: string;
   readonly schemaVersion: number;
   readonly sourceProducts: readonly string[];
+  /** Payload keys that must be present (not null or undefined). Optional; when absent, only the object shape is checked. */
+  readonly requiredPayloadFields?: readonly string[];
 }
 export type EventRegistry = readonly EventDefinition[];
 
-/** No business events exist yet. Tests inject their own registry (for example example.v1). */
-export const PRODUCTION_EVENT_REGISTRY: EventRegistry = [];
+/** Scheduled owns bookings. Its three booking events share one payload schema (docs/EVENTS.md, schemaVersion 1).
+ * Event type names use underscores: the registry pattern and the database CHECK both refuse dots. */
+export const SCHEDULED_BOOKING_REQUIRED_FIELDS: readonly string[] = [
+  'bookingId', 'companyId', 'occurredAt', 'serviceId', 'staffIds', 'startAt', 'endAt', 'timezone', 'status',
+];
+
+/** Accepted production events. Each entry is reviewed with docs/EVENTS.md. Tests inject their own registry
+ * (for example example.v1). */
+export const PRODUCTION_EVENT_REGISTRY: EventRegistry = [
+  { eventType: 'booking_created', schemaVersion: 1, sourceProducts: ['scheduled'], requiredPayloadFields: SCHEDULED_BOOKING_REQUIRED_FIELDS },
+  { eventType: 'booking_cancelled', schemaVersion: 1, sourceProducts: ['scheduled'], requiredPayloadFields: SCHEDULED_BOOKING_REQUIRED_FIELDS },
+  { eventType: 'booking_rescheduled', schemaVersion: 1, sourceProducts: ['scheduled'], requiredPayloadFields: SCHEDULED_BOOKING_REQUIRED_FIELDS },
+];
 
 export interface OutboxTx {
   query(text: string, values?: readonly unknown[]): Promise<SqlQueryResult>;
@@ -131,6 +144,11 @@ export function prepareEvent(registry: EventRegistry, input: OutboxEventInput): 
   const definition = registry.find((d) => d.eventType === eventType && d.schemaVersion === schemaVersion);
   if (!definition) throw new OutboxError('unknown_event_type', `unknown event ${eventType}.v${schemaVersion}`);
   if (!definition.sourceProducts.includes(sourceProduct)) throw new OutboxError('source_not_allowed', 'sourceProduct may not emit this event');
+  for (const field of definition.requiredPayloadFields ?? []) {
+    if ((payload as Record<string, unknown>)[field] === undefined || (payload as Record<string, unknown>)[field] === null) {
+      throw new OutboxError('invalid_payload', `payload is missing required field ${field}`);
+    }
+  }
 
   const canonical = canonicalJson(payload);
   if (Buffer.byteLength(canonical, 'utf8') > OUTBOX_MAX_PAYLOAD_BYTES) throw new OutboxError('payload_too_large', 'payload exceeds the outbox size limit');

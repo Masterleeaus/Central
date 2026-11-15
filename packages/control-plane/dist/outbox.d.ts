@@ -15,9 +15,15 @@ export interface EventDefinition {
     readonly eventType: string;
     readonly schemaVersion: number;
     readonly sourceProducts: readonly string[];
+    /** Payload keys that must be present (not null or undefined). Optional; when absent, only the object shape is checked. */
+    readonly requiredPayloadFields?: readonly string[];
 }
 export type EventRegistry = readonly EventDefinition[];
-/** No business events exist yet. Tests inject their own registry (for example example.v1). */
+/** Scheduled owns bookings. Its three booking events share one payload schema (docs/EVENTS.md, schemaVersion 1).
+ * Event type names use underscores: the registry pattern and the database CHECK both refuse dots. */
+export declare const SCHEDULED_BOOKING_REQUIRED_FIELDS: readonly string[];
+/** Accepted production events. Each entry is reviewed with docs/EVENTS.md. Tests inject their own registry
+ * (for example example.v1). */
 export declare const PRODUCTION_EVENT_REGISTRY: EventRegistry;
 export interface OutboxTx {
     query(text: string, values?: readonly unknown[]): Promise<SqlQueryResult>;
