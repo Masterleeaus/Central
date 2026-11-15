@@ -145,6 +145,16 @@ Every command runs in one transaction with one audit row. Locks are taken with `
 
 Relink to the account already linked is refused as a no-op.
 
+### Authorised link workflow (control-api)
+
+`apps/control-api/src/product-link-workflow.mjs` is the orchestration for an operator-authorised link or unlink. For a link it runs, in order: operator authority check, resolution of the current link (a live link is refused and goes to review), the product assertion check, then `TrustedProvisioningService.apply` with the assertion attached.
+
+- The assertion check is `LinkAssertionVerifier.check` through `apps/control-api/src/product-link-assertion-check.mjs`. It runs every rule in the verification order above except the nonce, so a bad assertion spends nothing.
+- The write then calls `verify` through `verifyLinkCommand`, which spends the nonce once before the link write. A replayed assertion is refused there, so one signed assertion cannot create two links.
+- Any check failure returns false to the workflow, which fails closed with a fixed message. No claim or record value is returned.
+- Fixture tests: `apps/control-api/test/product-link-assertion-check.test.mjs` runs every case in Skilled's `canonical-signed.json` through the check and the workflow.
+- `apps/control-api/src/product-link-proof.mjs` is an older proof format that does not match this contract. The workflow no longer uses it. Its removal is open (see Scope).
+
 ## Ambiguous cases: fail closed and record for review
 
 | Situation | Outcome | Recorded |
@@ -187,6 +197,7 @@ Each resolution writes one `provisioning_audit` row: request ID, reviewer (`acto
 ## Scope and what is not implemented
 
 - **Product side (not implemented here):** Sorted, Supercharged and LMS must hold the Ed25519 private key, issue opaque immutable local IDs, sign the assertion for each link, and never sign display names or emails.
+- Remove or keep `apps/control-api/src/product-link-proof.mjs`, the unused older proof format. Owner decision.
 - Review UI and a review queue listing are not implemented. Reviews are resolved only through `link_review_resolve`.
 - Migrations 0010 to 0013 are not present on this branch; 0014 is applied after 0009, and 0018 after 0014 (0015 is billing events on main).
 - Tests: `packages/control-plane/test/link-assertion.test.mjs` (rejection rules, replay, rotation, key validation), `link-lifecycle.test.mjs` (create, review, relink, unlink, digests), `link-trusted-flow.test.mjs` (verifier behind the trusted service, cross-tenant, cross-product, email-only), and `apps/control-api/test/session-revocation-provisioning.test.mjs` (unlink revokes one application's session). The lifecycle SQL was run against PostgreSQL 16 with migrations 0001 to 0009, 0014 and 0015. Resolution was verified through the built provisioner with real Ed25519 assertions: 37 checks covering approval, relink, stale revision, idempotent retry, rejection, claimed accounts, cross-tenant and non-operator refusal, the resolved-row trigger and the column grants. The existing `tests/sql/rls_two_tenant.sql` passes on the same migrations. Tests for the new behaviour: `packages/control-plane/test/link-review-resolution.test.mjs`, `apps/control-api/test/link-key-config.test.mjs`, `apps/control-api/test/link-review-route.test.mjs`.

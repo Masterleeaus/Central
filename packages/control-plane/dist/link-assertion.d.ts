@@ -62,6 +62,10 @@ export declare class LinkAssertionVerifier {
     constructor(keySets: readonly ProductLinkKeySet[], nonces: LinkNonceStore, clock?: () => string);
     /** Throws LinkAssertionRejected with a fixed code. Nonce is consumed only after every other check passes. */
     verify(token: unknown, expected: LinkAssertionExpectation): Promise<LinkAssertionResult>;
+    /** Every check in `verify` except the nonce. It spends nothing, so a caller can reject a bad assertion before
+     * an authorised write. The write must still call `verify`, which is the only step that spends the nonce. */
+    check(token: unknown, expected: LinkAssertionExpectation): Promise<LinkAssertionResult>;
+    private inspect;
 }
 /** Nonce store on PostgreSQL. Runs as titan_trusted_writer (migration 0014). Expired rows are pruned in the same
  * transaction, which bounds the table to the replay window: an assertion past expiry is rejected anyway. */

@@ -98,6 +98,17 @@ export class LinkAssertionVerifier {
     }
     /** Throws LinkAssertionRejected with a fixed code. Nonce is consumed only after every other check passes. */
     async verify(token, expected) {
+        const { result, now } = await this.inspect(token, expected);
+        if (!(await this.nonces.consume(result.productId, result.nonce, result.expiresAt, now)))
+            fail('replayed');
+        return result;
+    }
+    /** Every check in `verify` except the nonce. It spends nothing, so a caller can reject a bad assertion before
+     * an authorised write. The write must still call `verify`, which is the only step that spends the nonce. */
+    async check(token, expected) {
+        return (await this.inspect(token, expected)).result;
+    }
+    async inspect(token, expected) {
         const now = this.clock();
         const nowMs = Date.parse(now);
         if (!Number.isFinite(nowMs))
@@ -161,9 +172,7 @@ export class LinkAssertionVerifier {
         if (claims.lu !== expected.localUserId || claims.la !== expected.localAccountId)
             fail('account_mismatch');
         const expiresAt = new Date(exp * 1000).toISOString();
-        if (!(await this.nonces.consume(productId, claims.nonce, expiresAt, now)))
-            fail('replayed');
-        return { productId, nonce: claims.nonce, issuedAt: new Date(iat * 1000).toISOString(), expiresAt };
+        return { now, result: { productId, nonce: claims.nonce, issuedAt: new Date(iat * 1000).toISOString(), expiresAt } };
     }
 }
 /** Nonce store on PostgreSQL. Runs as titan_trusted_writer (migration 0014). Expired rows are pruned in the same
