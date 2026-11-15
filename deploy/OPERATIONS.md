@@ -87,7 +87,7 @@ The operator (admin) plane stays off until `TITAN_OPERATOR_ORGANISATION_ID` or `
    Exit code 0 means every operator value is present and well-formed. Exit code 1 lists each missing or placeholder variable by name.
 5. Restart the service and confirm the health check (step 3 of "Install and operate the service").
 
-Tenant-administrator role IDs (for the mutation routes in issue #34) are not yet configured. They are owner-provided values and have no configuration key in the code yet.
+Tenant-administrator role IDs (issue #34) are read from `TITAN_TENANT_ADMIN_ROLE_IDS`. The value is owner-provided and not in the repository. While it is unset, `POST /v1/admin/tenant/provision` answers 503 `provisioning_disabled`. Set it only with the Logto owner's reviewed IDs, then restart the service.
 ## Authentication overload and rate-limit operations
 
 Before enabling browser rollout, confirm the public reverse proxy applies
