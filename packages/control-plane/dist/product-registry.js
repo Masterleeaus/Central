@@ -23,6 +23,16 @@ export const LEGACY_TO_PRODUCT = {
     desk: 'supercharged',
     academy: 'lms',
 };
+/**
+ * Application id -> product for link assertions only (docs/LINKING.md). Same rules as LEGACY_TO_PRODUCT, plus
+ * scheduled, which has no legacy application id. LEGACY_TO_PRODUCT stays unchanged: it types ApplicationId, drives
+ * the OIDC plan and planLookup (which needs a validated origin per entry), so adding scheduled there would change
+ * those contracts too.
+ */
+export const LINK_APPLICATION_TO_PRODUCT = {
+    ...LEGACY_TO_PRODUCT,
+    scheduled: 'scheduled',
+};
 /** Canonical products that never had a legacy application id. They must declare legacyId null. */
 export const LEGACY_FREE_PRODUCTS = ['scheduled'];
 /** Canonical products that have a legacy application id (the products in LEGACY_TO_PRODUCT). */
