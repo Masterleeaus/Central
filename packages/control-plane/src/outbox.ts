@@ -16,7 +16,8 @@ export type OutboxErrorCode =
   | 'missing_tenant' | 'invalid_tenant' | 'unknown_event_type' | 'source_not_allowed'
   | 'invalid_field' | 'invalid_payload' | 'payload_too_large' | 'idempotency_conflict'
   | 'bad_signature' | 'tenant_mismatch' | 'invalid_envelope' | 'not_dead' | 'not_pending' | 'route_mismatch'
-  | 'no_active_key' | 'insecure_endpoint' | 'transport_failed';
+  | 'no_active_key' | 'insecure_endpoint' | 'transport_failed'
+  | 'stale' | 'from_future';
 
 export class OutboxError extends Error {
   constructor(readonly code: OutboxErrorCode, message: string) {

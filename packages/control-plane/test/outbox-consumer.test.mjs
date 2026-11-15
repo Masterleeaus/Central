@@ -15,7 +15,9 @@ const envelope = (over = {}) => {
   e.signature = sign(e);
   return e;
 };
-const consumer = { consumer: 'desk-inbox', organisationId: ORG_A, eventTypes: ['example'], secret: SECRET };
+// The envelope fixtures are stamped 2026-01-01, so the consumer clock is pinned to that day (freshness window applies).
+const FIXTURE_NOW = () => Date.parse('2026-01-01T00:00:00.000Z');
+const consumer = { consumer: 'desk-inbox', organisationId: ORG_A, eventTypes: ['example'], secret: SECRET, now: FIXTURE_NOW };
 
 // Fake transaction backed by a Set of recorded keys, mirroring the primary key on (consumer, idempotency_key).
 function fakeTx(keys = new Set()) {

@@ -1,6 +1,10 @@
 import { OutboxError, assertTenantId } from './outbox.js';
 import { verifyEnvelopeWithKeys } from './outbox-publisher.js';
 import { resolveRouteKeys } from './outbox-keys.js';
+/** Replay window for envelope.occurredAt. These values match Scheduled's verifier (conformance B-08, B-09, E-07, E-08).
+ * An envelope older than the window, or more than the skew ahead of this consumer's clock, is refused before any effect. */
+export const MAX_ENVELOPE_AGE_MS = 86_400 * 1000;
+export const MAX_ENVELOPE_FUTURE_SKEW_MS = 300 * 1000;
 function parseEnvelope(value) {
     const e = value;
     if (!e || typeof e !== 'object')
@@ -21,10 +25,19 @@ export async function handleInbound(tx, consumer, rawEnvelope, effect) {
     const envelope = parseEnvelope(rawEnvelope);
     const keys = resolveRouteKeys({ consumer: consumer.consumer, secret: consumer.secret, keys: consumer.keys });
     const now = consumer.now ?? (() => Date.now());
+    const nowMs = now();
     // Any key valid at this moment may verify. An expired or not-yet-valid key does not.
-    if (!verifyEnvelopeWithKeys(envelope, keys, now())) {
+    if (!verifyEnvelopeWithKeys(envelope, keys, nowMs)) {
         throw new OutboxError('bad_signature', 'envelope signature does not verify with a key valid now');
     }
+    // occurredAt is covered by the signature, so it is checked only after the signature verifies.
+    const occurredMs = Date.parse(envelope.occurredAt);
+    if (!Number.isFinite(occurredMs))
+        throw new OutboxError('invalid_envelope', 'envelope.occurredAt is not a valid time');
+    if (occurredMs - nowMs > MAX_ENVELOPE_FUTURE_SKEW_MS)
+        throw new OutboxError('from_future', 'envelope.occurredAt is ahead of this consumer clock by more than the allowed skew');
+    if (nowMs - occurredMs > MAX_ENVELOPE_AGE_MS)
+        throw new OutboxError('stale', 'envelope.occurredAt is older than the replay window');
     if (assertTenantId(envelope.organisationId) !== assertTenantId(consumer.organisationId)) {
         throw new OutboxError('tenant_mismatch', 'event belongs to another tenant');
     }

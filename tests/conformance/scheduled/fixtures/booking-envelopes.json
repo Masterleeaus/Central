@@ -305,8 +305,8 @@
         "accepted": false,
         "reason": "stale"
       },
-      "centralOutcome": "processed",
-      "note": "Scheduled rejects anything older than 86400 seconds. Central has no age check on inbound envelopes."
+      "centralOutcome": "stale",
+      "note": "Scheduled rejects anything older than 86400 seconds. Central refuses the same window before any effect."
     },
     {
       "id": "B-09",
@@ -343,8 +343,8 @@
         "accepted": false,
         "reason": "from_future"
       },
-      "centralOutcome": "processed",
-      "note": "Scheduled allows 300 seconds of future skew. Central has no occurredAt check on inbound envelopes."
+      "centralOutcome": "from_future",
+      "note": "Scheduled allows 300 seconds of future skew. Central refuses anything further ahead before any effect."
     },
     {
       "id": "B-10",

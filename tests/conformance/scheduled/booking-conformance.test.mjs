@@ -4,9 +4,7 @@
 // BookingEventEnvelope, SignedEventVerifier). Each case records Scheduled's verdict and the outcome Central's
 // handleInbound must reach (centralOutcome).
 //
-// Mismatches are expected-fail (node:test `todo`). They run, and their failure is reported as TODO without failing the
-// suite. A "today" pin records behaviour that matches the contract. Expected-fail tests that start passing mean the
-// matching production change has landed: remove the todo option and keep the assertion.
+// Every case is a hard assertion. Freshness (B-08, B-09) is enforced by handleInbound (issue #146).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -17,7 +15,6 @@ const fixture = JSON.parse(readFileSync(new URL('./fixtures/booking-envelopes.js
 
 const EVENT_NAMES = ['booking_created', 'booking_cancelled', 'booking_rescheduled'];
 const WIRE_NAME = /^[a-z][a-z0-9_]{0,63}$/;
-const TODO_FRESHNESS = 'expected-fail: Central has no occurredAt age or future-skew check on inbound envelopes';
 
 const bookingCase = (id) => {
   const found = fixture.cases.find((c) => c.id === id);
@@ -172,7 +169,7 @@ test('booking fixtures: Scheduled verdicts record the signature, freshness and e
   assert.equal(bookingCase('B-04').scheduledVerdict.accepted, true);
 });
 
-// ---------- expected-fail mismatches ----------
+// ---------- producer registry and freshness ----------
 
 test('booking_created: Central production registry lists the event for scheduled', () => {
   const entry = PRODUCTION_EVENT_REGISTRY.find((d) => d.eventType === 'booking_created' && d.schemaVersion === 1);
@@ -192,19 +189,14 @@ test('booking_rescheduled: Central production registry lists the event for sched
   assert.ok(entry.sourceProducts.includes('scheduled'));
 });
 
-test('B-08 booking_created-stale: Central rejects an envelope Scheduled calls stale (expected-fail)', { todo: TODO_FRESHNESS }, async () => {
+test('B-08 booking_created-stale: Central rejects an envelope Scheduled calls stale', async () => {
   const { outcome, effects } = run('B-08');
   await assert.rejects(outcome, (error) => error instanceof OutboxError && error.code === 'stale');
   assert.equal(effects(), 0);
 });
 
-test('B-09 booking_rescheduled-from-future: Central rejects an envelope Scheduled calls from_future (expected-fail)', { todo: TODO_FRESHNESS }, async () => {
+test('B-09 booking_rescheduled-from-future: Central rejects an envelope Scheduled calls from_future', async () => {
   const { outcome, effects } = run('B-09');
   await assert.rejects(outcome, (error) => error instanceof OutboxError && error.code === 'from_future');
   assert.equal(effects(), 0);
-});
-
-test('B-08 and B-09: today Central accepts stale and future-dated envelopes that Scheduled rejects (pin)', async () => {
-  assert.equal(await run('B-08').outcome, 'processed');
-  assert.equal(await run('B-09').outcome, 'processed');
 });

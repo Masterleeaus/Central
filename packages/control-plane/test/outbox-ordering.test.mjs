@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { handleInbound, canonicalJson } from '../dist/index.js';
+// Envelopes below are stamped 2026-01-01; the consumer clock is pinned to that day so the freshness window does not apply.
+const FIXTURE_NOW = () => Date.parse('2026-01-01T00:00:00.000Z');
 
 // Ordering contract (docs/EVENTS.md, "Ordering"):
 //  - The PUBLISHER keeps each tenant's events in outbox order (claim rule, verified on PostgreSQL 16 in
@@ -36,7 +38,7 @@ function dedupeTx(keys) {
 function stream(organisationId, consumerName = `inbox-${organisationId.slice(-1)}`) {
   const keys = new Set();
   const effects = [];
-  const identity = { consumer: consumerName, organisationId, eventTypes: ['example'], secret: SECRET };
+  const identity = { consumer: consumerName, organisationId, eventTypes: ['example'], secret: SECRET, now: FIXTURE_NOW };
   return {
     effects,
     async deliver(envelope) {
@@ -91,7 +93,7 @@ test("a consumer bound to tenant A never applies tenant B's events, so they cann
 
 test('a failed effect leaves the key unrecorded so a redelivery runs it in order', async () => {
   const keys = new Set();
-  const identity = { consumer: 'inbox-A', organisationId: ORG_A, eventTypes: ['example'], secret: SECRET };
+  const identity = { consumer: 'inbox-A', organisationId: ORG_A, eventTypes: ['example'], secret: SECRET, now: FIXTURE_NOW };
   const effects = [];
   let failOnce = true;
   const effect = async (_tx, e) => {

@@ -150,6 +150,13 @@ publisher `keys` with the previous key (its `notAfter` is T1) and the new key (i
 publisher switches to the new key at T0; (3) after T1, remove the previous key from both sides. Leave a margin of several
 minutes between T0 and T1 so that clock skew between the publisher and consumer cannot open a gap.
 
+## Freshness
+
+A consumer checks `occurredAt` after the signature verifies and before any effect runs. It refuses an envelope with
+`stale` when `occurredAt` is more than 86400 seconds before its clock, and with `from_future` when `occurredAt` is more
+than 300 seconds after its clock. A refused envelope records no idempotency key, and its signed `occurredAt` cannot change, so a
+redelivery is refused the same way. Both limits match Scheduled's verifier. The window is an owner decision: see issue #146.
+
 ## Ordering
 
 Guaranteed for one tenant:

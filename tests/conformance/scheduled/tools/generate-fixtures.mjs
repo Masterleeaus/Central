@@ -194,8 +194,8 @@ const variants = {
   wrongTenant: { body: signedBodies.wrongTenant, centralOutcome: 'tenant_mismatch' },
   unacceptedType: { body: signedBodies.unacceptedType, centralOutcome: 'unknown_event_type' },
   unsigned: { body: envelope(), centralOutcome: 'invalid_envelope' },
-  stale: { body: signedBodies.stale, centralOutcome: 'processed', note: 'Central does not check occurredAt age. Scheduled rejects anything older than 86400 seconds.' },
-  future: { body: signedBodies.future, centralOutcome: 'processed', note: 'Central does not check occurredAt against its clock. Scheduled allows 300 seconds of skew.' },
+  stale: { body: signedBodies.stale, centralOutcome: 'stale', note: 'Scheduled rejects anything older than 86400 seconds. Central refuses the same window before any effect.' },
+  future: { body: signedBodies.future, centralOutcome: 'from_future', note: 'Scheduled allows 300 seconds of skew. Central refuses anything further ahead before any effect.' },
   badSchemaVersion: { body: signedBodies.badSchemaVersion, centralOutcome: 'invalid_envelope' },
 };
 
