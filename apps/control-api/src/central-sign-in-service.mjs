@@ -13,7 +13,7 @@ import {createPostgresCompanySelectionStore} from './central-selection-pg.mjs';
 export function createCentralSignInService({pool,sessions,issuer,clientId,clientSecret,redirectUri,
   verifyIdToken,listEligibleCompanies,recheckCompany,listOrganisations,getCompanyName,fetcher,stateStore,selectionStore,sealer,clock,
   enableCompanySelection=false,
-  allowInsecureLocalhost=false,logger}={}){
+  allowInsecureLocalhost=false,logger,activityRecorder=null}={}){
   const customAuthority=typeof listEligibleCompanies==='function'&&typeof recheckCompany==='function';
   const builtinAuthority=listEligibleCompanies==null&&recheckCompany==null&&typeof getCompanyName==='function';
   if(!pool?.connect||typeof sessions?.issue!=='function'||typeof verifyIdToken!=='function'||(!customAuthority&&!builtinAuthority))
@@ -39,6 +39,6 @@ export function createCentralSignInService({pool,sessions,issuer,clientId,client
   const handler=createCentralOidcBrowserHandler({oidcLogin,sessions,selectionFlow,
     listEligibleCompanies:listEligibleCompanies??authority.listEligibleCompanies,
     recheckCompany:recheckCompany??authority.recheckCompany,allowInsecureLocalhost,
-    ...(logger?{logger}:{})});
+    ...(logger?{logger}:{}),activityRecorder});
   return Object.freeze({handler});
 }

@@ -2,7 +2,7 @@
  * durable one-use PKCE state, signed ID-token verification and nonce checking.
  * No public route is mounted until the host integrates this handler explicitly.
  */
-import {randomBytes} from 'node:crypto';
+import {randomBytes,randomUUID} from 'node:crypto';
 import {isSecureEndpoint,insecureLocalhostAllowed} from './endpoint-policy.mjs';
 import {createRateLimiter} from './rate-limit.mjs';
 import {createConcurrencyLimiter} from './concurrency-limit.mjs';
@@ -13,6 +13,27 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const headers={'cache-control':'no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff'};
 const cookie=(value,age)=>BINDING+'='+value+'; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age='+age;
 const clearBinding=()=>cookie('',0);
+// Activity history (issue #16, on the #36 recorder). Only login outcomes with a known company are recorded.
+// Denials before a company is chosen have no trusted organisation, so they are not written (see docs/RETENTION.md section 6).
+const ACTIVITY_TIMEOUT_MS=2000;
+const withTimeout=(promise,ms)=>{let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('timeout')),ms);timer.unref?.();})]).finally(()=>clearTimeout(timer));};
+export function centralLoginActivityInput({companyId,outcome,reason}){
+  const allowed=outcome==='success';
+  return {
+    organisationId:companyId,
+    actorKind:'service',
+    actorId:'central-oidc-login',
+    action:allowed?'login.succeeded':'login.denied',
+    targetType:'organisation',
+    targetId:companyId,
+    sourceProduct:'central',
+    outcome:allowed?'success':'denied',
+    correlationId:`login-${randomUUID()}`,
+    detail:allowed
+      ?{decision:'allow',reason:'allowed',status:303}
+      :{decision:'deny',reason,status:403},
+  };
+}
 const respond=(res,status,error,cookies)=>{
   res.writeHead(status,{...headers,'content-type':'application/json; charset=utf-8',...(cookies?{'set-cookie':cookies}:{})});
   res.end(JSON.stringify({error}));
@@ -47,7 +68,7 @@ function eligibleCompanyIds(entries){
  */
 export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligibleCompanies,recheckCompany,selectionFlow,
   allowInsecureLocalhost=insecureLocalhostAllowed(),clientIp=req=>req.socket?.remoteAddress??'unknown',
-  logger=()=>{},concurrencyLimits={perKey:3,globalLimit:48},rateLimits={ip:{limit:30,windowMs:60000},subject:{limit:10,windowMs:60000}}}={}){
+  logger=()=>{},activityRecorder=null,concurrencyLimits={perKey:3,globalLimit:48},rateLimits={ip:{limit:30,windowMs:60000},subject:{limit:10,windowMs:60000}}}={}){
   if(typeof oidcLogin?.begin!=='function'||typeof oidcLogin?.complete!=='function'||
     typeof sessions?.issue!=='function'||typeof listEligibleCompanies!=='function'||typeof recheckCompany!=='function')
     throw new TypeError('trusted central OIDC dependencies required');
@@ -55,6 +76,12 @@ export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligible
   const subjectLimiter=createRateLimiter(rateLimits.subject);
   const concurrent=createConcurrencyLimiter(concurrencyLimits);
   const audit=(event,fields={})=>{try{logger(event,fields);}catch{/* never log sensitive tokens */}};
+  // Never throws. A recording failure is logged (error class only) and the login response is unchanged (fail open, fail visible).
+  const recordLogin=async(input)=>{
+    if(typeof activityRecorder!=='function')return;
+    try{await withTimeout(Promise.resolve().then(()=>activityRecorder(input)),ACTIVITY_TIMEOUT_MS);}
+    catch(error){audit('central_login_activity_failed',{error_class:error?.message==='timeout'?'RecordTimeout':(error?.name??'Error'),outcome:input.outcome});}
+  };
   const execute=async function handleCentralOidc(req,res){
     let url;
     try{url=new URL(req.url??'/','http://localhost');}catch{respond(res,400,'invalid_url');return true;}
@@ -103,9 +130,13 @@ export function createCentralOidcBrowserHandler({oidcLogin,sessions,listEligible
         }
         fail(403,'company_selection_required');return true;
       }
-      if(await recheckCompany({...identity,companyId})!==true){fail(403,'company_access_denied');return true;}
+      if(await recheckCompany({...identity,companyId})!==true){
+        await recordLogin(centralLoginActivityInput({companyId,outcome:'denied',reason:'company_access_denied'}));
+        fail(403,'company_access_denied');return true;
+      }
       const issued=await sessions.issue({identityId:verified.subject,companyId});
       if(typeof issued?.cookie!=='string'||!issued.cookie.startsWith('__Host-titan-central='))throw Error('invalid_session');
+      await recordLogin(centralLoginActivityInput({companyId,outcome:'success'}));
       res.writeHead(303,{...headers,location:'/central','set-cookie':[clearBinding(),issued.cookie]});
       res.end();
       audit('central_login_succeeded',{outcome:'allow'});
