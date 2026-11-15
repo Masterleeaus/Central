@@ -18,7 +18,7 @@
 
 import { createHash } from 'node:crypto';
 
-export const FLAG_PRODUCTS = ['sorted', 'supercharged', 'lms', 'central'] as const;
+export const FLAG_PRODUCTS = ['sorted', 'supercharged', 'lms', 'central', 'scheduled'] as const;
 export type FlagProduct = (typeof FLAG_PRODUCTS)[number];
 
 export const FLAG_ENVIRONMENTS = ['development', 'staging', 'production'] as const;
