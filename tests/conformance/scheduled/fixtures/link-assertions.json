@@ -1,0 +1,149 @@
+{
+  "source": "scheduled/src/link-assertion.js (signLinkAssertion, verifyLinkAssertion, publicJwk)",
+  "generatedBy": "tests/conformance/scheduled/tools/generate-fixtures.mjs",
+  "now": "2026-11-15T10:00:00.000Z",
+  "issuer": "scheduled",
+  "audience": "titan-central",
+  "centralKeyConfig": {
+    "kid": "scheduled-conformance-2026",
+    "jwk": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "K--HtNe-30Qj5ZkveIPN-I6hjv_P5zoGpeyR48owwR4"
+    },
+    "notBefore": "2026-01-01T00:00:00.000Z"
+  },
+  "cases": [
+    {
+      "id": "L-01",
+      "name": "valid-default",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiJFbDdpSzdvNHdLaFRBdlN6SDBWSnZDNl9zcFFRMWpERiIsImlhdCI6MTc5NDczNjgwMCwiZXhwIjoxNzk0NzM3MTAwfQ.Ajr1lR6cAsLx3yAHewXwT0yEYXDdQMLzhc8Z27RwsgsuekV7_4jrQTZcpG3XtS5BMfBhzBVnMrxDMPELQXvvAg",
+      "scheduledVerdict": {
+        "result": "accept"
+      },
+      "centralAfterRegistration": "accept",
+      "note": "Scheduled default lifetime (300 seconds). Central would accept this once scheduled is registered."
+    },
+    {
+      "id": "L-02",
+      "name": "valid-short-ttl",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiJwR1NwQ18tbXY2OGhLQnN6bTljSnlDTzBJQUVENXdhcCIsImlhdCI6MTc5NDczNjgwMCwiZXhwIjoxNzk0NzM2ODYwfQ.S6PfvHPzWT1EP78c7i_Fj3FhZoxr1Lh0g_zllu2anaPw9lNsABudsFaQug__nQtqEMLEwVsp52ogyTb6OfZDCQ",
+      "scheduledVerdict": {
+        "result": "accept"
+      },
+      "centralAfterRegistration": "accept"
+    },
+    {
+      "id": "L-03",
+      "name": "valid-max-ttl",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiJfeTBTYWxVVmtfMFhvdlpNcW9lNGVnZXlheGEyV2cydyIsImlhdCI6MTc5NDczNjgwMCwiZXhwIjoxNzk0NzM3MTAwfQ.-AK08RvWcdqCcva-3zZTdkwYf93c468Ikf-0O1f4WVpW_r4KlytB6ThPDeMh311ugiNCVg9ez1SaTir6PPLkDg",
+      "scheduledVerdict": {
+        "result": "accept"
+      },
+      "centralAfterRegistration": "accept"
+    },
+    {
+      "id": "L-04",
+      "name": "service-audience-used-as-link-audience",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ1cm46dGl0YW4tY2VudHJhbDpwcm9kdWN0OnNjaGVkdWxlZCIsInN1YiI6ImNlbnRyYWwtdXNlci0wMDAxIiwib3JnIjoiY2VudHJhbC1vcmctMDAwMSIsImx1Ijoic2NoZWR1bGVkLXVzZXItMDAwMSIsImxhIjoic2NoZWR1bGVkLWFjY291bnQtMDAwMSIsIm5vbmNlIjoiTk5LTGF5Q3Z4YWRDVHNsUUJ0MjY4UC0zX2FsV1pDRFkiLCJpYXQiOjE3OTQ3MzY4MDAsImV4cCI6MTc5NDczNzEwMH0.EGKo27yrY9_ev7GcI0B0oys7r56ZbjipPC-aEG7h2TpRd-8W-57WpWnZiDXJ_-stVtpgZOmHTBhJQ8YoVSfyCQ",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "aud does not match the Central audience"
+      },
+      "centralAfterRegistration": "wrong_audience",
+      "note": "Scheduled service audience is not the link audience titan-central."
+    },
+    {
+      "id": "L-05",
+      "name": "signed-by-other-key",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiJzc1RvYjJkejdZLW9PTzJ5allOME1jSEwyNjZhcC1udCIsImlhdCI6MTc5NDczNjgwMCwiZXhwIjoxNzk0NzM3MTAwfQ.uBOUNc7JOOmJ8GP9KxFQxClgLcP6t6Az7XdGFO41lVUVPVAyKU_yd6ZxIU8u37wT_3GNWHX15xvre84TuUvFCw",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "signature verification failed"
+      },
+      "centralAfterRegistration": "bad_signature"
+    },
+    {
+      "id": "L-06",
+      "name": "unknown-kid",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLXVua25vd24ta2lkIn0.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiJ6SU10dXNOQ1czemR4NjRLRXpTVzdYcDllZXA5czg0NyIsImlhdCI6MTc5NDczNjgwMCwiZXhwIjoxNzk0NzM3MTAwfQ.zw2J85NNWs3V_2RUf_tr4ajOmusa2eFp3Z2P5vipCY_9zO5gOjAb2TLZlsarqIStjZXGjEljQTSV7_9oMXKWCg",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "kid does not match a trusted key"
+      },
+      "centralAfterRegistration": "unknown_key"
+    },
+    {
+      "id": "L-07",
+      "name": "expired",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiJoR1NsRmw5Y2pIQzVBY2pPT0xCQldBMzVXWFc2S1ZEUCIsImlhdCI6MTc5NDczNjIwMCwiZXhwIjoxNzk0NzM2NTAwfQ.009hJRrt87TPgnE8X3XASj54Pkdcq88avYaVrCBcBPx_YMV4Gu9VVSGhWGJEpE7H2cQ2WrzyXAxf5b1iNNdYDw",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "assertion has expired"
+      },
+      "centralAfterRegistration": "expired"
+    },
+    {
+      "id": "L-08",
+      "name": "future-dated-within-clock-skew",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiJYbU1KMWJldmVtOFpxYkE2QjdKOHJxZDl3RUJuUEE0dSIsImlhdCI6MTc5NDczNjgxMCwiZXhwIjoxNzk0NzM3MTEwfQ.UP9_M5TIVvTWolXE-O-Tk3-KcDN3izf_k14M3SKrzk1-DABKAp-0RI_pwTTjWThQbGfiX2bLnrpsulTQRsTXDA",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "assertion is not yet valid"
+      },
+      "centralAfterRegistration": "accept",
+      "note": "Central tolerates 30 seconds of future iat. Scheduled has no skew allowance and rejects iat above its clock."
+    },
+    {
+      "id": "L-09",
+      "name": "future-dated-beyond-clock-skew",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiIta1I5Z2VweXBfMU9UczU1SEdnMm9wbkM4TEdPU0NhRSIsImlhdCI6MTc5NDczNjkyMCwiZXhwIjoxNzk0NzM3MjIwfQ.lFBpC_751Y0jMLaXwBbfcEeQv4zn7SUcQfs_BuM7sqWpX2PFBMgzQ6rAoziZsYsNhXLpR1n__L_OuEjQ-UGHDA",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "assertion is not yet valid"
+      },
+      "centralAfterRegistration": "future_dated"
+    },
+    {
+      "id": "L-10",
+      "name": "lifetime-over-300-seconds",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiJmNjc3TXdVWkpOLUNJVU9GRmFENUVGOXBHak1nbVB2USIsImlhdCI6MTc5NDczNjgwMCwiZXhwIjoxNzk0NzM3NDAwfQ.-RYaWhrdvai1_o37kxND_H6upQbdtnfueE1qP9BFC600K65nnLwS7w93l5thfqXSXR5HYDsX-YlJfu1QdxXwCw",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "exp must be after iat and at most 300 seconds later"
+      },
+      "centralAfterRegistration": "bad_lifetime",
+      "note": "Scheduled signer refuses lifetimes over 300 seconds, so the token is forged by hand."
+    },
+    {
+      "id": "L-11",
+      "name": "forbidden-email-claim",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiJSdHA5WkdvSnBKbWN5X3RWNlJBM1RKY2s3bzJDUDZFdCIsImlhdCI6MTc5NDczNjgwMCwiZXhwIjoxNzk0NzM2OTIwLCJlbWFpbCI6InBlcnNvbkBleGFtcGxlLnRlc3QifQ.-4J2O0ci16VUUo8nFf55U5Osc1Fcm-5UYVLBzFxaR9HcR9h1dafkY0-8qvnCSE3HDWR-6aEZxrEQ_xXiyRptDw",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "forbidden claim present: email"
+      },
+      "centralAfterRegistration": "forbidden_claim"
+    },
+    {
+      "id": "L-12",
+      "name": "algorithm-hs256",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwibm9uY2UiOiI2UnZTNGNCZmpGeFRYMjRQQzBMVzhaZjl3Q0RWOXF0ciIsImlhdCI6MTc5NDczNjgwMCwiZXhwIjoxNzk0NzM2OTIwfQ.fV-ylhkTRF4YbVExIJ5hESu_L8K49_jHzOA0sHd06mY8K6muuK-dkXz96Qs84IvqvUQBfEXV2k1FIqOZnl3qDg",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "alg must be EdDSA"
+      },
+      "centralAfterRegistration": "bad_algorithm"
+    },
+    {
+      "id": "L-13",
+      "name": "missing-nonce",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6InRpdGFuLWxpbmsrand0Iiwia2lkIjoic2NoZWR1bGVkLWNvbmZvcm1hbmNlLTIwMjYifQ.eyJpc3MiOiJzY2hlZHVsZWQiLCJhdWQiOiJ0aXRhbi1jZW50cmFsIiwic3ViIjoiY2VudHJhbC11c2VyLTAwMDEiLCJvcmciOiJjZW50cmFsLW9yZy0wMDAxIiwibHUiOiJzY2hlZHVsZWQtdXNlci0wMDAxIiwibGEiOiJzY2hlZHVsZWQtYWNjb3VudC0wMDAxIiwiaWF0IjoxNzk0NzM2ODAwLCJleHAiOjE3OTQ3MzY5MjB9.ZRUT9Bvg5mi0vjzLaUoZ6Qk8N0J_hUtW0Bnq4JvpZbjJAsvfjIF_d3-uaHXhvxljNCLVni3Hci9Q8F-zwho8DA",
+      "scheduledVerdict": {
+        "result": "reject",
+        "message": "missing claim: nonce"
+      },
+      "centralAfterRegistration": "missing_claim"
+    }
+  ]
+}
