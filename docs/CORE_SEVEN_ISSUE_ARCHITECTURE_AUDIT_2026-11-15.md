@@ -30,7 +30,7 @@ Every one of the 314 open issues had a Markdown checklist in this refreshed quer
 
 ### Blocked / overlapping source work
 
-- **Supercharged [PR #346](https://github.com/Masterleeaus/Supercharged/pull/346)**: proposes fail-closed Origin/Referer checking on `POST /widget/session/start` (aligns with config GET), refuses malformed origins/body types, and adds security tests. **Not merged** because the PR check pipeline was still failing in existing Postgres boot/inbox gates at the time of this review; do not bypass quality gates.
+- **Supercharged [PR #346](https://github.com/Masterleeaus/Supercharged/pull/346)**: implements proposed fail-closed Origin/Referer checking on `POST /widget/session/start` (aligns with config GET), refuses malformed origins/body types, and adds five security tests. All **five new tests passed** in [PR CI](https://github.com/Masterleeaus/Supercharged/actions/runs/43713067688); however, the overall PR workflow **failed** (fresh-Postgres `0018` references missing `u.company_id`, Inbox suppression check, migration 0020 assertion, and route-auth allowlist). **Not merged**. Both #345 and #346 overlap; preserve unique tests, select one canonical patch and keep release gates enforced.
 - **Supercharged [PR #345](https://github.com/Masterleeaus/Supercharged/pull/345)** overlaps #346 and must be reconciled to one canonical security fix, with unique tests preserved. Neither PR proves browser/provider runtime acceptance, and Origin headers alone are not authentication.
 - High-risk issues still open: Sorted #88/#100/#95, Supercharged #317/#343, Central #140/#141/#160, Skilled #300/#301, Scheduled #46/#47/#49 and Front Desk #45–#49. Do not tick remaining implementation work without reproducible evidence.
 
