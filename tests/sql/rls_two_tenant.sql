@@ -124,7 +124,8 @@ RESET ROLE;
 -- organisation as a bound parameter. The reader is tenant-scoped by that setting (migration 0008).
 SET LOCAL ROLE titan_trusted_reader;
 SELECT pg_temp.expect_count('trusted reader sees identities without a tenant set', 'SELECT id FROM titan.identities', 2);
-SELECT pg_temp.expect_count('trusted reader sees organisations without a tenant set', 'SELECT id FROM titan.organisations', 2);
+-- Scoped to this file's two fixtures: earlier CI steps insert other organisations into the same shared database.
+SELECT pg_temp.expect_count('trusted reader sees organisations without a tenant set', $s$SELECT id FROM titan.organisations WHERE id IN ('00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-00000000000b')$s$, 2);
 SELECT pg_temp.expect_count('trusted reader sees no memberships without a tenant set', 'SELECT id FROM titan.memberships', 0);
 SELECT pg_temp.expect_count('trusted reader sees no entitlements without a tenant set', 'SELECT id FROM titan.entitlements', 0);
 SELECT pg_temp.expect_count('trusted reader sees no account links without a tenant set', 'SELECT id FROM titan.local_account_links', 0);
