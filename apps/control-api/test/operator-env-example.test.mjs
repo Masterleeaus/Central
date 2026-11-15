@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { readOperatorConfig, createOperatorAdmin } from '../src/operator-config.mjs';
+import { readOperatorConfig, readTenantAdminConfig, createOperatorAdmin } from '../src/operator-config.mjs';
 import { createMetrics } from '../src/metrics.mjs';
 
 // Reads the active (uncommented) assignments of the shipped template. Values are placeholders or the
@@ -88,6 +88,8 @@ test('a placeholder M2M secret stops startup', () => {
   assert.throws(() => createOperatorAdmin({ env, verifyToken: async () => ({}), metrics: createMetrics(), fetcher: async () => ({}) }), /TITAN_LOGTO_M2M_CLIENT_SECRET/);
 });
 
-test('tenant-administrator role IDs (#34 mutations): owner must supply the values', { todo: 'needs the owner-provided tenant-administrator role IDs; no config key exists yet' }, () => {
-  assert.fail('add a config test once TITAN_TENANT_ADMIN_ROLE_IDS (or the agreed name) is read by the code');
+test('the template ships tenant-administrator role IDs (#34) unset: a commented placeholder, never an active value', () => {
+  assert.equal(fromTemplate.TITAN_TENANT_ADMIN_ROLE_IDS, undefined);
+  assert.match(template, /^# TITAN_TENANT_ADMIN_ROLE_IDS=REPLACE_ME$/m);
+  assert.equal(readTenantAdminConfig({ ...COMPLETE, TITAN_TENANT_ADMIN_ROLE_IDS: undefined }), null);
 });

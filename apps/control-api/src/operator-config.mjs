@@ -7,7 +7,7 @@ import {
   createPostgresLinkNonceStore, createPostgresCanonicalResolver,
 } from '../../../packages/control-plane/dist/index.js';
 import { createAdminHandler, createLogtoOperatorAuthoriser, OPERATOR_COMMAND_KINDS } from './admin.mjs';
-import { readOrganisationAccess } from '../../../packages/control-plane/dist/administration.js';
+import { readOrganisationAccess, createTenantAdministrationAuthorizer, createPostgresTenantAdministrationStore } from '../../../packages/control-plane/dist/administration.js';
 import { timedFetch } from './metrics.mjs';
 import { createFlagChangeHandler } from './config-admin.mjs';
 
@@ -42,6 +42,21 @@ export function readOperatorConfig(env) {
   if (roleIds.length < 1 || roleIds.length > 32 || new Set(roleIds).size !== roleIds.length || !roleIds.every(r => r !== PLACEHOLDER && ID.test(r)))
     throw new Error('invalid TITAN_OPERATOR_ROLE_IDS');
   return { organisationId, roleIds };
+}
+
+export const TENANT_ADMIN_ROLE_IDS_VARIABLE = 'TITAN_TENANT_ADMIN_ROLE_IDS';
+
+/** Logto organisation role IDs that mark a tenant administrator (issue #34). Owner-provided; never invented here.
+ * Returns null when unset or empty, which keeps POST /v1/admin/tenant/provision answering 503 provisioning_disabled.
+ * A placeholder or malformed value throws, naming only the variable. Read only when the operator plane is on. */
+export function readTenantAdminConfig(env) {
+  const raw = env[TENANT_ADMIN_ROLE_IDS_VARIABLE];
+  if (!present(raw)) return null;
+  if (typeof raw !== 'string' || raw === PLACEHOLDER) throw new Error(`invalid ${TENANT_ADMIN_ROLE_IDS_VARIABLE}`);
+  const roleIds = raw.split(',').map(s => s.trim());
+  if (roleIds.length < 1 || roleIds.length > 32 || new Set(roleIds).size !== roleIds.length || !roleIds.every(r => r !== PLACEHOLDER && ID.test(r)))
+    throw new Error(`invalid ${TENANT_ADMIN_ROLE_IDS_VARIABLE}`);
+  return Object.freeze(roleIds);
 }
 
 /** TITAN_OPERATOR_FLAG_CHANGES=1 enables POST /v1/admin/flags/change. Unset or 0 keeps the route off (404). */
@@ -98,6 +113,17 @@ export function createOperatorProvisioning({ pool, logto, linkKeySets }) {
   return (actor, context, command) => service.apply(actor, context, command);
 }
 
+/** Tenant mutation path (POST /v1/admin/tenant/provision): membership and membership_update only. The authority is
+ * the tenant policy (organisation owner or admin, Titan delegation rule, live Logto membership and administrator role),
+ * re-checked inside TrustedProvisioningService before any SQL. Link assertions are never verified on this route. */
+export function createTenantProvisioning({ pool, logto, administrativeRoleIds }) {
+  const resolve = createPostgresCanonicalResolver(pool);
+  const authorize = createTenantAdministrationAuthorizer({ verifier: logto, resolve, store: createPostgresTenantAdministrationStore(pool), administrativeRoleIds });
+  const refuseLinks = async () => { throw new Error('link commands are not served on the tenant route'); };
+  const service = new TrustedProvisioningService(new CentralProvisioner(pool), logto, authorize, resolve, refuseLinks);
+  return (actor, context, command) => service.apply(actor, context, command);
+}
+
 /** Builds the /v1/admin/ handler when the operator plane is on, otherwise returns null (route stays 404).
  * flags = { registry, store } is required only for the flag-change route. fetcher and metrics are injectable for tests. Logto calls are counted and timed through timedFetch.
  * Provisioning is wired only when both a database pool and link key sets are supplied; otherwise POST
@@ -136,5 +162,9 @@ export function createOperatorAdmin({ env, verifyToken, metrics, logger = () => 
   // Provisioning is wired only when a database pool and link key sets are both supplied.
   const provision = pool && linkKeySets && linkKeySets.length > 0 ? createOperatorProvisioning({ pool, logto: verifier, linkKeySets }) : undefined;
   const readOrganisation = pool ? (organisationId) => readOrganisationAccess(pool, organisationId) : undefined;
-  return createAdminHandler({ verifyToken, authoriseOperator, provision, readOrganisation, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
+  // Tenant mutations are wired only when tenant-administrator role IDs AND a database pool are configured. Otherwise the route answers 503.
+  const tenantRoleIds = readTenantAdminConfig(env);
+  if (tenantRoleIds && !pool) throw new Error(`${TENANT_ADMIN_ROLE_IDS_VARIABLE} requires a database pool`);
+  const provisionTenant = tenantRoleIds ? createTenantProvisioning({ pool, logto: verifier, administrativeRoleIds: tenantRoleIds }) : undefined;
+  return createAdminHandler({ verifyToken, authoriseOperator, provision, provisionTenant, readOrganisation, origins, productRegistry, logger, flagChange: flagChanges ? createFlagChangeHandler(flags) : undefined });
 }
