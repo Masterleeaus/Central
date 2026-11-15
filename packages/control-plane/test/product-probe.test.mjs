@@ -136,5 +136,5 @@ test('probe results are reported separately and carry no access-relevant fields'
 });
 
 test('definitions used by the probe are still the canonical set', () => {
-  assert.deepEqual(PRODUCT_DEFINITIONS.map((p) => p.id), ['sorted', 'supercharged', 'lms']);
+  assert.deepEqual(PRODUCT_DEFINITIONS.map((p) => p.id), ['sorted', 'supercharged', 'lms', 'scheduled']);
 });

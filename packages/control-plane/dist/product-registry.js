@@ -8,13 +8,14 @@
  * Pure module: no network calls, no environment reads. Runtime service origins
  * are supplied by the operator through ProductOperatorConfig.
  */
-export const PRODUCT_IDS = ['sorted', 'supercharged', 'lms'];
+export const PRODUCT_IDS = ['sorted', 'supercharged', 'lms', 'scheduled'];
 /** Capabilities every product must declare for the draft contract. */
 export const REQUIRED_CAPABILITIES = ['health', 'version', 'tenant-link:verify'];
 const EXPECTED_TENANT_KEY = {
     sorted: 'sorted.account_id',
     supercharged: 'supercharged.company_account',
     lms: 'lms.companyRef',
+    scheduled: 'scheduled.account_id',
 };
 /** Legacy application id -> canonical product id. The issue's ordering is field/desk/academy -> Sorted/Supercharged/LMS. */
 export const LEGACY_TO_PRODUCT = {
@@ -22,6 +23,10 @@ export const LEGACY_TO_PRODUCT = {
     desk: 'supercharged',
     academy: 'lms',
 };
+/** Canonical products that never had a legacy application id. They must declare legacyId null. */
+export const LEGACY_FREE_PRODUCTS = ['scheduled'];
+/** Canonical products that have a legacy application id (the products in LEGACY_TO_PRODUCT). */
+export const LEGACY_PRODUCT_IDS = PRODUCT_IDS.filter((id) => !LEGACY_FREE_PRODUCTS.includes(id));
 export const PRODUCT_DEFINITIONS = [
     {
         id: 'sorted',
@@ -52,6 +57,16 @@ export const PRODUCT_DEFINITIONS = [
         contractVersion: '0.1.0-draft',
         capabilities: ['health', 'version', 'tenant-link:verify', 'courses:read', 'certificates:read'],
         tenantKey: { kind: 'lms.companyRef', field: 'companyRef' },
+    },
+    {
+        id: 'scheduled',
+        legacyId: null,
+        displayName: 'Scheduled',
+        repository: { owner: 'Masterleeaus', name: 'Scheduled' },
+        audience: 'urn:titan-central:product:scheduled',
+        contractVersion: '0.1.0-draft',
+        capabilities: ['health', 'version', 'tenant-link:verify', 'bookings:read'],
+        tenantKey: { kind: 'scheduled.account_id', field: 'account_id' },
     },
 ];
 export class ProductRegistryError extends Error {
@@ -84,7 +99,13 @@ export function findDefinitionProblems(definitions) {
         if (ids.has(def.id))
             problems.push({ code: 'duplicate_id', message: `duplicate product id: ${def.id}` });
         ids.add(def.id);
-        if (!isKnownLegacyId(def.legacyId)) {
+        if (def.legacyId === null) {
+            // Only a product with no legacy id may omit one. Every product that has a legacy id must map to it (below).
+            if (!LEGACY_FREE_PRODUCTS.includes(def.id)) {
+                problems.push({ code: 'missing_legacy_id', message: `${def.id} must declare a legacy id` });
+            }
+        }
+        else if (!isKnownLegacyId(def.legacyId)) {
             problems.push({ code: 'unknown_legacy_id', message: `unknown legacy id: ${String(def.legacyId)}` });
         }
         else {

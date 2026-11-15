@@ -9,13 +9,17 @@ import type { ApplicationId } from './contracts.js';
  * Pure module: no network calls, no environment reads. Runtime service origins
  * are supplied by the operator through ProductOperatorConfig.
  */
-export declare const PRODUCT_IDS: readonly ["sorted", "supercharged", "lms"];
+export declare const PRODUCT_IDS: readonly ["sorted", "supercharged", "lms", "scheduled"];
 export type ProductId = (typeof PRODUCT_IDS)[number];
 /** Capabilities every product must declare for the draft contract. */
 export declare const REQUIRED_CAPABILITIES: readonly ["health", "version", "tenant-link:verify"];
-export type TenantKeyKind = 'sorted.account_id' | 'supercharged.company_account' | 'lms.companyRef';
+export type TenantKeyKind = 'sorted.account_id' | 'supercharged.company_account' | 'lms.companyRef' | 'scheduled.account_id';
 /** Legacy application id -> canonical product id. The issue's ordering is field/desk/academy -> Sorted/Supercharged/LMS. */
 export declare const LEGACY_TO_PRODUCT: Readonly<Record<ApplicationId, ProductId>>;
+/** Canonical products that never had a legacy application id. They must declare legacyId null. */
+export declare const LEGACY_FREE_PRODUCTS: readonly ProductId[];
+/** Canonical products that have a legacy application id (the products in LEGACY_TO_PRODUCT). */
+export declare const LEGACY_PRODUCT_IDS: readonly ProductId[];
 export interface TenantKeyDefinition {
     kind: TenantKeyKind;
     /**
@@ -26,7 +30,8 @@ export interface TenantKeyDefinition {
 }
 export interface ProductDefinition {
     id: ProductId;
-    legacyId: ApplicationId;
+    /** Legacy application id, or null for a product that never had one (scheduled). */
+    legacyId: ApplicationId | null;
     displayName: string;
     /** GitHub repository identity. Informational only: it never grants access and never yields a service origin. */
     repository: {
@@ -51,7 +56,7 @@ export interface ProductOperatorConfig {
     trustedOrigins: readonly string[];
 }
 export declare const PRODUCT_DEFINITIONS: readonly ProductDefinition[];
-export type RegistryErrorCode = 'unknown_product' | 'missing_product' | 'unknown_legacy_id' | 'legacy_mapping_mismatch' | 'duplicate_id' | 'duplicate_legacy_id' | 'duplicate_audience' | 'duplicate_repository' | 'duplicate_origin' | 'invalid_contract_version' | 'missing_required_capability' | 'invalid_tenant_key' | 'untrusted_origin' | 'missing_origin';
+export type RegistryErrorCode = 'unknown_product' | 'missing_product' | 'missing_legacy_id' | 'unknown_legacy_id' | 'legacy_mapping_mismatch' | 'duplicate_id' | 'duplicate_legacy_id' | 'duplicate_audience' | 'duplicate_repository' | 'duplicate_origin' | 'invalid_contract_version' | 'missing_required_capability' | 'invalid_tenant_key' | 'untrusted_origin' | 'missing_origin';
 export declare class ProductRegistryError extends Error {
     readonly code: RegistryErrorCode;
     constructor(code: RegistryErrorCode, message: string);

@@ -15,6 +15,8 @@ import {
   allApplications,
   ProductRegistryError,
   LEGACY_TO_PRODUCT,
+  planLookup,
+  originsForLegacyIds,
 } from '../dist/index.js';
 
 const SORTED = 'https://sorted.titanzero.io';
@@ -28,14 +30,14 @@ const expectCode = (fn, code) => assert.throws(fn, (e) => e instanceof ProductRe
 
 // Definitions
 
-test('default definitions are valid and cover all three products', () => {
+test('default definitions are valid and cover all four products', () => {
   assert.deepEqual(findDefinitionProblems(PRODUCT_DEFINITIONS), []);
-  assert.deepEqual(PRODUCT_DEFINITIONS.map((p) => p.id), ['sorted', 'supercharged', 'lms']);
+  assert.deepEqual(PRODUCT_DEFINITIONS.map((p) => p.id), ['sorted', 'supercharged', 'lms', 'scheduled']);
 });
 
 test('registry without operator origins leaves serviceOrigin null', () => {
   const reg = buildProductRegistry({ serviceOrigins: {}, trustedOrigins: [] });
-  assert.equal(reg.length, 3);
+  assert.equal(reg.length, 4);
   assert.ok(reg.every((p) => p.serviceOrigin === null));
 });
 
@@ -263,4 +265,59 @@ test('inspection is pure: it does not mutate its inputs', () => {
   const snapshot = structuredClone({ lms, config });
   inspectProductContract(lms, config);
   assert.deepEqual({ lms, config }, snapshot);
+});
+
+// Scheduled (no legacy id). Its origin stays optional, and it never appears in the legacy-keyed views.
+
+const SCHEDULED = 'https://scheduled.titanzero.io';
+
+test('scheduled is a canonical product with the expected audience, repository and no legacy id', () => {
+  const def = PRODUCT_DEFINITIONS.find((p) => p.id === 'scheduled');
+  assert.equal(def.legacyId, null);
+  assert.equal(def.audience, 'urn:titan-central:product:scheduled');
+  assert.equal(def.tenantKey.kind, 'scheduled.account_id');
+  assert.equal(repositoryIdentity(registry(), 'Masterleeaus/Scheduled').product.id, 'scheduled');
+  assert.equal(repositoryIdentity(registry(), 'Masterleeaus/Scheduled').accessGranted, false);
+});
+
+test('a product other than scheduled without a legacy id is rejected', () => {
+  const defs = clone();
+  defs[0].legacyId = null;
+  assert.ok(findDefinitionProblems(defs).some((p) => p.code === 'missing_legacy_id'));
+});
+
+test('scheduled cannot be given a legacy id', () => {
+  const defs = clone();
+  defs[3].legacyId = 'field';
+  const codes = findDefinitionProblems(defs).map((p) => p.code);
+  assert.ok(codes.includes('legacy_mapping_mismatch'));
+  assert.ok(codes.includes('duplicate_legacy_id'));
+});
+
+test('scheduled with a legacy-free definition and no origin validates with serviceOrigin null', () => {
+  const reg = buildProductRegistry({ serviceOrigins: {}, trustedOrigins: [] });
+  assert.equal(resolveProduct(reg, 'scheduled').serviceOrigin, null);
+  assert.deepEqual(findDefinitionProblems(PRODUCT_DEFINITIONS), []);
+});
+
+test('scheduled origin is attached only when configured and on the allowlist', () => {
+  const cfg = { serviceOrigins: { scheduled: SCHEDULED }, trustedOrigins: [SCHEDULED] };
+  assert.equal(resolveProduct(buildProductRegistry(cfg), 'scheduled').serviceOrigin, SCHEDULED);
+  expectCode(() => buildProductRegistry({ serviceOrigins: { scheduled: SCHEDULED }, trustedOrigins: [] }), 'untrusted_origin');
+});
+
+test('scheduled is not a legacy id and is rejected by the legacy lookup', () => {
+  expectCode(() => resolveLegacyId(registry(), 'scheduled'), 'unknown_legacy_id');
+  assert.throws(() => toLegacyApplicationId('scheduled'), (e) => e instanceof ProductRegistryError && e.code === 'unknown_product');
+});
+
+test('scheduled is excluded from planLookup and originsForLegacyIds (legacy-keyed views)', () => {
+  const reg = registry();
+  assert.deepEqual(Object.keys(planLookup(buildProductRegistry({ serviceOrigins: { sorted: SORTED, supercharged: SUPER, lms: LMS }, trustedOrigins: allowlist }))).sort(), ['academy', 'desk', 'field']);
+  assert.deepEqual(Object.keys(originsForLegacyIds(reg)).sort(), ['academy', 'desk', 'field']);
+});
+
+test('a scheduled tenant reference must match its own verified key', () => {
+  assert.deepEqual(checkTenantReference('acc-9', 'acc-9'), { ok: true });
+  assert.deepEqual(checkTenantReference('acc-9', 'acc-1'), { ok: false, code: 'cross_tenant' });
 });

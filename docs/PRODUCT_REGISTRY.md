@@ -5,7 +5,7 @@ Status: **partial**. The registry is validated at Titan Central API startup and 
 ## Scope and limits
 
 - The Sorted, Supercharged and LMS code lives in other repositories. Those repositories are **not attached to this session**, so nothing in this document has been checked against their code.
-- Tenant and account keys (`account_id`, `company_account_id`, `companyRef`) are **assumptions** taken from the issue text. They are not verified. Only the owning products can verify them.
+- Tenant and account keys (`account_id`, `company_account_id`, `companyRef`, and `account_id` for Scheduled) are **assumptions** taken from the issue text. They are not verified. Only the owning products can verify them.
 - The registry makes no network calls. The only network code is the probe interface, which takes an injected fetch and is not called at startup.
 - Repository identity is never a service origin and never grants access.
 
@@ -16,10 +16,11 @@ Status: **partial**. The registry is validated at Titan Central API startup and 
 | `sorted` | `field` | Sorted | `Masterleeaus/Sorted` | `urn:titan-central:product:sorted` | `0.1.0-draft` | `account_id` |
 | `supercharged` | `desk` | Supercharged | `Masterleeaus/Supercharged` | `urn:titan-central:product:supercharged` | `0.1.0-draft` | `company_account_id` |
 | `lms` | `academy` | LMS | `Masterleeaus/Skilled` | `urn:titan-central:product:lms` | `0.1.0-draft` | `companyRef` |
+| `scheduled` | none (no legacy id) | Scheduled | `Masterleeaus/Scheduled` | `urn:titan-central:product:scheduled` | `0.1.0-draft` | `account_id` (assumed) |
 
-The LMS repository is named `Skilled`. The repository name is identity only.
+The LMS repository is named `Skilled`. The repository name is identity only. Scheduled has no legacy application id, so its `legacyId` is `null`. It owns bookings.
 
-Declared capabilities (draft): all products declare `health`, `version` and `tenant-link:verify`. Sorted adds `jobs:read`, `visits:read`. Supercharged adds `communications:read`, `agents:read`. LMS adds `courses:read`, `certificates:read`.
+Declared capabilities (draft): all products declare `health`, `version` and `tenant-link:verify`. Sorted adds `jobs:read`, `visits:read`. Supercharged adds `communications:read`, `agents:read`. LMS adds `courses:read`, `certificates:read`. Scheduled adds `bookings:read`.
 
 ## Operator configuration (wired)
 
@@ -32,13 +33,15 @@ Read by `loadProductRegistry` in `apps/control-api/src/operator-config.mjs`. It 
 | `TITAN_ACADEMY_ORIGIN` | Service origin for `lms` (legacy variable name) |
 | `TITAN_PRODUCT_TRUSTED_ORIGINS` | Comma-separated operator allowlist. Required whenever any origin above is set |
 
+Scheduled has no origin variable yet. Its `serviceOrigin` stays `null` and it is never probed or fetched. Adding one is a separate change, because the three legacy origins are required together.
+
 Rules: the three origins are set together or not at all. Each origin must be HTTPS on a public DNS name, with the default port, and with no credentials, path, query or fragment. IP literals, `localhost`, and GitHub hosts (`github.com`, `github.io`, `githubusercontent.com`) are rejected. Each origin must appear on the allowlist, and no two products may share one. Template: `deploy/env.example`.
 
 ## Rules enforced by the code
 
-1. Product ids are a closed set (`sorted`, `supercharged`, `lms`). Unknown values are rejected, and so are legacy ids and repository names passed as product ids.
+1. Product ids are a closed set (`sorted`, `supercharged`, `lms`, `scheduled`). Unknown values are rejected, and so are legacy ids and repository names passed as product ids.
 2. Ids, legacy ids, audiences and repository identities must each be unique. Every canonical product must be present.
-3. Each legacy id maps to exactly one product, and the mapping must match the table above.
+3. Each legacy id maps to exactly one product, and the mapping must match the table above. Only `scheduled` may have a `null` legacy id. Any other product with a `null` legacy id is rejected (`missing_legacy_id`), and `scheduled` cannot be given one.
 4. Contract versions use `MAJOR.MINOR.PATCH` with an optional `-draft` suffix.
 5. Each product declares every required capability and uses its own expected tenant key.
 6. Origin rules as listed above (`normaliseTrustedOrigin`).
@@ -49,6 +52,7 @@ Rules: the three origins are set together or not at all. Each origin must be HTT
 
 ## Runtime lookup (wired)
 
+- Scheduled is not in the legacy-keyed views. `planLookup` and `originsForLegacyIds` cover only `field`, `desk` and `academy`. The support console entitlement view covers the same three products.
 - `planLookup(registry)` returns, per legacy id, the canonical `productId`, `displayName` and the validated `serviceOrigin`. It fails with `missing_origin` if any product has no origin.
 - `originsForLegacyIds(registry)` gives the legacy-keyed origins used to build the OIDC plans.
 - `GET /v1/admin/oidc/plans` adds `productId`, `legacyId` and `displayName` to each application entry. Origins come only from the registry. The response still reports `registrationStatus: not_registered`.
@@ -71,6 +75,7 @@ Rules: the three origins are set together or not at all. Each origin must be HTT
 | `field` | `sorted` |
 | `desk` | `supercharged` |
 | `academy` | `lms` |
+| none | `scheduled` |
 
 - The mapping is used in the plans view labels and the registry. Stored records and access checks still use legacy ids.
 - Display labels in `applications.ts` (`Titan Field`, `Titan Desk`, `Titan Academy`) are unchanged.
@@ -99,6 +104,6 @@ Rules: the three origins are set together or not at all. Each origin must be HTT
 | --- | --- | --- |
 | Registry module (`product-registry.ts`) | `0.1.0` | Implemented, validated at startup |
 | Probe module (`product-probe.ts`) | `0.1.0` | Implemented, not scheduled |
-| Per-product draft contract (`sorted`, `supercharged`, `lms`) | `0.1.0-draft` | DRAFT, unverified |
+| Per-product draft contract (`sorted`, `supercharged`, `lms`, `scheduled`) | `0.1.0-draft` | DRAFT, unverified |
 
 A product whose configured contract version differs from `0.1.0-draft` is reported as `contract_version_mismatch` (inspection) or `contract_incompatible` (probe). A product that reports a different version is not authorised by this registry.
