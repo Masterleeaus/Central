@@ -162,7 +162,7 @@ Each resolution writes one `provisioning_audit` row: request ID, reviewer (`acto
 
 ## Skilled fixture alignment (issue #71)
 
-Skilled's link-assertion fixtures are copied verbatim into `packages/control-plane/test/fixtures/skilled-link-assertions/` (LA-01 to LA-26, Skilled commit 95935bb). The issue's earlier reference to LA-01 to LA-10 was out of date. `packages/control-plane/test/skilled-link-fixtures.test.mjs` checks each one against this verifier. The canonical file `canonical-signed.json` holds the public key and one signed token per fixture with its expected Central result, for Skilled to check against.
+Skilled's link-assertion fixtures are copied verbatim into `packages/control-plane/test/fixtures/skilled-link-assertions/` (LA-01 to LA-26, Skilled commit 95935bb). The issue's earlier reference to LA-01 to LA-10 was out of date. `packages/control-plane/test/skilled-link-fixtures.test.mjs` checks each one against this verifier. On 2026-11-15 all 26 copies were compared byte for byte with Skilled commit 95935bb and matched. The canonical file `canonical-signed.json` holds the public key and one signed token per fixture with its expected Central result, for Skilled to check against.
 
 Wire compatibility, checked by that test:
 - Header `{alg: "EdDSA", typ: "titan-link+jwt", kid}` and claims `iss` (`lms`), `aud`, `sub`, `org`, `lu`, `la`, `nonce`, `iat`, `exp`. Skilled's signer and this verifier use the same names and values.

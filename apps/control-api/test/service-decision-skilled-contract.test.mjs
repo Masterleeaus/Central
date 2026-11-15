@@ -1,8 +1,8 @@
 // Contract test between Central's service-decision endpoint and Skilled's client.
 // Fixture values are copied from Skilled's decision transport tests
 // (lms-main/apps/backend/src/tests/central-decision-transport.fixture.ts, Skilled HEAD 95935bb).
-// The acceptance rules in skilledAccepts() are a copy of Skilled's createAuthenticatedCentralDecisionClient
-// checks (central-decision-transport.ts). No live credential and no network beyond loopback is used.
+// skilledAcceptsCurrent() copies Skilled's createAuthenticatedCentralDecisionClient checks at 95935bb
+// (central-decision-transport.ts); skilledAcceptsTarget() is the rule Skilled must implement. No live credential and no network beyond loopback is used.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -26,32 +26,49 @@ const SKILLED = {
 // Central internal organisation UUID that Skilled must send (contract doc: operator-controlled association).
 const CENTRAL_ORG_UUID = '00000000-0000-4000-8000-000000000001';
 
-// ---- Skilled acceptance rules (copied from Skilled's client) ----
+// ---- Skilled acceptance rules ----
+// skilledAcceptsCurrent is a copy of Skilled's client at commit 95935bb (central-decision-transport.ts). Its decision
+// key set has no expiresAt, so it refuses every Central 200 that carries expiresAt. That is a Skilled-side gap.
+// skilledAcceptsTarget is the rule Skilled must implement to match the Central contract (expiresAt required,
+// issued-at plus 300 seconds). Both copies are asserted below, so the gap stays visible until Skilled changes.
 const SKILLED_ID = /^[A-Za-z0-9:_-]{1,200}$/;
 const SKILLED_REQUEST = /^[A-Za-z0-9_-]{32,128}$/;
+const EXPIRES_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 function exactKeys(value, fields) {
  return Object.keys(value).sort().join('|') === [...fields].sort().join('|');
 }
-function skilledBoundedDecision(value) {
+function skilledBoundedDecision(value, fields) {
  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
- return exactKeys(value, ['allowed', 'applicationId', 'organisationId', 'localUserId', 'localAccountId',
-   'membershipRevision', 'entitlementRevision', 'linkRevision', ...(Object.hasOwn(value,'expiresAt') ? ['expiresAt'] : [])]) &&
+ return exactKeys(value, fields) &&
   value.allowed === true && value.applicationId === 'academy' &&
   [value.organisationId, value.localUserId, value.localAccountId].every(v => typeof v === 'string' && SKILLED_ID.test(v)) &&
   [value.membershipRevision, value.entitlementRevision, value.linkRevision].every(v =>
-   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0) &&
-  (!Object.hasOwn(value,'expiresAt') || (typeof value.expiresAt === 'string' &&
-   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.expiresAt) &&
-   Date.parse(value.expiresAt) > Date.now() && Date.parse(value.expiresAt) - Date.now() <= 300_000));
+   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0);
 }
-/** Returns true when Skilled's client would accept this response for this request. */
-function skilledAccepts(response, requestBody) {
+const DECISION_FIELDS = ['allowed', 'applicationId', 'organisationId', 'localUserId', 'localAccountId',
+ 'membershipRevision', 'entitlementRevision', 'linkRevision'];
+const ENVELOPE_FIELDS = ['issuer', 'subject', 'requestId', 'decision'];
+/** Skilled's current client (95935bb): no expiresAt in the decision key set. */
+function skilledAcceptsCurrent(response, requestBody) {
  if (response.status !== 200) return false;
  if (response.contentType.split(';')[0].trim().toLowerCase() !== 'application/json') return false;
  const env = response.body;
- return exactKeys(env, ['issuer', 'subject', 'requestId', 'decision']) &&
+ return !!env && typeof env === 'object' && exactKeys(env, ENVELOPE_FIELDS) &&
   env.issuer === requestBody.issuer && env.subject === requestBody.subject &&
-  env.requestId === requestBody.requestId && skilledBoundedDecision(env.decision);
+  env.requestId === requestBody.requestId && skilledBoundedDecision(env.decision, DECISION_FIELDS);
+}
+/** Target rule for Skilled: expiresAt is required on 200 and must lie within 300 seconds of now. */
+function skilledAcceptsTarget(response, requestBody) {
+ if (response.status !== 200) return false;
+ if (response.contentType.split(';')[0].trim().toLowerCase() !== 'application/json') return false;
+ const env = response.body;
+ const d = env && env.decision;
+ if (!d || typeof d !== 'object' || typeof d.expiresAt !== 'string' || !EXPIRES_AT.test(d.expiresAt)) return false;
+ const remaining = Date.parse(d.expiresAt) - Date.now();
+ return !!env && typeof env === 'object' && exactKeys(env, ENVELOPE_FIELDS) &&
+  env.issuer === requestBody.issuer && env.subject === requestBody.subject &&
+  env.requestId === requestBody.requestId &&
+  skilledBoundedDecision(d, [...DECISION_FIELDS, 'expiresAt']) && remaining > 0 && remaining <= 300_000;
 }
 
 // ---- Harness: real handler on loopback, with the Skilled fixture issuer and audience ----
@@ -82,27 +99,40 @@ const contractBody = (overrides = {}) => ({
  organisationId: CENTRAL_ORG_UUID, requestId: SKILLED.requestId, ...overrides,
 });
 
-test('Skilled fixture decision passes Skilled acceptance rules when Central returns it', async () => {
+test('Central 200 carries expiresAt; the target Skilled rule accepts it, with a 300 second bound', async () => {
  const body = contractBody();
  const r = await callCentral({ body });
  assert.equal(r.status, 200);
- assert.ok(skilledAccepts(r, body), JSON.stringify(r));
- const {expiresAt,...decision} = r.body.decision;
- if (expiresAt !== undefined) assert.match(expiresAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+ assert.ok(skilledAcceptsTarget(r, body), JSON.stringify(r));
+ const {expiresAt, ...decision} = r.body.decision;
+ assert.match(expiresAt, EXPIRES_AT);
  assert.deepEqual(decision, SKILLED.decision);
+});
+
+test('gap: Skilled current client refuses Central 200 because of expiresAt (contract doc, section Skilled alignment, item 4)', async () => {
+ // Skilled's exactKeys check has no expiresAt, so every real Central allow is refused until Skilled adds it.
+ const body = contractBody();
+ const r = await callCentral({ body });
+ assert.equal(r.status, 200);
+ assert.equal(skilledAcceptsCurrent(r, body), false);
+ // The same body with expiresAt removed is what Skilled's current client would accept.
+ const {expiresAt, ...decision} = r.body.decision;
+ assert.equal(skilledAcceptsCurrent({ ...r, body: { ...r.body, decision } }, body), true);
 });
 
 test('Skilled acceptance rules reject a response whose requestId or subject does not echo the request', async () => {
  const body = contractBody();
  const r = await callCentral({ body });
- assert.equal(skilledAccepts({ ...r, body: { ...r.body, requestId: 'Q'.repeat(32) } }, body), false);
- assert.equal(skilledAccepts({ ...r, body: { ...r.body, subject: 'someone-else' } }, body), false);
+ assert.equal(skilledAcceptsTarget({ ...r, body: { ...r.body, requestId: 'Q'.repeat(32) } }, body), false);
+ assert.equal(skilledAcceptsTarget({ ...r, body: { ...r.body, subject: 'someone-else' } }, body), false);
+ assert.equal(skilledAcceptsCurrent({ ...r, body: { ...r.body, requestId: 'Q'.repeat(32) } }, body), false);
 });
 
 test('denied decision answers 403, which Skilled treats as no decision', async () => {
  const r = await callCentral({ body: contractBody(), decide: async () => null });
  assert.equal(r.status, 403);
- assert.equal(skilledAccepts(r, contractBody()), false);
+ assert.equal(skilledAcceptsTarget(r, contractBody()), false);
+ assert.equal(skilledAcceptsCurrent(r, contractBody()), false);
 });
 
 test('gap: Skilled current request body without organisationId is refused (contract doc, section Skilled alignment)', async () => {
