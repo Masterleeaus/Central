@@ -1,0 +1,19 @@
+{
+  "organisationId": "00000000-0000-4000-8000-00000000000a",
+  "sourceProduct": "scheduled",
+  "eventType": "booking_created",
+  "schemaVersion": 1,
+  "correlationId": "req-0001",
+  "idempotencyKey": "scheduled:booking:B-1001:created",
+  "payload": {
+    "bookingId": "B-1001",
+    "companyId": "co-1",
+    "occurredAt": "2026-11-14T09:00:00Z",
+    "serviceId": "svc-1",
+    "staffIds": ["st-1"],
+    "startAt": "2026-11-20T01:00:00Z",
+    "endAt": "2026-11-20T03:00:00Z",
+    "timezone": "Australia/Melbourne",
+    "status": "confirmed"
+  }
+}
