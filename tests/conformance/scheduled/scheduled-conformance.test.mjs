@@ -9,9 +9,8 @@
 // Link assertions: Scheduled is registered (PRODUCT_IDS, LINK_APPLICATION_TO_PRODUCT, link key config), so every
 // link case asserts Central's target outcome directly. The "without a key set" pins check that a verifier holding no
 // Scheduled key still rejects with unknown_product.
-// Activity events: the source check does not accept scheduled yet (C4 or C5). That case stays an expected-fail
-// (node:test `todo`): it runs, and its failure is reported as TODO without failing the suite. When C4 or C5 land,
-// remove its todo option.
+// Activity events: the source check accepts scheduled (activity-events.ts, migration 0030). This case is an ordinary
+// assertion, not an expected-fail.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPublicKey, generateKeyPairSync } from 'node:crypto';
@@ -27,7 +26,6 @@ const eventFixture = JSON.parse(readFileSync(new URL('./fixtures/event-envelopes
 
 const NOW_ISO = linkFixture.now;
 const NOW_MS = Date.parse(NOW_ISO);
-const TODO_ACTIVITY = 'expected-fail until C4 or C5 land: the activity source check does not accept scheduled yet';
 
 // Expectation Central receives for a Scheduled assertion. There is no legacy application id for scheduled, so the
 // link application id 'scheduled' maps to the scheduled product through LINK_APPLICATION_TO_PRODUCT.
@@ -143,7 +141,7 @@ test('product registry: scheduled is listed in PRODUCT_IDS', () => {
   assert.ok(PRODUCT_IDS.includes('scheduled'));
 });
 
-test('activity events: source product scheduled is accepted by prepareActivityEvent (expected-fail, C4 or C5)', { todo: TODO_ACTIVITY }, () => {
+test('activity events: source product scheduled is accepted by prepareActivityEvent', () => {
   assert.doesNotThrow(() => prepareActivityEvent({
     organisationId: '6f1c2a3e-8b4d-4e5f-9a1b-2c3d4e5f6a7b',
     actorKind: 'service',
