@@ -52,6 +52,7 @@ function fakeDb(){
   if(s.startsWith('INSERT INTO titan.identities')){db.writes.push(['insert_identity',p[0]]);return {rows:[{id:p[0]}],rowCount:1};}
   if(s.startsWith('INSERT INTO titan.titan_session_revocations')){
    const k=`${p[0]}|${p[1]}|${p[2]}`;const g=(db.revocations.get(k)??0)+1;db.revocations.set(k,g);return {rows:[{generation:g}],rowCount:1};}
+  if(s.startsWith('INSERT INTO titan.outbox_events')){(db.outbox??=[]).push({event_type:p[2],idempotency_key:p[5]});return {rows:[{id:'evt'}],rowCount:1};}
   if(s.startsWith('INSERT INTO titan.activity_events')){db.activity.push({event_id:p[0],action:p[5]});return {rows:[],rowCount:1};}
   if(s.startsWith('INSERT INTO titan.provisioning_audit')){db.audit.push({request_id:p[0],actor:p[1],authority:p[2],command_kind:p[3],digest:p[4],subject:p[5]});return {rows:[],rowCount:1};}
   throw Error('unexpected SQL in fake: '+s.slice(0,80));

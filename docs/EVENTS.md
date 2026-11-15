@@ -280,3 +280,13 @@ created time) cannot change; the database enforces this.
 
 Not in this repository: consumer implementations in the other products, the production event registry (still empty),
 alerting on dead letters, and automated secret rotation (rotation is done by configuration, as above).
+
+## Session revocation events (issues #6, #102)
+
+`session_revoked` v1, source `central`, tenant = `organisation_id`.
+
+- Written in the same transaction as each session generation bump (`titan.titan_session_revocations`). That covers membership suspend, demote, revoke, organisation suspend, link unlink and relink, and the RP-initiated global logout (`revokeAll`). A rolled-back bump publishes nothing. A failed event write rolls the bump back and confirms no revocation.
+- One event per (application, subject, organisation, generation). Idempotency key: `session_revoked:<organisation>:<application>:<subject>:<generation>`. A replayed request writes no second event.
+- Payload (exact keys): `applicationId` (`desk`, `field` or `academy`), `logtoSubject`, `generation`. No tokens, session IDs or profile data.
+- Delivery uses the signed outbox like any other event. Routes decide which products receive it. Consumers must end local sessions for `logtoSubject` in `applicationId` whose generation is below `generation`, or end them when the event arrives.
+- Central defines the event only. Product consumers, and the publisher route entries that point them at this event, are not in this repository (see issue #102).

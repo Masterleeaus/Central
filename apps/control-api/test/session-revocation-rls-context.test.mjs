@@ -79,6 +79,7 @@ test('revokeAll runs as the trusted writer and sets no organisation scope (cross
     'BEGIN',
     'SET LOCAL ROLE titan_trusted_writer',
     'INSERT INTO titan.titan_session_revocations (application_id,',
+    'INSERT INTO titan.outbox_events',
     'COMMIT'
   ]);
   assert.equal(c.log.some(x => x.q.includes('set_config')), false);

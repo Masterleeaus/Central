@@ -6,6 +6,7 @@
  */
 import { createHash } from 'node:crypto';
 import { recordActivity } from './activity-events.js';
+import { enqueueSessionRevoked } from './session-revocation-event.js';
 /** Thrown after the review row and its audit row have committed. The link itself was NOT written. */
 export class LinkReviewRequired extends Error {
     reason;
@@ -438,8 +439,9 @@ async function applyUpdate(conn, c) {
         }
     }
 }
-/** Advances the session revocation generation for one application, subject and organisation.
- * Runs on the caller's transaction so a failure rolls back the row change and the audit record. */
+/** Advances the session revocation generation for one application, subject and organisation, and writes the matching
+ * signed session_revoked event. Runs on the caller's transaction so a failure rolls back the row change, the audit record
+ * and the event. */
 async function bumpGeneration(conn, applicationId, logtoSubject, organisationId) {
     const result = await conn.query(`INSERT INTO titan.titan_session_revocations (application_id,logto_subject,organisation_id,generation)
 VALUES ($1,$2,$3,1) ON CONFLICT (application_id,logto_subject,organisation_id)
@@ -448,4 +450,6 @@ RETURNING generation`, [applicationId, logtoSubject, organisationId]);
     const value = Number(result.rows[0]?.generation);
     if (!Number.isSafeInteger(value) || value < 1)
         throw Error('revocation not confirmed');
+    // Signed session_revoked event, same transaction: products end their sessions for this subject (issue #102).
+    await enqueueSessionRevoked(conn, { organisationId, applicationId, logtoSubject, generation: value });
 }

@@ -5,6 +5,7 @@
  * Writes must be called exclusively after trusted administrator authority checks.
  */
 import {withRoleTransaction} from './role-transaction.mjs';
+import {enqueueSessionRevoked} from '../../../packages/control-plane/dist/index.js';
 const APPS=new Set(['desk','field','academy']);
 const ID=/^[A-Za-z0-9:_-]{1,200}$/;
 const check=({applicationId,logtoSubject,organisationId})=>{
@@ -29,13 +30,18 @@ export function createPostgresSessionRevocations({pool}={}) {
     },
     async revokeAll(args){
       check(args);
-      const result=await withRoleTransaction(pool,'titan_trusted_writer',conn=>conn.query(`INSERT INTO titan.titan_session_revocations (application_id,logto_subject,organisation_id,generation)
+      // The generation bump and its signed session_revoked event commit together (issue #102).
+      // If the event cannot be written, the bump rolls back and no revocation is confirmed.
+      return withRoleTransaction(pool,'titan_trusted_writer',async conn=>{
+        const result=await conn.query(`INSERT INTO titan.titan_session_revocations (application_id,logto_subject,organisation_id,generation)
 VALUES ($1,$2,$3,1) ON CONFLICT (application_id,logto_subject,organisation_id)
 DO UPDATE SET generation=titan_session_revocations.generation+1,revoked_at=now()
-RETURNING generation`,[args.applicationId,args.logtoSubject,args.organisationId]));
-      const value=Number(result.rows[0]?.generation);
-      if(!Number.isSafeInteger(value)||value<1)throw new Error('revocation not confirmed');
-      return value;
+RETURNING generation`,[args.applicationId,args.logtoSubject,args.organisationId]);
+        const value=Number(result.rows[0]?.generation);
+        if(!Number.isSafeInteger(value)||value<1)throw new Error('revocation not confirmed');
+        await enqueueSessionRevoked(conn,{organisationId:args.organisationId,applicationId:args.applicationId,logtoSubject:args.logtoSubject,generation:value});
+        return value;
+      });
     }
   };
 }

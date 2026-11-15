@@ -48,6 +48,8 @@ export const PRODUCTION_EVENT_REGISTRY: EventRegistry = [
   { eventType: 'booking_created', schemaVersion: 1, sourceProducts: ['scheduled'], requiredPayloadFields: SCHEDULED_BOOKING_REQUIRED_FIELDS },
   { eventType: 'booking_cancelled', schemaVersion: 1, sourceProducts: ['scheduled'], requiredPayloadFields: SCHEDULED_BOOKING_REQUIRED_FIELDS },
   { eventType: 'booking_rescheduled', schemaVersion: 1, sourceProducts: ['scheduled'], requiredPayloadFields: SCHEDULED_BOOKING_REQUIRED_FIELDS },
+  // Central session revocation (issues #6, #102). Written by session-revocation-event.ts in the bump transaction.
+  { eventType: 'session_revoked', schemaVersion: 1, sourceProducts: ['central'], requiredPayloadFields: ['applicationId', 'logtoSubject', 'generation'] },
 ];
 
 export interface OutboxTx {
