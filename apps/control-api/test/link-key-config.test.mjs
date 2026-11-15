@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
 import { readLinkKeySets, validateLinkKeySets, LINK_KEYS_FILE_VAR, LINK_KEYS_JSON_VAR } from '../src/link-key-config.mjs';
+import { PRODUCT_IDS } from '../../../packages/control-plane/dist/index.js';
 
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 const X = publicKey.export({ format: 'jwk' }).x;
@@ -57,7 +58,7 @@ test('content that is not JSON fails startup without echoing it', () => {
 test('the top level must be an array of one to four product entries', () => {
   rejects({ productId: 'sorted', keys: [key()] }, /must be an array/);
   rejects([], /must be an array/);
-  rejects([set(), set({ productId: 'supercharged' }), set({ productId: 'lms' }), set({ productId: 'scheduled' }), set({ productId: 'sorted' })], /must be an array/);
+  rejects(Array.from({ length: PRODUCT_IDS.length + 1 }, (_, i) => set({ productId: PRODUCT_IDS[i % PRODUCT_IDS.length] })), /must be an array/);
 });
 
 test('scheduled is a known product for link key sets, and an unknown product is still rejected', () => {
