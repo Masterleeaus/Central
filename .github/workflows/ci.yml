@@ -59,9 +59,10 @@ jobs:
         run: node --test test/*.test.mjs
       - name: configuration engine tests
         run: node --test packages/config-engine/test/*.test.mjs
-      - name: control-api tests
-        working-directory: apps/control-api
-        run: node --test test/*.test.mjs
+      # Same command as the root test:conformance script. Without this step the Scheduled
+      # booking and event contract can change with CI green (issue #144).
+      - name: Scheduled conformance tests
+        run: npm run test:conformance
 
       - name: Python tests (deploy)
         run: python3 -m unittest discover -s deploy/tests -p 'test_*.py' -v
@@ -98,7 +99,7 @@ jobs:
       - name: Provision Central service login for migration grants
         run: |
           psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" <<'SQL'
-          CREATE ROLE titan_central_app LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
+          CREATE ROLE titan_central_app LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS PASSWORD 'ci-only-throwaway';
           SQL
       - name: Apply migrations to a fresh database
         run: python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL"
@@ -107,6 +108,34 @@ jobs:
           out=$(python3 tools/migrate.py --database-url "$TITAN_CI_DATABASE_URL")
           echo "$out"
           test "$out" = "applied 0 migration(s)"
+      # Test-only prerequisite. Migrations 0006 and 0013 create titan_trusted_writer and titan_trusted_reader NOLOGIN,
+      # and no migration grants either role to the service login. The flag tests run SET ROLE on both as
+      # titan_central_app, which Postgres refuses without membership (CI failure on #150, SQLSTATE 42501 on
+      # titan_trusted_writer, then on titan_trusted_reader). NOINHERIT keeps the 'no direct privilege' assertion valid.
+      - name: Grant trusted roles to the CI service login
+        run: |
+          psql -X -v ON_ERROR_STOP=1 "$TITAN_CI_DATABASE_URL" <<'SQL'
+          GRANT titan_trusted_writer, titan_trusted_reader TO titan_central_app;
+          SQL
+      # Login-role path: the service login role (NOINHERIT, member of the trusted roles) runs the
+      # session-revocation and OIDC-state statements and the access check through SET LOCAL ROLE.
+      # TITAN_REQUIRE_DB_TESTS makes a missing psql or database URL fail the job instead of skipping.
+      - name: Login-role path tests (SQL, real PostgreSQL)
+        env:
+          TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
+          TITAN_REQUIRE_DB_TESTS: '1'
+        run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
+      # Runs before any other SQL or test writes data: test_login_role_path.py requires a freshly migrated
+      # database and refuses to run once titan tables hold rows (CI run 43678602824).
+      # Runs after migrations because the feature-flag tests need migrations 0001-0009 and 0013.
+      # The URL logs in as titan_central_app (password set in the provisioning step above).
+      # TITAN_REQUIRE_DB_TESTS makes a missing URL fail the file instead of skipping its nine tests (issue #145).
+      - name: control-api tests (PostgreSQL feature flags)
+        working-directory: apps/control-api
+        env:
+          TITAN_FLAG_TEST_DATABASE_URL: postgresql://titan_central_app:ci-only-throwaway@localhost:5432/titan_central
+          TITAN_REQUIRE_DB_TESTS: '1'
+        run: node --test test/*.test.mjs
       - name: Multi-company product selection PostgreSQL replay and app namespace isolation
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/product_company_selection.sql "$TITAN_CI_DATABASE_URL"
 
@@ -123,14 +152,6 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/activity_events.sql "$TITAN_CI_DATABASE_URL"
       - name: Session revocation RLS tests (two organisations)
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/session_revocation_rls.sql "$TITAN_CI_DATABASE_URL"
-      # Login-role path: the service login role (NOINHERIT, member of the trusted roles) runs the
-      # session-revocation and OIDC-state statements and the access check through SET LOCAL ROLE.
-      # TITAN_REQUIRE_DB_TESTS makes a missing psql or database URL fail the job instead of skipping.
-      - name: Login-role path tests (SQL, real PostgreSQL)
-        env:
-          TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
-          TITAN_REQUIRE_DB_TESTS: '1'
-        run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
 
 
       # The draft shared-schema chain is a separate clean-install path until #43 reconciles it.
