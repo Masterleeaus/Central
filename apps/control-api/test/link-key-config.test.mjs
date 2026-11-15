@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
 import { readLinkKeySets, validateLinkKeySets, LINK_KEYS_FILE_VAR, LINK_KEYS_JSON_VAR } from '../src/link-key-config.mjs';
+import { PRODUCT_IDS } from '../../../packages/control-plane/dist/index.js';
 
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 const X = publicKey.export({ format: 'jwk' }).x;
@@ -38,6 +39,11 @@ test('a valid inline configuration returns normalised key sets', () => {
   assert.equal(parsed[0].keys[1].notAfter, '2027-01-01T00:00:00+00:00');
 });
 
+test('every product the control-plane registry lists is accepted, one key set each', () => {
+  const parsed = validateLinkKeySets(PRODUCT_IDS.map(productId => set({ productId })));
+  assert.deepEqual(parsed.map(s => s.productId), [...PRODUCT_IDS]);
+});
+
 test('a valid file configuration is read once from the configured path', () => {
   const seen = [];
   const parsed = readLinkKeySets({ [LINK_KEYS_FILE_VAR]: '/etc/titan/link-keys.json' }, { readFile: (p) => { seen.push(p); return JSON.stringify(sets(set())); } });
@@ -57,7 +63,7 @@ test('content that is not JSON fails startup without echoing it', () => {
 test('the top level must be an array of one to three product entries', () => {
   rejects({ productId: 'sorted', keys: [key()] }, /must be an array/);
   rejects([], /must be an array/);
-  rejects([set(), set({ productId: 'supercharged' }), set({ productId: 'lms' }), set({ productId: 'sorted' })], /must be an array/);
+  rejects(Array.from({ length: PRODUCT_IDS.length + 1 }, (_, i) => set({ productId: PRODUCT_IDS[i % PRODUCT_IDS.length] })), /must be an array/);
 });
 
 test('each entry must be an object with only productId and keys', () => {
