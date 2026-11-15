@@ -1,5 +1,5 @@
 -- Activity history tests for migration 0011 (issue #36).
--- Run as a superuser against a database where migrations 0001-0011 and 0029 are applied:
+-- Run as a superuser against a database where migrations 0001-0011 and 0030 are applied:
 --   psql -v ON_ERROR_STOP=1 -f tests/sql/activity_events.sql "$DATABASE_URL"
 -- Uses two fixed test organisations (f1, f2) and fixed event ids. Counts are limited to those, so the script
 -- can run on a database that already holds other activity rows. Seeds, then checks: the writer cannot UPDATE, DELETE or TRUNCATE; the trigger rejects
@@ -96,7 +96,7 @@ SELECT set_config('titan.organisation_id', '00000000-0000-4000-8000-0000000000f2
 SELECT pg_temp.expect_count('writer scoped to B reads only B events', 'SELECT event_id FROM titan.activity_events', 1);
 RESET ROLE;
 
--- ---------------------------------------------------------------- source 'scheduled' (migration 0029)
+-- ---------------------------------------------------------------- source 'scheduled' (migration 0030)
 -- The writer records a Scheduled event. The CHECK is widened, not replaced by a looser rule: near-miss spellings stay refused.
 SET LOCAL ROLE titan_trusted_writer;
 INSERT INTO titan.activity_events (event_id, organisation_id, actor_kind, actor_id, action, target_type, target_id, source_product, outcome, correlation_id, detail)
