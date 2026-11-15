@@ -1,12 +1,44 @@
 # Cross-product event contract
 
-Status: contract and mechanism only. No business event is approved yet, so the production registry is empty
-(`PRODUCTION_EVENT_REGISTRY` in `packages/control-plane/src/outbox.ts`). The only event defined in the repository is
-`example.v1`, which exists for tests. Adding a business event means adding a reviewed registry entry, a section here,
-and a consumer decision. It does not happen as a side effect of this document.
+Status: contract and mechanism. The production registry (`PRODUCTION_EVENT_REGISTRY` in
+`packages/control-plane/src/outbox.ts`) holds the three Scheduled booking events described in
+"Scheduled booking events" below. `example.v1` exists only for tests. Adding a business event means adding a reviewed
+registry entry, a section here, and a consumer decision. It does not happen as a side effect of this document.
 
 Central coordinates handoffs between products. Each product stays authoritative for its own records: an event
 carries the minimum data needed for the handoff, not a copy of the product's state.
+
+## Scheduled booking events
+
+Scheduled (`scheduled`) owns bookings. It is the only source product for these events.
+
+| Event (`eventType`.v`schemaVersion`) | Name in prose | Meaning |
+| --- | --- | --- |
+| `booking_created.v1` | `booking.created` | A booking was created. |
+| `booking_cancelled.v1` | `booking.cancelled` | A booking was cancelled. |
+| `booking_rescheduled.v1` | `booking.rescheduled` | A booking's time or staff changed. |
+
+The underscore form is the `eventType` in the registry and on the wire. The dotted form is only a label for prose.
+The registry pattern (`^[a-z][a-z0-9_]{0,63}$`) and the `titan.outbox_events` CHECK both refuse dots, so a dotted name
+cannot be a registry key. Other teams should match on the underscore form.
+
+Payload (schemaVersion 1, all three events share it). Every field below is required and must not be null, except
+`customerRef`, which is optional:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `bookingId` | string | Scheduled's booking id. |
+| `companyId` | string | The Scheduled tenant id. Routing and tenant checks use the envelope's `organisationId`, not this field. |
+| `occurredAt` | ISO time | When the change happened in Scheduled. |
+| `serviceId` | string | Scheduled's service id. |
+| `staffIds` | array of strings | Assigned staff ids. |
+| `startAt`, `endAt` | ISO time | Booking window, in UTC. |
+| `timezone` | string | IANA zone of the booking, for example `Australia/Melbourne`. |
+| `status` | string | Booking status after the change, as Scheduled names it. |
+| `customerRef` | string, optional | Opaque reference to the customer in Scheduled. Never a name, email, phone or address. |
+
+The payload carries no customer personal data. The presence check runs in `prepareEvent`; the field types are a
+producer rule and are not checked by the registry. Changes to these payloads follow the Versioning rules.
 
 ## Components
 

@@ -16,8 +16,18 @@ export class OutboxError extends Error {
         this.name = 'OutboxError';
     }
 }
-/** No business events exist yet. Tests inject their own registry (for example example.v1). */
-export const PRODUCTION_EVENT_REGISTRY = [];
+/** Scheduled owns bookings. Its three booking events share one payload schema (docs/EVENTS.md, schemaVersion 1).
+ * Event type names use underscores: the registry pattern and the database CHECK both refuse dots. */
+export const SCHEDULED_BOOKING_REQUIRED_FIELDS = [
+    'bookingId', 'companyId', 'occurredAt', 'serviceId', 'staffIds', 'startAt', 'endAt', 'timezone', 'status',
+];
+/** Accepted production events. Each entry is reviewed with docs/EVENTS.md. Tests inject their own registry
+ * (for example example.v1). */
+export const PRODUCTION_EVENT_REGISTRY = [
+    { eventType: 'booking_created', schemaVersion: 1, sourceProducts: ['scheduled'], requiredPayloadFields: SCHEDULED_BOOKING_REQUIRED_FIELDS },
+    { eventType: 'booking_cancelled', schemaVersion: 1, sourceProducts: ['scheduled'], requiredPayloadFields: SCHEDULED_BOOKING_REQUIRED_FIELDS },
+    { eventType: 'booking_rescheduled', schemaVersion: 1, sourceProducts: ['scheduled'], requiredPayloadFields: SCHEDULED_BOOKING_REQUIRED_FIELDS },
+];
 /** Canonical JSON: object keys sorted at every depth, no whitespace. Used for the size bound and the digest. */
 export function canonicalJson(value) {
     return JSON.stringify(sortKeys(value, 0));
@@ -93,6 +103,11 @@ export function prepareEvent(registry, input) {
         throw new OutboxError('unknown_event_type', `unknown event ${eventType}.v${schemaVersion}`);
     if (!definition.sourceProducts.includes(sourceProduct))
         throw new OutboxError('source_not_allowed', 'sourceProduct may not emit this event');
+    for (const field of definition.requiredPayloadFields ?? []) {
+        if (payload[field] === undefined || payload[field] === null) {
+            throw new OutboxError('invalid_payload', `payload is missing required field ${field}`);
+        }
+    }
     const canonical = canonicalJson(payload);
     if (Buffer.byteLength(canonical, 'utf8') > OUTBOX_MAX_PAYLOAD_BYTES)
         throw new OutboxError('payload_too_large', 'payload exceeds the outbox size limit');
