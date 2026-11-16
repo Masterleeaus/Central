@@ -196,7 +196,7 @@ test('B-08 booking_created-stale: Central rejects an envelope Scheduled calls st
   assert.equal(effects(), 0);
 });
 
-test('B-09 booking_rescheduled-from-future: Central rejects an envelope Scheduled calls from_future', async () {
+test('B-09 booking_rescheduled-from-future: Central rejects an envelope Scheduled calls from_future', async () => {
   const { outcome, effects } = run('B-09');
   await assert.rejects(outcome, (error) => error instanceof OutboxError && error.code === 'from_future');
   assert.equal(effects(), 0);
