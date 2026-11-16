@@ -21,7 +21,7 @@ function parseEnvelope(value) {
  * future tolerance. Restrict this policy to Scheduled until other publishers
  * negotiate compatible replay limits; stale dead-letter replay needs review.
  */
-const SCHEDULED_MAX_EVENT_AGE_SECONDS = 86400;
+const SCHEDULED_MAX_EVENT_AGE_SECONDS = 86_400;
 const SCHEDULED_MAX_FUTURE_SKEW_SECONDS = 300;
 function assertScheduledFreshness(occurredAt, nowMs) {
     // Require a full ISO timestamp with an explicit timezone: Date.parse alone
