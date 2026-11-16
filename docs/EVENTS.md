@@ -109,6 +109,14 @@ for different data is a bug and is refused.
   supplied at runtime from the environment or the secret store. They are never committed and never placed in events,
   logs or error messages.
 
+### Scheduled inbound timestamp freshness
+
+Central's signed inbound consumer uses the same default freshness policy as Scheduled's PHP `SignedEventVerifier`: **maximum age 86,400 seconds (24 hours)**, **future clock tolerance 300 seconds (5 minutes)**. Both bounds are inclusive; dates must be valid, timezone-qualified ISO timestamps. Signature validity, tenant binding, event-type permission and timestamp freshness are all checked **before** inserting a processed-event idempotency key or invoking a business effect. A stale signed Scheduled event returns `stale`, an event too far ahead returns `from_future`, and a malformed time returns `invalid_envelope`.
+
+This rule currently applies to `sourceProduct=scheduled`; changing other publishers' event replay windows requires separately agreed contracts. **Recovery constraint:** a dead-lettered Scheduled booking event older than 24 hours cannot simply be replayed unchanged; the operator must reconcile the authoritative Scheduled booking state and issue an approved fresh event or repair command with a new authorised source transaction. Do not bypass the guard by editing signed timestamps or rewriting an old envelope. Consumers must maintain idempotency and reject cross-company events.
+
+Verification: `tests/conformance/scheduled/booking-conformance.test.mjs` cases B-08/B-09, plus `packages/control-plane/test/outbox-consumer.test.mjs` boundary, forgery and no-database-effect tests.
+
 ## Transport (HTTP)
 
 - `createHttpPublishTransport({ endpoints, fetch, timeoutMs, allowInsecureLocalhost })` sends each envelope to the URL
