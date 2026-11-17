@@ -2,8 +2,7 @@
 
 A minimal, server-rendered sign-in and product launcher for Titan Central (issue #44).
 
-After sign-in it shows the active company, the three products (Sorted, Supercharged, LMS) with their
-access status from Central's access check, and a company-switch link when one is configured.
+This historical launcher implementation describes its original three-product (Sorted, Supercharged, LMS) view. The authoritative five-product target also includes **Scheduled**, and the current tenant/product registry must drive the launcher dynamically. Do not present the historical three-product view as a completed five-product launcher. The missing end-to-end admission, company switching, OIDC and application provisioning evidence remains tracked in Central #44, #72, #100, #141 and #160. In the implemented flow, product access status comes from Central's access decisions, never static UI configuration.
 
 - Plain Node `http` (>= 22). No runtime dependencies, no bundler, no framework.
 - Sign-in is not implemented here. The launcher links to the existing control-api start route
