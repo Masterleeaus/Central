@@ -4,7 +4,8 @@
 // BookingEventEnvelope, SignedEventVerifier). Each case records Scheduled's verdict and the outcome Central's
 // handleInbound must reach (centralOutcome).
 //
-// Every case is a hard assertion. Freshness (B-08, B-09) is enforced by handleInbound (issue #146).
+// Scheduled and Central must agree on signature, tenant binding and timestamp freshness.
+// Any regression in these checks is a required failure, never an expected-fail/TODO.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -169,7 +170,7 @@ test('booking fixtures: Scheduled verdicts record the signature, freshness and e
   assert.equal(bookingCase('B-04').scheduledVerdict.accepted, true);
 });
 
-// ---------- producer registry and freshness ----------
+// ---------- verified production contracts ----------
 
 test('booking_created: Central production registry lists the event for scheduled', () => {
   const entry = PRODUCTION_EVENT_REGISTRY.find((d) => d.eventType === 'booking_created' && d.schemaVersion === 1);
@@ -199,4 +200,16 @@ test('B-09 booking_rescheduled-from-future: Central rejects an envelope Schedule
   const { outcome, effects } = run('B-09');
   await assert.rejects(outcome, (error) => error instanceof OutboxError && error.code === 'from_future');
   assert.equal(effects(), 0);
+});
+
+test('B-08 and B-09: rejected signed events never write the processed key or execute effects', async () => {
+  for (const [id, code] of [['B-08', 'stale'], ['B-09', 'from_future']]) {
+    let effects = 0;
+    const tx = { async query() { throw new Error('rejected event must not reach the database'); } };
+    await assert.rejects(
+      handleInbound(tx, consumerFor(), structuredClone(bookingCase(id).body), async () => { effects += 1; }),
+      (error) => error instanceof OutboxError && error.code === code,
+    );
+    assert.equal(effects, 0, 'rejected event has no business effect');
+  }
 });

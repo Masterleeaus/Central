@@ -240,7 +240,9 @@ test('the same envelope redelivered after a lost acknowledgement is processed on
     recorded.add(k);
     return { rows: [{ consumer: values[0] }], rowCount: 1 };
   } };
-  const consumer = { consumer: 'desk-inbox', organisationId: ORG_A, eventTypes: ['booking_created'], secret: SECRET_A };
+  // The publisher and inbound consumer must share the deterministic scenario clock;
+  // using wall time would incorrectly treat this fixture as a stale real event.
+  const consumer = { consumer: 'desk-inbox', organisationId: ORG_A, eventTypes: ['booking_created'], secret: SECRET_A, now: () => store.clock.ms };
   const outcomes = [];
   for (let i = 0; i < 2; i += 1) {
     outcomes.push(await handleInbound(tx, consumer, sent[0].envelope, async () => { effects += 1; }));

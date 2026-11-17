@@ -306,7 +306,7 @@
         "reason": "stale"
       },
       "centralOutcome": "stale",
-      "note": "Scheduled rejects anything older than 86400 seconds. Central refuses the same window before any effect."
+      "note": "Both Scheduled and Central reject envelopes older than 86400 seconds before business effects."
     },
     {
       "id": "B-09",
@@ -344,7 +344,7 @@
         "reason": "from_future"
       },
       "centralOutcome": "from_future",
-      "note": "Scheduled allows 300 seconds of future skew. Central refuses anything further ahead before any effect."
+      "note": "Both Scheduled and Central allow 300 seconds of future skew; this case is 20 minutes ahead."
     },
     {
       "id": "B-10",

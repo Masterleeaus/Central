@@ -66,6 +66,66 @@ test('a consumer rejects event types it does not accept', async () => {
   await assert.rejects(handleInbound(fakeTx(), { ...consumer, eventTypes: ['other'] }, envelope(), async () => {}), { code: 'unknown_event_type' });
 });
 
+test('Scheduled booking freshness at the exact inclusive boundaries matches its PHP verifier', async () => {
+  const now = Date.parse('2026-11-15T10:00:00.000Z');
+  const scheduled = { ...consumer, eventTypes: ['booking_created'], now: () => now };
+  const times = [
+    new Date(now - 86_400_000).toISOString(), // exactly 24 hours old: accepted
+    new Date(now + 300_000).toISOString(),    // exactly 5 minutes ahead: accepted
+    new Date(now - 5_000).toISOString(),
+    '2026-11-15T20:00:00.000+11:00', // offset-aware timestamp: accepted
+  ];
+  for (const [index, occurredAt] of times.entries()) {
+    const keys = new Set();
+    let effects = 0;
+    const event = envelope({ sourceProduct: 'scheduled', eventType: 'booking_created', occurredAt, idempotencyKey: 'fresh-' + index });
+    const result = await handleInbound(fakeTx(keys), scheduled, event, async () => { effects += 1; });
+    assert.equal(result, 'processed', occurredAt);
+    assert.equal(keys.size, 1);
+    assert.equal(effects, 1);
+  }
+});
+
+test('Scheduled rejects stale, future and malformed signed timestamps before transaction or effect', async () => {
+  const now = Date.parse('2026-11-15T10:00:00.000Z');
+  const scheduled = { ...consumer, eventTypes: ['booking_created'], now: () => now };
+  const cases = [
+    [new Date(now - 86_401_000).toISOString(), 'stale'],
+    [new Date(now + 301_000).toISOString(), 'from_future'],
+    ['not-a-timestamp', 'invalid_envelope'],
+    ['2026-02-30T09:00:00.000Z', 'invalid_envelope'],
+    ['2026-11-15T10:00:00', 'invalid_envelope'],
+    ['2026-11-15T25:00:00Z', 'invalid_envelope'],
+  ];
+  for (const [index, [occurredAt, code]] of cases.entries()) {
+    const keys = new Set();
+    let effects = 0;
+    const event = envelope({ sourceProduct: 'scheduled', eventType: 'booking_created', occurredAt, idempotencyKey: 'rejected-' + index });
+    await assert.rejects(handleInbound(fakeTx(keys), scheduled, event, async () => { effects += 1; }), { code });
+    assert.equal(keys.size, 0, occurredAt + ' must not record idempotency key');
+    assert.equal(effects, 0, occurredAt + ' must not run business effect');
+  }
+});
+
+test('Scheduled rejects forged stale timestamps by signature before checking freshness', async () => {
+  const now = Date.parse('2026-11-15T10:00:00.000Z');
+  const scheduled = { ...consumer, eventTypes: ['booking_created'], now: () => now };
+  const keys = new Set();
+  const signed = envelope({ sourceProduct: 'scheduled', eventType: 'booking_created', occurredAt: new Date(now).toISOString() });
+  signed.occurredAt = new Date(now - 172_800_000).toISOString();
+  await assert.rejects(handleInbound(fakeTx(keys), scheduled, signed, async () => {}), { code: 'bad_signature' });
+  assert.equal(keys.size, 0);
+});
+
+test('tenant mismatch remains authoritative before freshness checks on signed Scheduled events', async () => {
+  const now = Date.parse('2026-11-15T10:00:00.000Z');
+  const scheduled = { ...consumer, eventTypes: ['booking_created'], organisationId: ORG_B, now: () => now };
+  const keys = new Set();
+  const signed = envelope({ sourceProduct: 'scheduled', eventType: 'booking_created', occurredAt: new Date(now - 172_800_000).toISOString() });
+  await assert.rejects(handleInbound(fakeTx(keys), scheduled, signed, async () => {}), { code: 'tenant_mismatch' });
+  assert.equal(keys.size, 0);
+});
+
 test('signature verification is per secret', () => {
   assert.equal(verifyEnvelopeSignature(envelope(), SECRET), true);
   assert.equal(verifyEnvelopeSignature(envelope(), 'y'.repeat(40)), false);

@@ -23,9 +23,5 @@ export type ConsumerIdentity = {
     readonly secret?: undefined;
 });
 export type InboundOutcome = 'processed' | 'duplicate';
-/** Replay window for envelope.occurredAt. These values match Scheduled's verifier (conformance B-08, B-09, E-07, E-08).
- * An envelope older than the window, or more than the skew ahead of this consumer's clock, is refused before any effect. */
-export declare const MAX_ENVELOPE_AGE_MS: number;
-export declare const MAX_ENVELOPE_FUTURE_SKEW_MS: number;
 /** Verifies authenticity and tenant binding, then runs effect once per (consumer, idempotency key). */
 export declare function handleInbound(tx: OutboxTx, consumer: ConsumerIdentity, rawEnvelope: unknown, effect: (tx: OutboxTx, envelope: OutboxEnvelope) => Promise<void>): Promise<InboundOutcome>;

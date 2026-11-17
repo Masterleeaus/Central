@@ -100,13 +100,13 @@ const cases = [
     request: publish('booking_created', booking(), 1, '2026-11-15T09:55:00.000Z', { secret: OTHER_SECRET }),
   },
   {
-    id: 'B-08', name: 'booking_created-stale', eventType: 'booking_created', centralOutcome: 'processed',
-    note: 'Scheduled rejects anything older than 86400 seconds. Central refuses the same window before any effect.',
+    id: 'B-08', name: 'booking_created-stale', eventType: 'booking_created', centralOutcome: 'stale',
+    note: 'Both Scheduled and Central reject envelopes older than 86400 seconds before business effects.',
     request: publish('booking_created', booking(), 1, '2026-11-13T10:00:00.000Z'),
   },
   {
-    id: 'B-09', name: 'booking_rescheduled-from-future', eventType: 'booking_rescheduled', centralOutcome: 'processed',
-    note: 'Scheduled allows 300 seconds of future skew. Central refuses anything further ahead before any effect.',
+    id: 'B-09', name: 'booking_rescheduled-from-future', eventType: 'booking_rescheduled', centralOutcome: 'from_future',
+    note: 'Both Scheduled and Central allow 300 seconds of future skew; this case is 20 minutes ahead.',
     request: publish('booking_rescheduled', booking({ ...RESCHEDULED_TIMES }), 3, '2026-11-15T10:20:00.000Z'),
   },
 ];

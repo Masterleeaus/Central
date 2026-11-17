@@ -20,6 +20,7 @@ import { verifyConfigRuntimeReadiness } from './config-runtime-readiness.mjs';
 import { closeFailedStartup } from './config-runtime-cleanup.mjs';
 import { centralListenPort } from './config-listen-policy.mjs';
 import { createServiceLifecycle } from './service-lifecycle.mjs';
+import { startOidcStatePruning } from './oidc-state-prune-schedule.mjs';
 import { listenCentral } from './service-startup-listener.mjs';
 import { createCentralBrowserRouter } from './central-browser-router.mjs';
 import { createGlobalLogoutMount } from './global-logout-mount.mjs';
@@ -54,13 +55,14 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
   assertConfigStartup(env);
   const {Pool}=await loadPg();
   const pool=new Pool({connectionString:TITAN_CENTRAL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,idleTimeoutMillis:10000,application_name:'titan-central-api'});
-  let configRuntime, sharedPool, browserRouter;
+  let configRuntime, sharedPool, browserRouter, oidcStatePruner;
   let closingRuntime;
   const runtime={close(){
     if(!closingRuntime)closingRuntime=(async()=>{
       const results=await Promise.allSettled([
         Promise.resolve().then(()=>configRuntime?.close?.()),
         Promise.resolve().then(()=>sharedPool?.end?.()),
+        Promise.resolve().then(()=>oidcStatePruner?.stop()),
       ]);
       const errors=results.filter(x=>x.status==='rejected').map(x=>x.reason);
       if(errors.length)throw new AggregateError(errors,'Central auxiliary pool close failed');
@@ -109,6 +111,8 @@ export async function startCentralService({env=process.env, loadPg=()=>import('p
     if(browserRouter && await browserRouter.handler(req,res))return;
     return centralHandler(req,res);
   };
+  // Expired login-state rows are pruned on a timer (issue #11). Stopped by runtime.close on shutdown or failed startup.
+  oidcStatePruner=startOidcStatePruning({pool,onError:error=>auditLog('oidc_state_prune_failed',{message:error?.message??String(error)})});
   const server=createServer(handler);
   server.maxConnections=128;
   server.requestTimeout=15000;

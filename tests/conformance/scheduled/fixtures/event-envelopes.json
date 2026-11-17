@@ -174,7 +174,7 @@
         "reason": "stale"
       },
       "centralOutcome": "stale",
-      "note": "Scheduled rejects anything older than 86400 seconds. Central refuses the same window before any effect."
+      "note": "Central and Scheduled reject timestamps older than 86400 seconds."
     },
     {
       "id": "E-08",
@@ -199,7 +199,7 @@
         "reason": "from_future"
       },
       "centralOutcome": "from_future",
-      "note": "Scheduled allows 300 seconds of skew. Central refuses anything further ahead before any effect."
+      "note": "Central and Scheduled allow 300 seconds of future clock skew."
     },
     {
       "id": "E-09",
