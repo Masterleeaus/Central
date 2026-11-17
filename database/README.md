@@ -35,13 +35,13 @@ unknown out-of-order migration.
 Migration `0001_shared_company_core.sql` creates the shared core only. CI applies
 it to a separate clean PostgreSQL database and checks the required company UUID
 foreign keys. It does not yet move Sorted, LMS, or Supercharged domain tables,
-change their database clients, or prove RLS isolation. Do not mark the four-app database
+change their database clients, or prove RLS isolation. Do not mark the five-product shared-database
 upgrade production-ready until those migrations and app adapters are completed
 and verified on a disposable PostgreSQL database.
 
 ## Upgrade sequence
 
-1. Freeze and inventory all four schema sources.
+1. Freeze and inventory the schema sources for all five integrated products (Central, Scheduled, Sorted, Skilled and Supercharged).
 2. Reconcile shared entities and table-name collisions; assign each table an
    owner and tenant/global scope in `table-registry.csv`.
 3. Port app-domain DDL into one ordered chain and establish schema namespaces.
