@@ -1,7 +1,6 @@
 # Shared Titan PostgreSQL database
 
-This defines the target shared database contract for Titan Central, Sorted,
-Supercharged, and LMS. The LMS source repository is `Masterleeaus/Skilled`.
+This directory documents the proposed shared-database foundation. **The authoritative integrated target includes FIVE products: Central, Sorted, Scheduled, Skilled (LMS source: `Masterleeaus/Skilled`) and Supercharged.** The former four-product wording omitted Scheduled. Central ADR-009 requires one physical PostgreSQL database with a canonical `company_id`, separately scoped per-product credentials and one centrally ordered migration ledger. The migrations described here are still subject to real environment-ledger inspection, cross-product reconciliation and staging acceptance under Central #140/#160; this document is not a production cutover certificate.
 PostgreSQL is the common database engine. This directory begins the new
 clean-install migration chain. The existing `/migrations` chain remains the
 active legacy source and continues to be tested separately; it must not be
