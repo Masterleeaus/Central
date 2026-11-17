@@ -2,6 +2,8 @@
 
 - [Repository overview](../README.md) and [contributor workflow](../CONTRIBUTING.md).
 - [Architecture decisions](../TITAN_ARCHITECTURE_DECISIONS.md).
+- [Platform integration handbook](INTEGRATION_HANDBOOK.md): cross-product authority, booking handoffs, identity, failure handling and acceptance gates.
+- [Seven-repository platform map](PLATFORM_MAP.md): product responsibilities and documentation hierarchy.
 - [Deployment operations](../deploy/OPERATIONS.md) and [proxy configuration](../deploy/proxy/README.md).
 - [Canonical company database](../database/README.md), distinct from legacy access migrations.
 - [Central launcher](../apps/control-api/CENTRAL_LAUNCHER.md) and [configuration engine](../packages/config-engine/README.md).
