@@ -1,161 +1,75 @@
-# Titan Central
+# Titan Central — shared identity, company authority and integration control plane
 
-Titan Central is the central identity and access-control service for Sorted, Supercharged and LMS. It keeps the identity, organisation, entitlement, verified account-link and session-revocation facts these products share. Logto remains the identity provider. The repository still uses the legacy application identifiers field, desk and academy in compatibility-sensitive interfaces; they map to Sorted, Supercharged and LMS, respectively. Tenant data stays in each application.
+**Repository:** `Masterleeaus/Central` · **Documentation review:** 18 November 2026
 
-Status: pre-deployment. The migrations are reviewed drafts, the HTTP service is not deployed, and nothing in this repository has been applied to a live environment. Read [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md) for the decisions and [PASS15_DEPLOYMENT_RUNBOOK.md](docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md) for the gates that must pass before any deployment.
+Titan Central is the control plane for **five integrated products**: Central itself, ScheduledAt.Work, SortedAt.Work, SkilledAt.Work and SuperchargedAt.Work. It uses **Logto** as the identity provider. Central owns verified company context, membership/role decisions, service identity, entitlement policy, product links, signed handoffs, tenant-aware audit and the shared-database migration authority.
 
-## Components
+**State:** an implemented and extensively tested source foundation, **not a certified five-product production cutover**. An old `titan_central`-only database or three-app launcher is a historical transitional configuration, not the target in [ADR-009](TITAN_ARCHITECTURE_DECISIONS.md).
 
-| Path | What it is |
+## Authority and service boundaries
+
+| System | Authoritative responsibility | Hard rule |
+| --- | --- | --- |
+| **Central** | Logto/OIDC coordination, canonical company UUID, membership, entitlements, app identities/audiences, shared migration ledger and cross-app governance | Access is checked at service and tenant boundaries; never use email alone as company proof |
+| **Scheduled** | Booking, calendar, inventory of available time slots, booking changes and website/landing-page publication | Only deterministic booking authority can commit a slot |
+| **Sorted** | Jobs/visits, customers/property history, quotes, invoices and staff/field task records | Preserve quote/approval and business data provenance |
+| **Skilled** | Courses, content publication, learning, assessment and verified competencies | Evidence and assessor approval precede competency claims |
+| **Supercharged** | Business communications, AI-assisted conversations, workflow/agent execution and connector orchestration | Agent tools are scoped, audited, consent-aware; no booking bypass |
+
+The **Scheduling & Enquiries Manager** Free WordPress plugin is an additional, locally usable product interface, **not a sixth independently logged-in database authority**. Its optional hosted Assistant and Agent Team pair with Central entitlement/consent services, without a separate Pro plugin. In integrated mode it calls Scheduled's authoritative booking interfaces; in standalone mode its locally working booking engine must remain useful.
+
+## One-database design: target, not yet migration evidence
+
+[ADR-009](TITAN_ARCHITECTURE_DECISIONS.md) requires:
+
+- **One physical PostgreSQL database**, not separate product databases on the same host.
+- Canonical `company_id` UUID across every company-owned business row, with membership and row-level isolation tested against **two real disposable companies**.
+- A single centrally governed, ordered, checksum-verified migration ledger and advisory-locking rollout; product databases, Prisma/Drizzle/SQL or installer migrations are **not** independent production authorities.
+- Separate least-privilege service roles and OIDC client audiences; no shared application secret and no alternate integrated-mode login.
+- Explicit signed/idempotent cross-app event or decision contracts, bounded replay windows, revocation and failure-mode reconciliation.
+
+**Do not treat historical README references to `titan_central` as proof that the five apps share that one database.** Applied migrations must never be rewritten, and none of the multi-app cutover tasks may be checked without staging evidence. See [#140](https://github.com/Masterleeaus/Central/issues/140), [#141](https://github.com/Masterleeaus/Central/issues/141), [#142](https://github.com/Masterleeaus/Central/issues/142) and [#160](https://github.com/Masterleeaus/Central/issues/160).
+
+## Runtime and source map
+
+| Path | Responsibility |
 | --- | --- |
-| `apps/control-api` | Node 22 ESM HTTP service (`src/server.mjs`). Verifies OIDC tokens, checks access through the control-plane library, and stores OIDC login state, session revocations, browser sessions and company selections in PostgreSQL. Binds to loopback only. |
-| `apps/launcher` | Server-rendered sign-in and product launcher for Titan Central (`src/`, built to `dist/`). Shows the active company and the three products after sign-in. |
-| `packages/control-plane` | TypeScript authorization library (`src/`). Resolves app-scoped roles, entitlements and local-account links. Compiled output is committed in `dist/`; see below. |
-| `packages/config-engine` | Dependency-free ESM configuration engine (`src/`), tested by `npm test`. Review-only: feature flags are not an authorisation mechanism. |
-| `migrations` | Ordered SQL migrations `0001` to `0028` for the dedicated `titan_central` PostgreSQL database. See the table below. |
-| `tools` | Operator scripts. `migrate.py` is the migration runner, `verify_logto_source.py` is a read-only checker for a supplied Logto source archive, `retention_purge.py` is the retention purge (dry-run by default; migration 0028), and the company backfill, reconciliation and cutover scripts. |
-| `deploy` | `preflight.py`, a read-only readiness assessor for a staging configuration, and `staging.example.json`, an example that must report not ready. |
-| `tests` | Python tests for `tools/` and the migration runner, `tests/sql/` (PostgreSQL row-level security, role and store checks, run by hand or in CI), and `tests/integration/`. |
-| `deploy/tests` | Python tests for `deploy/preflight.py`. |
+| `apps/control-api/` | Node.js 22 ESM API: token/access verification, account linking, revocation and company/entitlement services |
+| `apps/launcher/` | Central browser login, company selection and product launcher |
+| `packages/control-plane/` | TypeScript authorization, registry, events and policy contracts; source in `src/`, generated `dist/` |
+| `packages/config-engine/` | Feature flags / configuration evaluation, **not** an authorization substitute |
+| `migrations/` | Existing ordered Central SQL migration history; future shared schema changes require one coordinated ledger |
+| `tools/migrate.py` | Version/checksum-verified migration runner; inspect actual environment ledgers before applying |
+| `deploy/` | Example staging config, preflight, proxy configuration and operational gates |
+| `tests/` | Conformance, security, migration, two-company PostgreSQL and test harnesses |
 
-## Build and test
+Compatibility-sensitive `field`, `desk`, `academy` and related stored app IDs may map to Sorted, Supercharged and Skilled. **Do not rename these in tokens, DB or routes until a versioned migration is proved.** Scheduled has a distinct product registry/audience contract ([#100](https://github.com/Masterleeaus/Central/issues/100)).
 
-Requirements: Node.js 22 or later, Python 3.13 (3.10 or later should work), and `psql` for database steps.
+## Developer workflow and required evidence
 
 ```bash
-# One locked workspace: API, control-plane and launcher.
 npm ci
 npm run build
 npm test
 npm run test:preflight
-
-# Python
-python3 -m unittest discover -s deploy/tests -p 'test_*.py'
-python3 -m unittest discover -s tests -p 'test_*.py'
+# Disposable test database only:
+python3 tools/migrate.py --database-url "$TITAN_TEST_DATABASE_URL" --dry-run
 ```
 
-CI (`.github/workflows/ci.yml`) runs all of the above, plus the dist-freshness check, the preflight check mode, and the database steps against a PostgreSQL 16 service container.
+Use a specifically provisioned **throwaway** PostgreSQL 16 instance for SQL/tenancy integration. The root test script runs scheduled booking/event conformance, control-plane and launcher tests. `packages/control-plane/dist/` is committed build output; rebuild it after changing `src/` and let CI check freshness. Do not put actual passwords or production credentials into the README, example commands, code or CI fixtures.
 
-### Database steps
+The currently documented [migration source](migrations/) and [database notes](database/README.md) are a **Central foundation**. They must be reconciled against the live target and exact applied ledger before switching any app to shared storage.
 
-```bash
-export DATABASE_URL='postgresql://USER@HOST:5432/titan_central'   # never commit a real URL
-python3 tools/migrate.py --database-url "$DATABASE_URL"            # apply pending migrations
-python3 tools/migrate.py --database-url "$DATABASE_URL" --dry-run  # list pending only
-psql -v ON_ERROR_STOP=1 -f tests/sql/rls_two_tenant.sql "$DATABASE_URL"  # superuser; test database only
-psql -X -v ON_ERROR_STOP=1 -f tests/sql/session_revocation_rls.sql "$DATABASE_URL"  # superuser; empty revocation table only
-```
+## Issue-driven release blockers
 
-The RLS test seeds two tenants and runs inside a transaction that is rolled back. Run it only against a disposable database, never a live one.
+1. **[Shared DB #140](https://github.com/Masterleeaus/Central/issues/140)**, [#43](https://github.com/Masterleeaus/Central/issues/43): canonical company schema, ordered migrations and RLS.
+2. **[Unified login #141](https://github.com/Masterleeaus/Central/issues/141)**, [#98](https://github.com/Masterleeaus/Central/issues/98), [#99](https://github.com/Masterleeaus/Central/issues/99): each product's Logto/OIDC and M2M audience/credentials; global logout and revocation.
+3. **[Staging go/no-go #160](https://github.com/Masterleeaus/Central/issues/160)**, [#142](https://github.com/Masterleeaus/Central/issues/142): test fresh install, data migration, dual-company denials, provider outages and rollback before deployment.
+4. **[Front Desk hosted service epic #149](https://github.com/Masterleeaus/Central/issues/149)**, [#152](https://github.com/Masterleeaus/Central/issues/152), [#153](https://github.com/Masterleeaus/Central/issues/153), [#156](https://github.com/Masterleeaus/Central/issues/156): single-plugin pairing, subscribed hosted services, billing, approval, rate/abuse control and receipts.
+5. **[CI credential policy #151](https://github.com/Masterleeaus/Central/issues/151)** and [cross-app service contracts #103](https://github.com/Masterleeaus/Central/issues/103): avoid source-committed passwords, preserve deterministic contract fixtures and strict tenant audit.
 
-## Migrations
+Evidence of merged source fixes (such as [Scheduled inbound freshness #146](https://github.com/Masterleeaus/Central/issues/146)) does **not** imply cross-product staging or production release acceptance.
 
-- Files are `migrations/NNNN_name.sql` and are applied in ascending version order.
-- Every file is one transaction: it starts with `BEGIN;` and ends with `COMMIT;`. The runner rejects files that do not.
-- `tools/migrate.py` records each applied migration in `public.schema_migrations` (version, name, sha256 checksum, applied time). The record is written inside the migration's own transaction.
-- Re-running is safe. The runner refuses to continue if an applied file has changed on disk, if an applied version has no file, or if a pending version sits below an applied one.
-- Applied migrations must never be edited. Add a new numbered file instead.
+## Working agreement
 
-| Migration | Purpose |
-| --- | --- |
-| 0001 | Core tables in schema `titan`: identities, organisations, memberships, entitlements, local account links. |
-| 0002 | Provisioning audit table. |
-| 0003 | OIDC login-state table (created unqualified, moved by 0005). |
-| 0004 | Session-revocation table (created unqualified, moved by 0005). |
-| 0005 | Moves the 0003 and 0004 tables into schema `titan`. Application queries use `titan.<table>`. |
-| 0006 | Row-level security on `titan.memberships`, `titan.entitlements`, `titan.local_account_links`. |
-| 0007 | Provisioning audit types for update and revoke commands; session-revocation and OIDC-state grants. |
-| 0008 | Trusted reader scoped to the organisation set for the transaction; `titan_trusted_writer` may read session revocations (needed by the revocation bump). |
-| 0009 | Login-role grants for the control-api stores: `titan_trusted_writer` may SELECT the OIDC login-state columns that consume and prune read. Nothing is granted to the login role itself. |
-| 0010 | Row-level security on `titan.titan_session_revocations`, keyed by `organisation_id`. The reader sees one organisation (the one set for its transaction); the writer keeps cross-tenant bumps. |
-| 0011 | Append-only `titan.activity_events` (issue #36): one redacted row per lifecycle event. No role may UPDATE, DELETE or TRUNCATE; a trigger rejects every such change. Retention carve-out in 0028. |
-| 0012 | Transactional outbox: `titan.outbox_events` (versioned, tenant-keyed, idempotency-keyed, bounded payload, pending/published/dead), `titan.outbox_event_audit`, and `titan.outbox_processed_events` for consumer dedupe. Tenant-scoped RLS. See `docs/EVENTS.md`. |
-| 0013 | Centrally governed configuration and feature flags (issue #38): `titan.feature_flags` (global rows and temporary per-organisation overrides that require `expires_at`), and `titan.feature_flag_history`, which is append-only. Changes are audited by trigger. |
-| 0014 | Verified account links (issue #37): at most one verified link per local account and application, `titan.link_assertion_nonces` for link assertions, and `titan.link_reviews` for ambiguous link attempts. Written only by `titan_trusted_writer`. |
-| 0015 | Subscription lifecycle ledger (issue #35): `titan.billing_subscriptions` (last applied position per provider subscription) and `titan.billing_events` (one row per verified provider event, with its disposition). Written only by `titan_trusted_writer`. See `docs/SUBSCRIPTIONS.md`. |
-| 0016 | Durable, one-use organisation selection for users with several eligible organisations (issue #32): `titan.titan_oidc_organisation_selections`, bound to the OIDC state, browser binding and selection token by digest. |
-| 0017 | Guided customer onboarding (issue #41): `titan.onboardings`, `titan.onboarding_product_results` and the append-only `titan.onboarding_events`, with the state machine enforced by triggers. |
-| 0018 | Reviewed resolution of account link conflicts: `titan.link_reviews` gains resolution columns. A resolved review is never reopened (issue #37). |
-| 0019 | Central browser sessions (`titan.central_browser_sessions`), keyed by an opaque token digest, with the NOLOGIN role `titan_central_sessions`. |
-| 0020 | Dedicated `central` application ID in `titan.titan_oidc_login_states`, and the NOLOGIN role `titan_central_oidc`. Central login state does not share a namespace with a product. |
-| 0021 | Company discovery for a verified Logto subject: the vetted `SECURITY DEFINER` function `titan.central_eligible_companies`, executable by `titan_central_discovery` (issue #44). |
-| 0022 | Durable, one-use, browser-bound Central company selection: `titan.central_company_selection_states`, with the issuer and subject sealed by the application. |
-| 0023 | Triggers that invalidate Central browser sessions in the same transaction as an access reduction (membership, organisation, identity, entitlement or account link), including direct SQL changes. |
-| 0024 | `titan.central_issue_browser_session`, which locks current membership, identity, organisation and entitlement before a session is created, so a login cannot race a revocation. |
-| 0025 | Product account-link proof nonces (`titan.product_link_proof_nonces`) and `titan.claim_product_link_proof_nonce`, so each nonce is used once across workers. |
-| 0026 | Product-specific one-use company selection (`titan.product_company_selection_states`) for `field`, `desk` and `academy`, with a separate browser binding and sealed identity. |
-| 0027 | Per-product selection roles (`titan_product_selection_<app>`) with row policies, so one app cannot read, delete or consume another app's pending selection states. |
-| 0028 | Retention purge (issue #16): the NOLOGIN role `titan_retention_purger` may DELETE and SELECT old rows in `titan.activity_events` and `titan.provisioning_audit`, only when the transaction sets `titan.retention_cutoff`. Used by `tools/retention_purge.py`, which is dry-run by default. |
-
-Tenant isolation (0006, narrowed by 0008; session revocations by 0010). Tenant scope is the transaction-local setting `titan.organisation_id`. Set it with a bound parameter, never by interpolation: `SELECT set_config('titan.organisation_id', $1, true)`. This has the same effect as `SET LOCAL` and is the only form that takes a bind parameter. With no scope set, tenant rows are invisible and writes fail (fail closed). A malformed value raises an error.
-
-Role design. Each role is a NOLOGIN group role. The deployment creates one login role for the service and grants it the two trusted roles. The login role must not be a superuser, must not have `BYPASSRLS`, and must be `NOINHERIT`:
-
-```sql
-CREATE ROLE titan_central_app LOGIN NOINHERIT PASSWORD '<from the secret store>';
-GRANT titan_trusted_reader, titan_trusted_writer TO titan_central_app;
--- Do not grant titan_tenant_app to the service; it is for a future tenant-facing role only.
--- Do not make titan_central_app the owner of any titan.* object.
-```
-
-- `titan_trusted_reader` runs the access check (`withCentralReadSnapshot`). It runs `SET LOCAL ROLE titan_trusted_reader`, then sets the organisation scope. It reads identities and organisations (global, not RLS-protected). It reads memberships, entitlements and local account links only for the organisation in scope.
-- `titan_trusted_writer` runs provisioning (`CentralProvisioner`). It runs `SET LOCAL ROLE titan_trusted_writer` and is cross-tenant by design. Every command is separately authorised and writes one audit row in the same transaction.
-- `titan_tenant_app` is tenant-scoped on the three tables and has no grant on identities, organisations or session revocations.
-
-Verified on PostgreSQL 16 with `tests/sql/rls_two_tenant.sql` (run as superuser), `tests/sql/session_revocation_rls.sql` (run as superuser, which becomes `titan_central_app` for its checks) and `tests/sql/login_role_path.sql` (run as superuser, which becomes `titan_central_app` for its checks). The session-revocation store (`apps/control-api/src/session-revocation-pg.mjs`) and the OIDC state store (`oidc-state-pg.mjs`) run each statement in a transaction that does `SET LOCAL ROLE titan_trusted_reader` or `titan_trusted_writer` (`role-transaction.mjs`); migration 0009 grants the writer the SELECT that consume and prune need. `readVersion` sets the organisation scope inside its transaction before it reads, because migration 0010 hides every revocation row when no scope is set (without it a revoked session would read as generation 0). `revokeAll` is cross-tenant by design and sets no scope.
-
-Not tenant-keyed, so not under RLS, by design: `titan.titan_oidc_login_states` (written before the Logto callback, so no organisation is known; protected by role, by the state digest key and by a 10-minute expiry) and `titan.provisioning_audit` (no organisation column; written only by `titan_trusted_writer`, and no other role has a grant on it).
-
-Running the login-role path test (`tests/test_login_role_path.py`): it runs only when `psql` and `TITAN_TEST_DATABASE_URL` are present, otherwise it is skipped with the reason printed. The database must hold migrations 0001-0010 and no tenant rows, and the URL should be a superuser URL for that database:
-
-```bash
-python3 tools/migrate.py --database-url "$TITAN_TEST_DATABASE_URL"
-python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
-```
-
-CI runs this against its PostgreSQL 16 service with `TITAN_REQUIRE_DB_TESTS=1`, so a skip fails the job.
-
-## Compiled output (`packages/control-plane/dist`)
-
-`apps/control-api` imports `packages/control-plane/dist/`, which is generated from `src/` and committed. `dist/` is not edited by hand. After any change to `packages/control-plane/src`, rebuild and commit the result:
-
-```bash
-cd packages/control-plane && npx tsc -p tsconfig.json
-```
-
-CI builds into a scratch directory and fails if the committed `dist/` differs from a fresh build. Changing `src` without rebuilding will fail CI.
-
-## Environment variables
-
-Names only. Values are supplied by the deployment environment and must never be committed.
-
-| Variable | Used by | Purpose |
-| --- | --- | --- |
-| `TITAN_CENTRAL_DATABASE_URL` | control-api (required) | PostgreSQL connection string for the `titan_central` database. |
-| `TITAN_OIDC_ISSUER` | control-api (required) | Expected token issuer (the Logto OIDC issuer). |
-| `TITAN_FIELD_AUDIENCE` | control-api (required) | Expected audience for Sorted (legacy application ID: `field`). |
-| `TITAN_DESK_AUDIENCE` | control-api (required) | Expected audience for Supercharged (legacy application ID: `desk`). |
-| `TITAN_ACADEMY_AUDIENCE` | control-api (required) | Expected audience for LMS (legacy application ID: `academy`). |
-| `TITAN_OIDC_STATE_KEY` | control-api (required for browser login state) | Base64-encoded 32-byte key used to seal short-lived OIDC state. |
-| `TITAN_OIDC_JWKS_URI` | control-api (required) | JWKS endpoint used to verify token signatures. |
-| `TITAN_CENTRAL_PORT` | control-api (optional) | Loopback port. Defaults to 3102. |
-| `TITAN_CI_DATABASE_URL` | CI only | Throwaway PostgreSQL URL for the database steps in CI. |
-
-`tools/migrate.py` takes its database URL as `--database-url`, not from an environment variable.
-
-## Run
-
-```bash
-cd apps/control-api && npm start   # requires the control-api variables above
-```
-
-## Further reading
-
-- [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md): architecture decisions ADR-001 to ADR-007.
-- [PASS15_DEPLOYMENT_RUNBOOK.md](docs/records/pass/PASS15_DEPLOYMENT_RUNBOOK.md): integration and production go/no-go gates.
-- [deploy/OPERATIONS.md](deploy/OPERATIONS.md): systemd template installation, secret storage, service operations and rollback.
-- [packages/control-plane/README.md](packages/control-plane/README.md): the authorization library's trust boundaries.
-
-## Workspace consolidation
-
-The root npm workspace includes `apps/control-api`, `packages/control-plane` and `apps/launcher`. The configuration engine remains a dependency-free ESM source package tested by `npm test`. Logto remains an external identity runtime. Current historical reports stay under `docs/records/pass`, without duplicate archives. See [contributor guidance](CONTRIBUTING.md) and the [reconciliation record](docs/central-brand-workspace-reconciliation.md).
+Read [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md), [deployment operations](deploy/OPERATIONS.md), [event contracts](docs/EVENTS.md), [service subscriptions](docs/SUBSCRIPTIONS.md), [control-plane details](packages/control-plane/README.md) and [the seven-core audits](docs/audits/). Every [open issue](https://github.com/Masterleeaus/Central/issues?q=is%3Aissue+is%3Aopen) has an actionable task checklist. Check `[x]` only for verified implementation and tests; close only with complete acceptance. Keep Logto upstream separate, never edit applied migrations and do not claim deployment on the basis of passing unit tests alone.
