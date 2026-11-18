@@ -18,7 +18,7 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_PASSWORD: ${{ env.CI_DB_PASSWORD }}
+          POSTGRES_PASSWORD: ${{ format('ci-{0}-{1}', github.run_id, github.run_attempt) }}
           POSTGRES_DB: titan_central
         ports:
           - 5432:5432
@@ -28,7 +28,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     env:
-      TITAN_CI_DATABASE_URL: postgresql://postgres:${{ env.CI_DB_PASSWORD }}@localhost:5432/titan_central
+      TITAN_CI_DATABASE_URL: postgresql://postgres:${{ format('ci-{0}-{1}', github.run_id, github.run_attempt) }}@localhost:5432/titan_central
     steps:
       - uses: actions/checkout@v4 # major-version pin only
       - uses: actions/setup-node@v4 # major-version pin only
