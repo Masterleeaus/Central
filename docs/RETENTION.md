@@ -36,10 +36,13 @@ are still in the service log (section 3). Their retention period is the same as 
 
 - **CURRENT:** a row expires no later than 10 minutes after creation. Consuming a row deletes it. A cleanup
   function deletes expired rows in bounded batches. Expired rows are treated as invalid even before cleanup.
+- **CURRENT:** the control API starts a timer at startup (`apps/control-api/src/oidc-state-prune-schedule.mjs`)
+  that runs that cleanup every 5 minutes under the restricted writer role. The timer is unref'd, does not
+  overlap runs, reports failures as `oidc_state_prune_failed` and retries on the next tick. It stops on shutdown.
 - **Not decided:** the owner's 1-year decision does not cover login state. Its retention period is still undecided.
-- **Proposed:** run that cleanup on a fixed schedule (for example every 15 minutes) so no expired row
-  outlives a short grace period. Login state holds sealed nonce and verifier values, so it must not be kept
-  longer than needed.
+- **Still open (issue #11):** a staging database check that expired rows are pruned on the live schedule, and
+  alerting on repeated `oidc_state_prune_failed` events. Login state holds sealed nonce and verifier values, so
+  it must not be kept longer than needed.
 
 **Session revocations (`titan.titan_session_revocations`).**
 
