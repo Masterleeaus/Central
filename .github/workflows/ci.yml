@@ -125,6 +125,13 @@ jobs:
           TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
           TITAN_REQUIRE_DB_TESTS: '1'
         run: python3 -m unittest discover -s tests -p 'test_login_role_path.py' -v
+      # Retention purge carve-out (migration 0028, issue #16). Runs in its own transaction and rolls back, so it
+      # leaves the freshly migrated database as it found it for the steps after it.
+      - name: Retention purge carve-out tests (SQL, real PostgreSQL)
+        env:
+          TITAN_TEST_DATABASE_URL: ${{ env.TITAN_CI_DATABASE_URL }}
+          TITAN_REQUIRE_DB_TESTS: '1'
+        run: python3 -m unittest discover -s tests -p 'test_retention_purge_0028_db.py' -v
       # The feature-flag tests write organisations and config rows. They get their own migrated database so the
       # reconciliation audit, which reads every row in titan_central, never sees them. Without this, the audit
       # reports unmapped_legacy_company blockers (exit 2) on main.
