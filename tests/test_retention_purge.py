@@ -1,14 +1,11 @@
-"""Tests for tools/retention_purge.py (issue #16) and migration 0028. No database is used.
+"""Tests for tools/retention_purge.py (issue #16) and migrations 0028 and 0031. No database is used.
 
-The job is exercised with a fake runner that records every SQL script. The database behaviour of migration 0028
-(purger carve-out, RLS, trigger) has no PostgreSQL test yet. That is a documented gap: add a tests/sql file and a CI step.
+The job is exercised with a fake runner that records every SQL script. The database behaviour of migrations 0028
+and 0031 (purger carve-out, RLS, append-only trigger, insert grant) is checked by tests/sql files run in CI.
 """
 import importlib.util
 import io
-import os
 import re
-import stat
-import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -27,29 +24,38 @@ def load(name, rel):
 purge = load('retention_purge', 'tools/retention_purge.py')
 migrate = load('migrate', 'tools/migrate.py')
 URL = 'postgresql://operator@example.invalid/titan'
+CUTOFF = '2026-11-18 00:00:00.123456+00'
+ACTIVITY_CSV = 'occurred_at,id\n2026-01-01 00:00:00+00,a1\n2026-01-02 00:00:00+00,a2\n'
+AUDIT_CSV = 'created_at,id\n'
 
 
 class FakeRunner:
-    """Answers the table check and dry-run queries, and returns scripted counts for DELETE batches."""
+    """Answers the table check, cutoff and dry-run queries, records exports and stores, and returns scripted DELETE counts."""
 
-    def __init__(self, batches=None, tables_present=True, export_error=False):
+    def __init__(self, batches=None, tables_present=True, export_error=False, store_error=False, cutoff=CUTOFF):
         self.scripts = []
         self.batches = list(batches or [])
         self.tables_present = tables_present
         self.export_error = export_error
+        self.store_error = store_error
+        self.cutoff = cutoff
 
     def __call__(self, sql):
         self.scripts.append(sql)
         if 'to_regclass' in sql:
             return ''.join(f'{t.table}|{"t" if self.tables_present or t.table == "titan.activity_events" else "f"}\n'
                            for t in purge.TARGETS)
+        if sql.startswith('SELECT (now()'):
+            return f'{self.cutoff}\n'
+        if 'INSERT INTO titan.retention_exports' in sql:
+            if self.store_error:
+                raise purge.PurgeError('psql failed; store refused')
+            return ''
         if 'COPY (' in sql:
             if self.export_error:
                 raise purge.PurgeError('psql failed; export refused')
-            if 'activity_events' in sql:
-                return 'occurred_at,id\n2026-01-01 00:00:00+00,a1\n2026-01-02 00:00:00+00,a2\n'
-            return 'created_at,id\n'
-        if sql.startswith('BEGIN READ ONLY'):
+            return ACTIVITY_CSV if 'activity_events' in sql else AUDIT_CSV
+        if sql.startswith('BEGIN READ ONLY') and 'count(*)' in sql:
             return ('titan.activity_events|7|2026-01-01 00:00:00+00|2026-02-01 00:00:00+00\n'
                     'titan.provisioning_audit|0||\n')
         return f'{self.batches.pop(0) if self.batches else 0}\n'
@@ -59,6 +65,9 @@ class FakeRunner:
 
     def exports(self):
         return [s for s in self.scripts if 'COPY (' in s]
+
+    def stores(self):
+        return [s for s in self.scripts if 'INSERT INTO titan.retention_exports' in s]
 
 
 def run(argv, runner, env=None):
@@ -85,6 +94,20 @@ class DefaultsAndValidation(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(purge.ConfigError):
                 purge.validate_batch(bad)
 
+    def test_cutoff_must_have_timestamp_shape(self):
+        self.assertEqual(purge.validate_cutoff(CUTOFF), CUTOFF)
+        for bad in ("2026-11-18 00:00:00+00'; DROP TABLE x; --", '', 'now()', '2026-11-18', None):
+            with self.subTest(bad=bad), self.assertRaises(purge.PurgeError):
+                purge.validate_cutoff(bad)
+
+    def test_bad_cutoff_from_database_stops_before_any_delete(self):
+        r = FakeRunner(cutoff="x'; DELETE FROM titan.activity_events; --")
+        code, _, err = run(['--execute'], r)
+        self.assertEqual(code, 1)
+        self.assertEqual(r.deletes(), [])
+        self.assertEqual(r.stores(), [])
+        self.assertIn('database error', err)
+
     def test_bad_days_exit_2_without_touching_database(self):
         r = FakeRunner()
         code, _, err = run(['--retention-days', '0'], r)
@@ -100,17 +123,18 @@ class DefaultsAndValidation(unittest.TestCase):
 
 
 class DryRun(unittest.TestCase):
-    def test_default_run_never_sends_delete(self):
+    def test_default_run_never_sends_delete_or_insert(self):
         r = FakeRunner()
         code, out, _ = run([], r)
         self.assertEqual(code, 0)
         self.assertEqual(r.deletes(), [])
+        self.assertEqual(r.stores(), [])
         self.assertFalse(any(re.search(r'\b(DELETE|UPDATE|INSERT|TRUNCATE)\b', s) for s in r.scripts))
         self.assertIn('DRY RUN. Nothing was deleted', out)
         self.assertIn('titan.activity_events: 7 row(s) eligible', out)
 
     def test_dry_run_is_read_only_and_rolls_back(self):
-        sql = purge.build_dry_run_sql(90, purge.TARGETS)
+        sql = purge.build_dry_run_sql(CUTOFF, purge.TARGETS)
         self.assertTrue(sql.startswith('BEGIN READ ONLY;'))
         self.assertTrue(sql.rstrip().endswith('ROLLBACK;'))
 
@@ -118,19 +142,14 @@ class DryRun(unittest.TestCase):
         r = FakeRunner(tables_present=False)
         code, out, _ = run([], r)
         self.assertEqual(code, 0)
-        dry = [s for s in r.scripts if s.startswith('BEGIN READ ONLY')][0]
+        dry = [s for s in r.scripts if s.startswith('BEGIN READ ONLY') and 'count(*)' in s][0]
         self.assertIn('titan.activity_events', dry)
         self.assertNotIn('titan.provisioning_audit', dry)
 
 
 class Execute(unittest.TestCase):
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.export_dir = os.path.join(tmp.name, 'exports')
-
     def exec_args(self, *extra):
-        return ['--execute', '--export-dir', self.export_dir, *extra]
+        return ['--execute', *extra]
 
     def test_execute_deletes_in_batches_until_short_batch(self):
         r = FakeRunner(batches=[2, 2, 1, 0])  # batch size 2: stops after the batch of 1
@@ -140,22 +159,33 @@ class Execute(unittest.TestCase):
         self.assertEqual(len(activity), 3)
         self.assertIn('deleted 5 row(s) from titan.activity_events older than 365 days', out)
 
-    def test_every_batch_sets_cutoff_role_and_predicate(self):
+    def test_every_batch_sets_role_and_the_fixed_cutoff(self):
         r = FakeRunner(batches=[0, 0])
         run(self.exec_args(), r)
         self.assertTrue(r.deletes())
         for s in r.deletes():
             self.assertTrue(s.startswith('BEGIN;'))
             self.assertIn('SET LOCAL ROLE titan_retention_purger;', s)
-            self.assertIn("set_config('titan.retention_cutoff', (now() - make_interval(days => 365))::text, true)", s)
+            self.assertIn(f"set_config('titan.retention_cutoff', '{CUTOFF}', true)", s)
             self.assertIn("current_setting('titan.retention_cutoff', true)", s)
             self.assertTrue(s.rstrip().endswith('COMMIT;'))
 
-    def test_custom_retention_days_is_used_in_cutoff(self):
+    def test_export_export_store_and_delete_all_use_one_cutoff(self):
+        # Regression for the export/delete gap: each step used its own now(), so rows could age past the cutoff
+        # between the export and the delete and be deleted without being exported.
+        r = FakeRunner(batches=[0, 0])
+        run(self.exec_args(), r)
+        steps = r.exports() + r.stores() + r.deletes()
+        self.assertTrue(steps)
+        for s in steps:
+            self.assertIn(f"'{CUTOFF}'", s)
+            self.assertNotIn('now()', s)
+        self.assertEqual(sum(1 for s in r.scripts if s.startswith('SELECT (now()')), 1)
+
+    def test_custom_retention_days_is_used_for_the_cutoff_query(self):
         r = FakeRunner(batches=[0])
         run(self.exec_args('--retention-days', '30'), r)
-        self.assertTrue(any('make_interval(days => 30)' in s for s in r.deletes()))
-        self.assertTrue(any('make_interval(days => 30)' in s for s in r.exports()))
+        self.assertIn('make_interval(days => 30)', [s for s in r.scripts if s.startswith('SELECT (now()')][0])
 
     def test_no_script_touches_unlisted_tables(self):
         r = FakeRunner(batches=[0, 0])
@@ -168,75 +198,91 @@ class Execute(unittest.TestCase):
         def failing(sql):
             if 'to_regclass' in sql:
                 return 'titan.activity_events|t\ntitan.provisioning_audit|t\n'
+            if sql.startswith('SELECT (now()'):
+                return f'{CUTOFF}\n'
             raise purge.PurgeError('psql failed; check the role membership and the migration 0028 state')
         code, _, err = run(self.exec_args(), failing)
         self.assertEqual(code, 1)
         self.assertNotIn('postgresql://', err)
 
-    def test_execute_without_export_dir_is_refused_before_any_sql(self):
+    def test_execute_no_longer_takes_an_export_directory(self):
+        # argparse rejects the removed flag with exit status 2 before any SQL is built.
         r = FakeRunner()
-        code, _, err = run(['--execute'], r)
-        self.assertEqual(code, 2)
-        self.assertIn('--export-dir', err)
+        with self.assertRaises(SystemExit) as ctx, redirect_stderr(io.StringIO()):
+            purge.main(['--execute', '--export-dir', '/tmp/x'], runner=r, env={})
+        self.assertEqual(ctx.exception.code, 2)
         self.assertEqual(r.scripts, [])
 
-    def test_every_export_runs_before_the_first_delete(self):
+    def test_every_store_runs_before_the_first_delete(self):
         r = FakeRunner(batches=[0, 0])
         run(self.exec_args(), r)
         first_delete = min(i for i, s in enumerate(r.scripts) if 'DELETE FROM' in s)
-        last_export = max(i for i, s in enumerate(r.scripts) if 'COPY (' in s)
-        self.assertEqual(len(r.exports()), 2)
-        self.assertLess(last_export, first_delete)
+        last_store = max(i for i, s in enumerate(r.scripts) if 'INSERT INTO titan.retention_exports' in s)
+        self.assertEqual(len(r.stores()), 2)
+        self.assertLess(last_store, first_delete)
 
-    def test_export_writes_csv_with_0600_mode_and_no_delete_in_export(self):
+    def test_export_and_store_are_read_only_then_one_insert_each(self):
         r = FakeRunner(batches=[0, 0])
         code, out, _ = run(self.exec_args(), r)
         self.assertEqual(code, 0)
-        files = sorted(os.listdir(self.export_dir))
-        self.assertEqual(len(files), 2)
-        activity_file = [f for f in files if f.startswith('titan_activity_events-')][0]
-        path = os.path.join(self.export_dir, activity_file)
-        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
-        with open(path, encoding='utf-8') as fh:
-            self.assertEqual(fh.read(), 'occurred_at,id\n2026-01-01 00:00:00+00,a1\n2026-01-02 00:00:00+00,a2\n')
-        self.assertIn('exported 2 row(s) from titan.activity_events', out)
+        self.assertEqual(len(r.exports()), 2)
         for s in r.exports():
             self.assertNotRegex(s, r'\b(DELETE|UPDATE|INSERT|TRUNCATE)\b')
             self.assertIn('ROLLBACK;', s)
+        self.assertEqual(len(r.stores()), 2)
+        for s in r.stores():
+            self.assertIn('SET LOCAL ROLE titan_retention_purger;', s)
+            self.assertNotRegex(s, r'\b(DELETE|UPDATE|TRUNCATE)\b')
+        self.assertIn('stored 2 row(s) from titan.activity_events in titan.retention_exports', out)
+        self.assertIn('stored 0 row(s) from titan.provisioning_audit', out)
 
-    def test_empty_table_export_writes_header_only(self):
+    def test_store_carries_row_count_checksum_and_body(self):
+        import hashlib
         r = FakeRunner(batches=[0, 0])
         run(self.exec_args(), r)
-        audit_file = [f for f in os.listdir(self.export_dir) if f.startswith('titan_provisioning_audit-')][0]
-        with open(os.path.join(self.export_dir, audit_file), encoding='utf-8') as fh:
-            self.assertEqual(fh.read(), 'created_at,id\n')
+        activity = [s for s in r.stores() if "'titan.activity_events'" in s][0]
+        self.assertIn(", 2, '" + hashlib.sha256(ACTIVITY_CSV.encode('utf-8')).hexdigest() + "', $csv", activity)
+        self.assertIn('occurred_at,id', activity)
+        self.assertIn('2026-01-02 00:00:00+00,a2', activity)
+
+    def test_store_body_uses_a_random_tag_per_script(self):
+        t1 = purge.build_store_sql(CUTOFF, purge.TARGETS[0], 2, 'a' * 64, ACTIVITY_CSV)
+        t2 = purge.build_store_sql(CUTOFF, purge.TARGETS[0], 2, 'a' * 64, ACTIVITY_CSV)
+        self.assertNotEqual(re.search(r'\$(csv[0-9a-f]+)\$', t1).group(1), re.search(r'\$(csv[0-9a-f]+)\$', t2).group(1))
+
+    def test_store_refuses_a_body_containing_its_own_tag(self):
+        with mock.patch.object(purge.secrets, 'token_hex', return_value='deadbeefdeadbeef'):
+            with self.assertRaises(purge.PurgeError):
+                purge.build_store_sql(CUTOFF, purge.TARGETS[0], 1, 'a' * 64, 'x,$csvdeadbeefdeadbeef$\n')
+
+    def test_empty_table_store_has_zero_rows(self):
+        r = FakeRunner(batches=[0, 0])
+        run(self.exec_args(), r)
+        audit = [s for s in r.stores() if "'titan.provisioning_audit'" in s][0]
+        self.assertIn(", 0, '", audit)
+        self.assertIn('created_at,id', audit)
+
+    def test_store_failure_stops_before_any_delete(self):
+        r = FakeRunner(batches=[0, 0], store_error=True)
+        code, _, err = run(self.exec_args(), r)
+        self.assertEqual(code, 1)
+        self.assertEqual(r.deletes(), [])
+        self.assertIn('database error', err)
 
     def test_export_failure_stops_before_any_delete(self):
         r = FakeRunner(batches=[0, 0], export_error=True)
         code, _, err = run(self.exec_args(), r)
         self.assertEqual(code, 1)
         self.assertEqual(r.deletes(), [])
+        self.assertEqual(r.stores(), [])
         self.assertIn('database error', err)
 
-    def test_existing_export_file_is_never_overwritten(self):
-        os.makedirs(self.export_dir)
-        with mock.patch.object(purge.time, 'strftime', return_value='FIXED'):
-            existing = os.path.join(self.export_dir, 'titan_activity_events-FIXED.csv')
-            with open(existing, 'w', encoding='utf-8') as fh:
-                fh.write('keep me\n')
-            r = FakeRunner(batches=[0, 0])
-            code, _, _ = run(self.exec_args(), r)
-        self.assertEqual(code, 1)
-        self.assertEqual(r.deletes(), [])
-        with open(existing, encoding='utf-8') as fh:
-            self.assertEqual(fh.read(), 'keep me\n')
-
-    def test_dry_run_needs_no_export_dir_and_writes_nothing(self):
+    def test_dry_run_writes_nothing(self):
         r = FakeRunner()
         code, _, _ = run([], r)
         self.assertEqual(code, 0)
         self.assertEqual(r.exports(), [])
-        self.assertFalse(os.path.exists(self.export_dir))
+        self.assertEqual(r.stores(), [])
 
     def test_run_psql_error_message_hides_url(self):
         import subprocess as sp
@@ -280,6 +326,38 @@ class MigrationZeroTwentyEight(unittest.TestCase):
         rb = (ROOT / 'database' / 'retention' / 'rollback_0028.sql').read_text()
         self.assertIn('DROP POLICY IF EXISTS activity_events_retention_delete', rb)
         self.assertNotIn('pg_has_role', rb)
+
+
+class MigrationZeroThirtyOne(unittest.TestCase):
+    path = ROOT / 'migrations' / '0031_retention_exports.sql'
+
+    def setUp(self):
+        self.text = self.path.read_text()
+
+    def test_framed_as_one_transaction_and_discovered(self):
+        found = {m.version: m for m in migrate.discover(ROOT / 'migrations')}
+        self.assertIn(31, found)
+        self.assertEqual(found[31].name, 'retention_exports')
+
+    def test_insert_only_for_the_purger(self):
+        self.assertIn('GRANT INSERT ON titan.retention_exports TO titan_retention_purger;', self.text)
+        self.assertNotRegex(self.text, r'GRANT\s+(SELECT|UPDATE|DELETE|ALL)[^;]*retention_exports')
+        self.assertIn('REVOKE ALL ON titan.retention_exports FROM PUBLIC;', self.text)
+
+    def test_append_only_trigger_covers_update_delete_and_truncate(self):
+        self.assertIn('BEFORE UPDATE OR DELETE ON titan.retention_exports', self.text)
+        self.assertIn('BEFORE TRUNCATE ON titan.retention_exports', self.text)
+        self.assertIn("RAISE EXCEPTION 'titan.retention_exports is append-only", self.text)
+
+    def test_checksum_and_table_are_constrained(self):
+        self.assertIn("CHECK (body_sha256 ~ '^[0-9a-f]{64}$')", self.text)
+        self.assertIn("CHECK (table_name IN ('titan.activity_events', 'titan.provisioning_audit'))", self.text)
+
+    def test_rollback_refuses_to_drop_rows(self):
+        rb = (ROOT / 'database' / 'retention' / 'rollback_0031.sql').read_text()
+        self.assertIn('rollback refused', rb)
+        self.assertIn('DROP TABLE IF EXISTS titan.retention_exports', rb)
+        self.assertIn('DELETE FROM public.schema_migrations WHERE version = 31;', rb)
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@
 Status: PARTLY DECIDED. Owner decision: **1 year (365 days)** for audit rows (section 1) and activity history (section 6).
 Nothing else in this document is settled policy. Items marked **TO DECIDE**
 need a legal, privacy or owner decision before they are implemented or relied on. Items marked **CURRENT** describe
-behaviour that the code already has. A purge job exists (`tools/retention_purge.py`, migration 0028, issue #16). It is dry-run by default, uses a 365-day cutoff by default, exports rows to a file before any delete, and has not been run against any database.
+behaviour that the code already has. A purge job exists (`tools/retention_purge.py`, migrations 0028 and 0031, issue #16). It is dry-run by default, uses a 365-day cutoff by default, stores exports in the database before any delete, and has not been run against any database.
 
 ## Scope
 
@@ -22,9 +22,9 @@ Each provisioning write records `request_id`, `actor_subject` (the Logto subject
   the year is counted; that detail is still open. The period is decided; the purge itself is still Proposed (below).
 - **TO DECIDE (legal):** whether `actor_subject` and `subject_id` are personal data for this purpose, and whether an
   erasure request can be honoured by pseudonymisation rather than deletion while the audit duty runs.
-- **DECIDED (owner):** audit rows are exported to a file before any delete. `tools/retention_purge.py --execute`
-  requires `--export-dir` and writes every eligible row to a new 0600 CSV file before its first DELETE.
-- **TO DECIDE (owner):** whether those export files are moved to an external store, and how long they are kept.
+- **DECIDED (owner):** audit rows are exported before any delete. `tools/retention_purge.py --execute` stores every
+  eligible row as a CSV body in `titan.retention_exports` (migration 0031) before its first DELETE. The owner decided on 2026-11-18 that exports live in a database table so the same backups cover them. Exports are append-only, and only `titan_retention_purger` can insert.
+- **TO DECIDE (owner):** how long export rows are kept. Exports are never deleted by the purge job, so removing them is a separate decision.
 
 Access decisions (allow and deny) are also written to `titan.activity_events` (section 6), one row each. They
 are still in the service log (section 3). Their retention period is the same as for audit rows above: **1 year**
@@ -98,7 +98,7 @@ are still in the service log (section 3). Their retention period is the same as 
   recorder (fail closed). The current choice favours availability and keeps the response shape fixed.
 - **CURRENT:** each row holds identifiers, an outcome and a detail object of at most 1,024 bytes, redacted before insert. Credentials and email addresses are refused, and personal-data keys are removed. Actor and target fields refuse address-shaped values.
 - **Proposed:** a purge run by the owner, outside the application, that removes rows older than the retention period. It must be the only path that deletes rows, must be bounded in batches, and must be recorded. Section 7 describes the job that implements this. It is not run.
-- **DECIDED (owner):** retention period of **1 year**, the same as section 1. Rows are exported to a file before the purge deletes them (section 7). The owner did not state the point
+- **DECIDED (owner):** retention period of **1 year**, the same as section 1. Rows are exported to `titan.retention_exports` before the purge deletes them (section 7). The owner did not state the point
   from which the year is counted; that detail is still open.
 - **TO DECIDE (owner):** whether activity export is needed (for example to a customer's own store) and in what format. The current reader returns one organisation's events, newest first, in pages of 100, and is the basis for any export.
 - **TO DECIDE (owner):** which roles may read activity. Tenant users should see events their role permits. Support operators should see only what their role permits, and each read should be audited. No operator read path exists yet.
@@ -108,12 +108,13 @@ are still in the service log (section 3). Their retention period is the same as 
 - **CURRENT (implemented, not run):** `tools/retention_purge.py` deletes `titan.activity_events` and `titan.provisioning_audit`
   rows older than `--retention-days` (default **365**, the 1-year decision in sections 1 and 6). It is a dry run unless `--execute` is passed. Each batch is one
   transaction, run as `titan_retention_purger`, bounded by the same cutoff in the database (migration 0028).
-- **CURRENT (export before delete):** `--execute` requires `--export-dir DIR`. The job first writes every row older than the
-  cutoff in both tables to a new CSV file in `DIR` (mode 0600, never overwritten). Only after all exports succeed does it run any DELETE. An export failure deletes nothing.
+- **CURRENT (export before delete):** `--execute` needs no directory. The job first stores every row older than the
+  cutoff in both tables as a CSV body in `titan.retention_exports` (migration 0031). Only after all stores succeed does it run any DELETE. A store failure deletes nothing. Export and delete use one cutoff, read once at the start of the run, so a row cannot age past the cutoff between its export and its delete.
 - **CURRENT (tested):** `tests/sql/retention_purge_0028.sql`, run by CI against real PostgreSQL through `tests/test_retention_purge_0028_db.py`. It checks that a purger deletes only rows older than the cutoff, that no cutoff means no rows, and that a non-member role is refused for every change.
 - **Finding (owner decision):** on PostgreSQL 16 the role that creates `titan_retention_purger` is automatically a member of it. The 0028 carve-out checks membership, so that creating role (the migration owner) passes the carve-out when a cutoff is set. The DELETE is still limited to rows older than the cutoff. Decide whether the carve-out should also require `current_user <> session owner`, or whether the owner's access is accepted. The test does not assert either way.
 - **Review:** review the carve-out before applying the migration to any database.
 - Rollback for the migration: `database/retention/rollback_0028.sql`.
+- **Migration 0031** (stored exports): rollback is `database/retention/rollback_0031.sql`. It refuses to run while any export row exists.
 
 ## Open items summary
 

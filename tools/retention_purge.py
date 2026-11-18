@@ -12,17 +12,20 @@ The default retention is 365 days (owner decision: 1 year).
 
 Usage
   TITAN_RETENTION_DATABASE_URL=postgresql://... python3 tools/retention_purge.py            # dry run
-  TITAN_RETENTION_DATABASE_URL=postgresql://... python3 tools/retention_purge.py --execute --export-dir DIR  # export, then delete
+  TITAN_RETENTION_DATABASE_URL=postgresql://... python3 tools/retention_purge.py --execute  # store exports, then delete
 
 How it works
-  * --execute requires --export-dir. Before any DELETE, every row older than the cutoff in each target
-    table is written to a new CSV file in that directory (mode 0600, created with O_EXCL so an existing
-    export is never overwritten). If any export fails, the job stops and deletes nothing.
-  * Each batch is one transaction. It runs SET LOCAL ROLE titan_retention_purger, sets the cutoff
-    (now() - retention days) with set_config(..., true), then deletes at most --batch-size rows.
+  * One cutoff is read from the database clock at the start of the run. Every export, every export
+    store and every delete batch uses that same cutoff, so a row cannot age past the cutoff between its
+    export and its delete and be removed unexported.
+  * --execute first stores, for each target table, every row older than the cutoff as a CSV body in
+    titan.retention_exports (migration 0031). Each store is its own transaction. The table is
+    append-only, and only titan_retention_purger may insert into it. Only after every store succeeds does
+    any DELETE run. A failed store deletes nothing.
+  * Each delete batch is one transaction. It runs SET LOCAL ROLE titan_retention_purger, sets the cutoff
+    with set_config(..., true), then deletes at most --batch-size rows.
   * The database enforces the cutoff too (migration 0028): the purger role can delete only rows older
     than titan.retention_cutoff, and the append-only trigger allows nothing else.
-  * The cutoff is computed by the database clock, so every batch uses the same rule.
   * The operator login must be a member of titan_retention_purger. Without membership the job stops
     with a clear error and deletes nothing.
   * psql is the SQL client (as in tools/migrate.py), run with ON_ERROR_STOP=1.
@@ -32,12 +35,13 @@ Exit codes: 0 done, 1 database error, 2 bad configuration.
 """
 import argparse
 import csv
+import hashlib
 import io
 import os
 import re
+import secrets
 import subprocess
 import sys
-import time
 from dataclasses import dataclass
 
 DEFAULT_RETENTION_DAYS = 365
@@ -47,6 +51,9 @@ MAX_BATCH_SIZE = 10000
 URL_ENV = 'TITAN_RETENTION_DATABASE_URL'
 ROLE = 'titan_retention_purger'
 CUTOFF_GUC = 'titan.retention_cutoff'
+# A timestamptz as PostgreSQL prints it with TimeZone set to a numeric offset. The cutoff is read back from
+# the database and then written into SQL as a literal, so only this exact shape is accepted.
+CUTOFF_RE = re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?[+-]\d{2}(:\d{2}(:\d{2})?)?$')
 
 
 class ConfigError(ValueError):
@@ -81,16 +88,27 @@ def validate_batch(value) -> int:
     return value
 
 
-def _setup(days: int) -> str:
+def validate_cutoff(value: str) -> str:
+    if not isinstance(value, str) or not CUTOFF_RE.match(value):
+        raise PurgeError('database returned an unexpected cutoff value; nothing was deleted')
+    return value
+
+
+def build_cutoff_sql(days: int) -> str:
     # days is a validated int, so interpolating it is safe.
+    return f'SELECT (now() - make_interval(days => {days}))::text;\n'
+
+
+def _setup(cutoff: str) -> str:
+    # cutoff has passed validate_cutoff, so it contains no quote characters.
     return (
         f'SET LOCAL ROLE {ROLE};\n'
-        f"SELECT set_config('{CUTOFF_GUC}', (now() - make_interval(days => {days}))::text, true) AS _cutoff \\gset _\n"
+        f"SELECT set_config('{CUTOFF_GUC}', '{cutoff}', true) AS _cutoff \\gset _\n"
     )
 
 
-def build_dry_run_sql(days: int, targets) -> str:
-    lines = ['BEGIN READ ONLY;', _setup(days)]
+def build_dry_run_sql(cutoff: str, targets) -> str:
+    lines = ['BEGIN READ ONLY;', _setup(cutoff)]
     for t in targets:
         lines.append(
             f"SELECT '{t.table}', count(*), coalesce(min({t.timestamp_column})::text, ''), "
@@ -101,11 +119,11 @@ def build_dry_run_sql(days: int, targets) -> str:
     return '\n'.join(lines) + '\n'
 
 
-def build_batch_sql(days: int, target: Target, batch_size: int) -> str:
+def build_batch_sql(cutoff: str, target: Target, batch_size: int) -> str:
     col = target.timestamp_column
     return (
         'BEGIN;\n'
-        + _setup(days)
+        + _setup(cutoff)
         + f"WITH victims AS (SELECT ctid FROM {target.table} "
         f"WHERE {col} < NULLIF(current_setting('{CUTOFF_GUC}', true), '')::timestamptz "
         f"ORDER BY {col} LIMIT {batch_size}), "
@@ -115,12 +133,12 @@ def build_batch_sql(days: int, target: Target, batch_size: int) -> str:
     )
 
 
-def build_export_sql(days: int, target: Target) -> str:
+def build_export_sql(cutoff: str, target: Target) -> str:
     # Read-only: the export never changes a row. COPY writes CSV with a header to stdout.
     col = target.timestamp_column
     return (
         'BEGIN READ ONLY;\n'
-        + _setup(days)
+        + _setup(cutoff)
         + f"COPY (SELECT * FROM {target.table} "
         f"WHERE {col} < NULLIF(current_setting('{CUTOFF_GUC}', true), '')::timestamptz "
         f"ORDER BY {col}) TO STDOUT WITH (FORMAT csv, HEADER true);\n"
@@ -128,37 +146,20 @@ def build_export_sql(days: int, target: Target) -> str:
     )
 
 
-def ensure_export_dir(path: str) -> None:
-    try:
-        os.makedirs(path, mode=0o700, exist_ok=True)
-    except OSError as exc:
-        raise PurgeError(f'export directory could not be created ({type(exc).__name__}); nothing was deleted') from exc
-    if not os.path.isdir(path):
-        raise PurgeError('export directory is not a directory; nothing was deleted')
-
-
-def export_targets(runner, days: int, targets, export_dir: str) -> list:
-    """Write every eligible row of each target to a new 0600 CSV file. Runs before any DELETE.
-
-    Returns one dict per target: table, path, rows. Any failure raises PurgeError, and the caller
-    must not delete anything.
-    """
-    stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
-    results = []
-    for t in targets:
-        csv_text = runner(build_export_sql(days, t))
-        rows = sum(1 for _ in csv.reader(io.StringIO(csv_text))) - 1
-        if rows < 0:
-            raise PurgeError(f'export of {t.table} produced no header; nothing was deleted')
-        path = os.path.join(export_dir, f"{t.table.replace('.', '_')}-{stamp}.csv")
-        try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, 'w', encoding='utf-8', newline='') as fh:
-                fh.write(csv_text)
-        except OSError as exc:
-            raise PurgeError(f'could not write export file for {t.table} ({type(exc).__name__}); nothing was deleted') from exc
-        results.append({'table': t.table, 'path': path, 'rows': rows})
-    return results
+def build_store_sql(cutoff: str, target: Target, row_count: int, sha256: str, csv_text: str) -> str:
+    # The CSV body goes in as a dollar-quoted literal with a random tag, so no quoting of its content is needed.
+    # row_count and sha256 are produced by this program, not by the database.
+    tag = 'csv' + secrets.token_hex(8)
+    if f'${tag}$' in csv_text:
+        raise PurgeError('export could not be stored safely; nothing was deleted')
+    return (
+        'BEGIN;\n'
+        + _setup(cutoff)
+        + 'INSERT INTO titan.retention_exports (table_name, cutoff, row_count, body_sha256, csv_body) VALUES ('
+        f"'{target.table}', '{cutoff}'::timestamptz, {int(row_count)}, '{sha256}', "
+        f'${tag}${csv_text}${tag}$);\n'
+        'COMMIT;\n'
+    )
 
 
 def build_table_check_sql() -> str:
@@ -180,8 +181,13 @@ def run_psql(url: str, sql: str) -> str:
         raise PurgeError('psql is not installed') from exc
     if proc.returncode != 0:
         # Report the error class only. psql output can echo the connection string.
-        raise PurgeError('psql failed; check the role membership and the migration 0028 state')
+        raise PurgeError('psql failed; check the role membership and the migration 0028 and 0031 state')
     return proc.stdout
+
+
+def fetch_cutoff(runner, days: int) -> str:
+    out = runner(build_cutoff_sql(days)).strip()
+    return validate_cutoff(out)
 
 
 def existing_targets(runner) -> list:
@@ -194,9 +200,9 @@ def existing_targets(runner) -> list:
     return [t for t in TARGETS if present.get(t.table)]
 
 
-def dry_run(runner, days: int, targets) -> list:
+def dry_run(runner, cutoff: str, targets) -> list:
     lines = []
-    out = runner(build_dry_run_sql(days, targets))
+    out = runner(build_dry_run_sql(cutoff, targets))
     for line in out.splitlines():
         parts = line.split('|')
         if len(parts) == 4:
@@ -204,26 +210,43 @@ def dry_run(runner, days: int, targets) -> list:
     return lines
 
 
-def execute(runner, days: int, batch_size: int, targets, export_dir: str) -> tuple:
-    # Phase 1: export every eligible row of every target. Phase 2 runs only if phase 1 succeeded.
-    exported = export_targets(runner, days, targets, export_dir)
+def store_exports(runner, cutoff: str, targets) -> list:
+    """Store every eligible row of each target as a CSV body in titan.retention_exports. Runs before any DELETE.
+
+    Returns one dict per target: table, rows, sha256. Any failure raises PurgeError, and the caller must not delete.
+    Stores that already committed stay in the table. They are extra evidence and do not change which rows are deleted.
+    """
+    results = []
+    for t in targets:
+        csv_text = runner(build_export_sql(cutoff, t))
+        rows = sum(1 for _ in csv.reader(io.StringIO(csv_text))) - 1
+        if rows < 0:
+            raise PurgeError(f'export of {t.table} produced no header; nothing was deleted')
+        sha256 = hashlib.sha256(csv_text.encode('utf-8')).hexdigest()
+        runner(build_store_sql(cutoff, t, rows, sha256, csv_text))
+        results.append({'table': t.table, 'rows': rows, 'sha256': sha256})
+    return results
+
+
+def execute(runner, cutoff: str, batch_size: int, targets) -> tuple:
+    # Phase 1: store every eligible row of every target. Phase 2 runs only if phase 1 succeeded.
+    stored = store_exports(runner, cutoff, targets)
     totals = {}
     for t in targets:
         total = 0
         while True:
-            out = runner(build_batch_sql(days, t, batch_size)).strip().splitlines()
+            out = runner(build_batch_sql(cutoff, t, batch_size)).strip().splitlines()
             deleted = int(out[-1]) if out and out[-1].strip().isdigit() else 0
             total += deleted
             if deleted < batch_size:
                 break
         totals[t.table] = total
-    return exported, totals
+    return stored, totals
 
 
 def parse_args(argv):
     p = argparse.ArgumentParser(description='Purge access-decision and audit rows older than the retention period. Dry run unless --execute.')
-    p.add_argument('--execute', action='store_true', help='delete rows. Without this flag nothing is deleted.')
-    p.add_argument('--export-dir', default='', help='required with --execute: directory for the pre-delete CSV exports (created 0700 if missing)')
+    p.add_argument('--execute', action='store_true', help='store exports in titan.retention_exports, then delete rows. Without this flag nothing is deleted.')
     p.add_argument('--retention-days', type=int, default=DEFAULT_RETENTION_DAYS, help=f'default {DEFAULT_RETENTION_DAYS}')
     p.add_argument('--batch-size', type=int, default=DEFAULT_BATCH_SIZE, help=f'rows per transaction, 1 to {MAX_BATCH_SIZE}')
     return p.parse_args(argv)
@@ -238,9 +261,6 @@ def main(argv=None, runner=None, env=None) -> int:
     except ConfigError as exc:
         print(f'configuration error: {exc}', file=sys.stderr)
         return 2
-    if args.execute and not args.export_dir:
-        print('configuration error: --execute needs --export-dir (rows are exported before any delete)', file=sys.stderr)
-        return 2
     url = env.get(URL_ENV, '')
     if runner is None:
         if not url:
@@ -249,20 +269,20 @@ def main(argv=None, runner=None, env=None) -> int:
         runner = lambda sql: run_psql(url, sql)  # noqa: E731
     try:
         targets = existing_targets(runner)
+        cutoff = fetch_cutoff(runner, days)
         if not args.execute:
-            rows = dry_run(runner, days, targets)
+            rows = dry_run(runner, cutoff, targets)
             print(f'DRY RUN. Nothing was deleted. Cutoff: rows older than {days} days (database clock).')
             for r in rows:
                 print(f"{r['table']}: {r['count']} row(s) eligible; oldest {r['oldest'] or '-'}, newest {r['newest'] or '-'}")
-            print('Re-run with --execute --export-dir DIR to export and then delete these rows.')
+            print('Re-run with --execute to store exports in titan.retention_exports and then delete these rows.')
             return 0
         if not targets:
             print('no target tables exist; nothing to purge')
             return 0
-        ensure_export_dir(args.export_dir)
-        exported, totals = execute(runner, days, batch, targets, args.export_dir)
-        for e in exported:
-            print(f"exported {e['rows']} row(s) from {e['table']} to {e['path']} before any delete")
+        stored, totals = execute(runner, cutoff, batch, targets)
+        for e in stored:
+            print(f"stored {e['rows']} row(s) from {e['table']} in titan.retention_exports (sha256 {e['sha256']}) before any delete")
         for name, n in totals.items():
             print(f'deleted {n} row(s) from {name} older than {days} days')
         return 0
