@@ -73,3 +73,9 @@ Evidence of merged source fixes (such as [Scheduled inbound freshness #146](http
 ## Working agreement
 
 Read [TITAN_ARCHITECTURE_DECISIONS.md](TITAN_ARCHITECTURE_DECISIONS.md), [deployment operations](deploy/OPERATIONS.md), [event contracts](docs/EVENTS.md), [service subscriptions](docs/SUBSCRIPTIONS.md), [control-plane details](packages/control-plane/README.md) and [the seven-core audits](docs/audits/). Every [open issue](https://github.com/Masterleeaus/Central/issues?q=is%3Aissue+is%3Aopen) has an actionable task checklist. Check `[x]` only for verified implementation and tests; close only with complete acceptance. Keep Logto upstream separate, never edit applied migrations and do not claim deployment on the basis of passing unit tests alone.
+
+## Find every README and developer guide
+
+- **[Complete README directory](docs/README_DIRECTORY.md)** — direct links to every README-style file in this repository, including component, test, vendor and historical documentation.
+- **[Documentation index](docs/README.md)** — curated entry point to the main technical guides and developer workflows.
+- **[Seven-repository platform map](https://github.com/Masterleeaus/Central/blob/main/docs/PLATFORM_MAP.md)** — cross-product architecture, ownership and integration boundaries.
