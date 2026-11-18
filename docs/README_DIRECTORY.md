@@ -15,6 +15,10 @@
 
 No vendor/donor/historical README files found.
 
+## This directory
+
+- [`docs/README_DIRECTORY.md`](README_DIRECTORY.md) — this complete linked inventory.
+
 ## Root README
 
 - [`README.md`](../README.md)
