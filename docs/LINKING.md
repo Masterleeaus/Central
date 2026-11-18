@@ -89,6 +89,8 @@ Operator-controlled configuration, one key set per product:
 Scope: the link-assertion signing key only. Central never generates a product's private key and never stores one.
 
 **Onboard a product key**
+Storage: each product's key set lives in one operator-held location, `TITAN_LINK_KEYS_FILE` or `TITAN_LINK_KEYS_JSON` (set at most one), and is checked by `apps/control-api/src/link-key-config.mjs` at every start (issue #101).
+
 1. The product generates an Ed25519 key pair on its own side and keeps the private key there.
 2. The product sends only the public JWK (`kty`, `crv`, `x`) and its planned `kid` to the platform owner, through the owner's normal channel. Never through a link assertion, a request body or a token header.
 3. The operator checks the JWK: `kty` `OKP`, `crv` `Ed25519`, `x` 32 bytes, and no `d` member. The operator also checks that the `kid` is new for that product.
