@@ -1,7 +1,7 @@
 -- Disposable CI only, separate authenticated issuer and executor.
 \set ON_ERROR_STOP on
 CREATE ROLE titan_approver_ci_login LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
- PASSWORD 'ci-only-throwaway';
+ PASSWORD :'ci_login_password';
 GRANT titan_staging_approval_issuer TO titan_approver_ci_login;
 DO $$
 BEGIN

@@ -2,7 +2,7 @@
 -- Production must provision a dedicated staging login separately.
 \set ON_ERROR_STOP on
 CREATE ROLE titan_backfill_ci_login LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
- PASSWORD 'ci-only-throwaway';
+ PASSWORD :'ci_login_password';
 GRANT titan_staging_backfill_executor TO titan_backfill_ci_login;
 INSERT INTO titan.staging_backfill_approvals(
  approval_id,legacy_organisation_id,company_id,logto_organisation_id,

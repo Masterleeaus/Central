@@ -24,7 +24,7 @@ def psql(user,statement):
       ['psql','-X','-qAt','-v','ON_ERROR_STOP=1','-h','localhost',
        '-U',user,'-d',DB,'-c',statement],
       capture_output=True,text=True,timeout=35,
-      env={**os.environ,'PGPASSWORD':'ci-only-throwaway'})
+      env={**os.environ,'PGPASSWORD':os.environ['CI_DB_PASSWORD']})
     return proc.returncode,proc.stdout.strip()
 
 def verify():
