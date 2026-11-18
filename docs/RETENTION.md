@@ -110,7 +110,9 @@ are still in the service log (section 3). Their retention period is the same as 
   transaction, run as `titan_retention_purger`, bounded by the same cutoff in the database (migration 0028).
 - **CURRENT (export before delete):** `--execute` requires `--export-dir DIR`. The job first writes every row older than the
   cutoff in both tables to a new CSV file in `DIR` (mode 0600, never overwritten). Only after all exports succeed does it run any DELETE. An export failure deletes nothing.
-- **Gap:** the migration 0028 carve-out has no PostgreSQL test yet. Review it, and apply the migration only after that review.
+- **CURRENT (tested):** `tests/sql/retention_purge_0028.sql`, run by CI against real PostgreSQL through `tests/test_retention_purge_0028_db.py`. It checks that a purger deletes only rows older than the cutoff, that no cutoff means no rows, and that a non-member role is refused for every change.
+- **Finding (owner decision):** on PostgreSQL 16 the role that creates `titan_retention_purger` is automatically a member of it. The 0028 carve-out checks membership, so that creating role (the migration owner) passes the carve-out when a cutoff is set. The DELETE is still limited to rows older than the cutoff. Decide whether the carve-out should also require `current_user <> session owner`, or whether the owner's access is accepted. The test does not assert either way.
+- **Review:** review the carve-out before applying the migration to any database.
 - Rollback for the migration: `database/retention/rollback_0028.sql`.
 
 ## Open items summary
