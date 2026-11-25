@@ -16,8 +16,8 @@ spec.loader.exec_module(migrate)
 
 RECORD_RE = re.compile(r"INSERT INTO public\.schema_migrations \(version, name, checksum\) VALUES \((\d+), '([^']+)', '([0-9a-f]+)'\);")
 MIGRATION_TEXT = "BEGIN;\nCREATE TABLE t_{n} (id int);\nCOMMIT;\n"
-# Real migrations on main: 0001-0028 and 0030. There is no 0029 file on main.
-REPO_MIGRATION_VERSIONS = list(range(1, 29)) + [30]
+# Real migrations on main: 0001-0028, 0030, and 0031 (Front Desk pairing, issue #189). There is no 0029 file on main.
+REPO_MIGRATION_VERSIONS = list(range(1, 29)) + [30, 31]
 
 
 class FakeClient:
