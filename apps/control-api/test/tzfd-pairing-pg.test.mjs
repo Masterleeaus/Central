@@ -5,8 +5,9 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
-import pg from 'pg';
 import { createPostgresTzfdPairingStore } from '../src/tzfd-pairing-pg.mjs';
+// 'pg' is loaded only when the integration database is configured, so the rest of the suite
+// runs where the driver is not installed (as the server does, via loadPg).
 import { createTzfdPairingHandler, TZFD_PAIR_PATH, TZFD_PAIR_CONTRACT } from '../src/tzfd-pairing-handler.mjs';
 
 const URL_ = process.env.TITAN_TZFD_TEST_DATABASE_URL;
@@ -21,8 +22,9 @@ const siteId = () => `site-${hex(12)}`;
 let admin;
 let pool;
 
-before(() => {
+before(async () => {
   if (skip) return;
+  const { default: pg } = await import('pg');
   admin = new pg.Pool({ connectionString: URL_, max: 2 });
   pool = new pg.Pool({ connectionString: URL_, max: 2 });
 });
