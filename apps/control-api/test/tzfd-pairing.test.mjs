@@ -12,6 +12,7 @@ const NONCE = '0123456789abcdef0123456789abcdef';
 const CODE = 'ABCDEFGH-1234-JKLM';
 const FEATURE = 'https://superchargedat.work/api/tzfd/ai';
 const NOW = 1_800_000_000_000;
+const COMPANY = '6f1c2e0a-9b8d-4c3e-8f7a-1b2c3d4e5f60';
 
 function fakeRes() {
   const res = { status: null, headers: null, body: null };
@@ -41,21 +42,19 @@ function goodBody(overrides = {}) {
   return { contract: TZFD_PAIR_CONTRACT, site: SITE, pairing_code: CODE, ...overrides };
 }
 
-function makeStore({ companyUuid = '6f1c2e0a-9b8d-4c3e-8f7a-1b2c3d4e5f60', consumeOnce = true, rotateFails = false } = {}) {
-  const calls = { consume: [], rotate: [] };
+/** In-memory stand-in for the atomic store: one unused code, refused codes leave nothing behind. */
+function makeStore({ companyUuid = COMPANY, consumeOnce = true, failure = null } = {}) {
+  const calls = { pair: [] };
   let used = false;
   return {
     calls,
-    async consumePairingCode(digest, nowMs) {
-      calls.consume.push({ digest, nowMs });
+    async pair(args) {
+      calls.pair.push(args);
+      if (failure) throw failure;
+      if (args.codeDigest !== pairingCodeDigest(CODE)) return null;
       if (consumeOnce && used) return null;
-      if (digest !== pairingCodeDigest(CODE)) return null;
       used = true;
       return { companyUuid };
-    },
-    async rotateSiteSecret(args) {
-      calls.rotate.push(args);
-      if (rotateFails) throw new Error('db down');
     },
   };
 }
@@ -86,7 +85,7 @@ test('query strings on the pairing path are refused as invalid', async () => {
   const res = fakeRes();
   assert.equal(await handler(fakeReq({ url: `${TZFD_PAIR_PATH}?x=1`, body: goodBody() }), res), true);
   assert.equal(res.status, 400);
-  assert.equal(store.calls.consume.length, 0);
+  assert.equal(store.calls.pair.length, 0);
 });
 
 test('GET is refused with 405', async () => {
@@ -101,8 +100,7 @@ test('a valid pairing returns the secret once, the feature endpoint, and echoes 
   const res = fakeRes();
   await handler(fakeReq({ body: goodBody() }), res);
   assert.equal(res.status, 200);
-  const out = res.json();
-  assert.deepEqual(out, {
+  assert.deepEqual(res.json(), {
     contract: TZFD_PAIR_CONTRACT,
     site: SITE,
     status: 'paired',
@@ -110,17 +108,16 @@ test('a valid pairing returns the secret once, the feature endpoint, and echoes 
     feature_endpoint: FEATURE,
   });
   assert.equal(res.headers['x-tzfd-nonce'], NONCE);
-  assert.equal(store.calls.rotate.length, 1);
-  assert.equal(store.calls.rotate[0].siteId, SITE);
-  assert.equal(store.calls.rotate[0].secret, 'a'.repeat(64));
-  assert.equal(store.calls.rotate[0].companyUuid, '6f1c2e0a-9b8d-4c3e-8f7a-1b2c3d4e5f60');
+  assert.equal(store.calls.pair.length, 1);
+  assert.equal(store.calls.pair[0].siteId, SITE);
+  assert.equal(store.calls.pair[0].secret, 'a'.repeat(64));
+  assert.equal(store.calls.pair[0].codeDigest, pairingCodeDigest(CODE));
 });
 
 test('the store only ever sees the code digest, never the code', async () => {
   const { handler, store } = makeHandler();
   await handler(fakeReq({ body: goodBody() }), fakeRes());
-  assert.equal(store.calls.consume[0].digest, pairingCodeDigest(CODE));
-  assert.notEqual(store.calls.consume[0].digest, CODE);
+  assert.notEqual(store.calls.pair[0].codeDigest, CODE);
   assert.equal(JSON.stringify(store.calls).includes(CODE), false);
 });
 
@@ -133,15 +130,15 @@ test('a code is single use: the second attempt is code_rejected', async () => {
   assert.deepEqual(res.json(), { status: 'code_rejected' });
 });
 
-test('an unknown code is code_rejected and rotates nothing', async () => {
-  const { handler, store } = makeHandler();
+test('an unknown code is code_rejected', async () => {
+  const { handler } = makeHandler();
   const res = fakeRes();
   await handler(fakeReq({ body: goodBody({ pairing_code: 'WRONG-CODE-000000' }) }), res);
   assert.equal(res.status, 403);
-  assert.equal(store.calls.rotate.length, 0);
+  assert.deepEqual(res.json(), { status: 'code_rejected' });
 });
 
-test('a wrong contract, site header mismatch or missing nonce is invalid_request with no store call', async () => {
+test('a wrong contract, a bad site or nonce header, or a malformed body is invalid_request with no store call', async () => {
   const cases = [
     { headers: { 'x-tzfd-contract': 'tzfd-pair/2' } },
     { headers: { 'x-tzfd-site': 'site-short' } },
@@ -159,7 +156,7 @@ test('a wrong contract, site header mismatch or missing nonce is invalid_request
     await handler(fakeReq({ headers: c.headers, body: c.body ?? goodBody() }), res);
     assert.equal(res.status, 400, JSON.stringify(c));
     assert.deepEqual(res.json(), { status: 'invalid_request' });
-    assert.equal(store.calls.consume.length, 0, JSON.stringify(c));
+    assert.equal(store.calls.pair.length, 0, JSON.stringify(c));
   }
 });
 
@@ -170,7 +167,7 @@ test('a timestamp outside the 300-second window is refused', async () => {
     await handler(fakeReq({ headers: { 'x-tzfd-timestamp': String(Math.floor(NOW / 1000) + offset) }, body: goodBody() }), res);
     assert.equal(res.status, 400, `offset ${offset}`);
   }
-  assert.equal(store.calls.consume.length, 0);
+  assert.equal(store.calls.pair.length, 0);
 });
 
 test('a body over 1024 bytes is refused', async () => {
@@ -178,24 +175,15 @@ test('a body over 1024 bytes is refused', async () => {
   const res = fakeRes();
   await handler(fakeReq({ body: 'x'.repeat(2000) }), res);
   assert.equal(res.status, 400);
-  assert.equal(store.calls.consume.length, 0);
+  assert.equal(store.calls.pair.length, 0);
 });
 
-test('a storage failure on consume is service_error and does not pair', async () => {
-  const store = { consumePairingCode: async () => { throw new Error('boom'); }, rotateSiteSecret: async () => {} };
-  const { handler, logs } = makeHandler({ store });
+test('a storage failure is service_error, does not pair, and never returns the secret', async () => {
+  const { handler, logs } = makeHandler({ store: makeStore({ failure: new Error('db down') }) });
   const res = fakeRes();
   await handler(fakeReq({ body: goodBody() }), res);
   assert.equal(res.status, 503);
   assert.deepEqual(res.json(), { status: 'service_error' });
-  assert.equal(JSON.stringify(logs).includes('a'.repeat(64)), false);
-});
-
-test('a failed secret write is service_error and the secret is not returned', async () => {
-  const { handler, logs } = makeHandler({ store: makeStore({ rotateFails: true }) });
-  const res = fakeRes();
-  await handler(fakeReq({ body: goodBody() }), res);
-  assert.equal(res.status, 503);
   assert.equal(res.body.includes('a'.repeat(64)), false);
   assert.equal(logs.at(-1).event, 'tzfd_pair_failed');
 });
@@ -231,7 +219,7 @@ test('a feature endpoint off the allowlist or not https is refused at startup', 
   assert.throws(() => createTzfdPairingHandler({ store, featureEndpoint: 'not a url' }), TypeError);
 });
 
-test('a store without the two required methods is refused at startup', () => {
+test('a store without the pair method is refused at startup', () => {
   assert.throws(() => createTzfdPairingHandler({ store: {}, featureEndpoint: FEATURE }), TypeError);
   assert.throws(() => createTzfdPairingHandler({ featureEndpoint: FEATURE }), TypeError);
 });

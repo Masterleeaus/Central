@@ -18,9 +18,12 @@
  *  - The feature endpoint is https and its host must be on the allowlist (default: superchargedat.work).
  *  - Nothing in the logs contains the code, the secret or the request body.
  *
- * Store contract (injected; a Postgres store is a follow-up):
- *   consumePairingCode(codeDigestHex, nowMs) -> Promise<{ companyUuid: string } | null>   // atomic: marks the code used
- *   rotateSiteSecret({ siteId, secret, companyUuid, nowMs }) -> Promise<void>              // throws on failure
+ * Store contract (injected; the Postgres store is in tzfd-pairing-pg.mjs):
+ *   pair({ codeDigest, siteId, secret }) -> Promise<{ companyUuid: string } | null>
+ *     Expiry and use are judged on the database clock, not the caller's.
+ *     One atomic call. Consumes an unused, unexpired code and binds the site secret to the code's company.
+ *     Resolves null when the code is refused. Rejects on a storage failure or a site bound to another company;
+ *     in both cases the code stays unused.
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { createRateLimiter } from './rate-limit.mjs';
@@ -90,7 +93,7 @@ export function createTzfdPairingHandler({
   clock = () => Date.now(),
   secretFactory = () => randomBytes(32).toString('hex'),
 } = {}) {
-  if (!store || typeof store.consumePairingCode !== 'function' || typeof store.rotateSiteSecret !== 'function') {
+  if (!store || typeof store.pair !== 'function') {
     throw new TypeError('pairing store required');
   }
   if (typeof featureEndpoint !== 'string') throw new TypeError('feature endpoint required');
@@ -133,14 +136,14 @@ export function createTzfdPairingHandler({
     }
 
     try {
-      const grant = await store.consumePairingCode(pairingCodeDigest(body.pairing_code), nowMs);
+      const secret = secretFactory();
+      // One atomic call: the code is consumed and the secret bound in the same transaction, or neither happens.
+      const grant = await store.pair({ codeDigest: pairingCodeDigest(body.pairing_code), siteId: site, secret });
       if (!grant || typeof grant.companyUuid !== 'string' || grant.companyUuid === '') {
         audit('tzfd_pair_code_rejected');
         respond(res, 403, { status: 'code_rejected' });
         return true;
       }
-      const secret = secretFactory();
-      await store.rotateSiteSecret({ siteId: site, secret, companyUuid: grant.companyUuid, nowMs });
       audit('tzfd_pair_ok');
       respond(res, 200, {
         contract: TZFD_PAIR_CONTRACT,
